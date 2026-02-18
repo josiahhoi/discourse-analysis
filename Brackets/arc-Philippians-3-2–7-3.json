@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "passageRef": "Philippians 3:2–7",
+  "propositions": [
+    "Look out for the dogs,",
+    "look out for the evildoers,",
+    "look out for those who mutilate the flesh.",
+    "For we are the circumcision,",
+    "who worship by the Spirit of God",
+    "and glory in Christ Jesus",
+    "and put no confidence in the flesh—",
+    "though I myself have reason for confidence in the flesh also.",
+    "If anyone else thinks he has reason for confidence in the flesh,",
+    "I have more:",
+    "circumcised on the eighth day, of the people of Israel, of the tribe of Benjamin, a Hebrew of Hebrews; as to the law, a Pharisee;",
+    "as to zeal, a persecutor of the church; as to righteousness under the law, blameless.",
+    "But whatever gain I had,",
+    "I counted as loss for the sake of Christ."
+  ],
+  "verseRefs": [
+    "2a",
+    "2b",
+    "2c",
+    "3a",
+    "3b",
+    "3c",
+    "3d",
+    "4a",
+    "4b",
+    "4c",
+    "5",
+    "6",
+    "7a",
+    "7b"
+  ],
+  "arcs": [
+    {
+      "from": 0,
+      "to": 1,
+      "type": "series",
+      "labelsSwapped": false
+    },
+    {
+      "from": 0,
+      "to": 2,
+      "type": "series",
+      "labelsSwapped": false
+    },
+    {
+      "from": 4,
+      "to": 5,
+      "type": "series",
+      "labelsSwapped": false
+    },
+    {
+      "from": 10,
+      "to": 11,
+      "type": "series",
+      "labelsSwapped": false
+    },
+    {
+      "from": 9,
+      "to": 11,
+      "type": "idea-explanation",
+      "labelsSwapped": false
+    },
+    {
+      "from": 8,
+      "to": 11,
+      "type": "conditional",
+      "labelsSwapped": false
+    },
+    {
+      "from": 6,
+      "to": 7,
+      "type": "concessive",
+      "labelsSwapped": true
+    },
+    {
+      "from": 4,
+      "to": 7,
+      "type": "series",
+      "labelsSwapped": false
+    },
+    {
+      "from": 3,
+      "to": 7,
+      "type": "idea-explanation",
+      "labelsSwapped": false
+    },
+    {
+      "from": 0,
+      "to": 7,
+      "type": "ground",
+      "labelsSwapped": false
+    },
+    {
+      "from": 8,
+      "to": 12,
+      "type": "idea-explanation",
+      "labelsSwapped": true
+    },
+    {
+      "from": 7,
+      "to": 13,
+      "type": "concessive",
+      "labelsSwapped": false
+    }
+  ],
+  "copyrightLabel": "(ESV)",
+  "exportedAt": "2026-02-16T00:29:54.304Z"
+}
