@@ -47,7 +47,7 @@ let arcFrom = null; // { type: 'single', index } or { type: 'range', from, to }
 let connectBracketToArcIdx = null; // when set, next proposition click is the reparent target
 let _connectCancelListener = null;
 let undoStack = []; // { action: 'divide'|'bracket', propositions, verseRefs, arcs } snapshots
-let comments = []; // { id, type: 'bracket'|'text', target: { arcIdx }|{ propIndex, start, end }, text, createdAt }
+let comments = []; // { id, type: 'bracket'|'text', target: { arcIdx }|{ propIndex, start, end }, text, author?, createdAt, replies?: { id, text, author?, createdAt }[] }
 let commentMode = false;
 
 // DOM
@@ -72,7 +72,8 @@ const clearArcsBtn = document.getElementById('clearArcs');
 
 // Load API key from localStorage
 if (apiKeyInput) {
-  apiKeyInput.value = localStorage.getItem('biblearc_esv_api_key') || '';
+  const defaultEsvKey = 'Token c8ccaec8888bfa568c00c545383a7cd28b056af3';
+  apiKeyInput.value = localStorage.getItem('biblearc_esv_api_key') || defaultEsvKey;
   apiKeyInput.addEventListener('change', () => {
     localStorage.setItem('biblearc_esv_api_key', apiKeyInput.value);
   });
@@ -93,6 +94,8 @@ if (versionSelect) {
 
 // Theme toggle (light/dark)
 const THEME_KEY = 'biblearc_theme';
+const COMMENT_AUTHOR_KEY = 'biblearc_comment_author';
+const PAGE_AUTHOR_KEY = 'biblearc_page_author';
 function initTheme() {
   const saved = localStorage.getItem(THEME_KEY);
   if (saved === 'light') document.documentElement.setAttribute('data-theme', 'light');
@@ -106,6 +109,28 @@ function toggleTheme() {
 initTheme();
 const themeToggle = document.getElementById('themeToggle');
 if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
+
+// Page/arc author (persisted in localStorage, included in saved/exported arc, shown top-right in workspace for export/copy)
+const pageAuthorInput = document.getElementById('pageAuthor');
+const passageAuthorEl = document.getElementById('passageAuthor');
+function syncPassageAuthorDisplay() {
+  if (passageAuthorEl) {
+    const name = (pageAuthorInput?.value || '').trim() || (typeof localStorage !== 'undefined' ? localStorage.getItem(PAGE_AUTHOR_KEY) : '') || '';
+    passageAuthorEl.textContent = name;
+  }
+}
+if (pageAuthorInput) {
+  pageAuthorInput.value = localStorage.getItem(PAGE_AUTHOR_KEY) || '';
+  syncPassageAuthorDisplay();
+  pageAuthorInput.addEventListener('change', () => {
+    try { localStorage.setItem(PAGE_AUTHOR_KEY, pageAuthorInput.value.trim()); } catch (_) {}
+    syncPassageAuthorDisplay();
+  });
+  pageAuthorInput.addEventListener('blur', () => {
+    try { localStorage.setItem(PAGE_AUTHOR_KEY, pageAuthorInput.value.trim()); } catch (_) {}
+    syncPassageAuthorDisplay();
+  });
+}
 
 // 18 Logical Relationships (BibleArc) - type key -> display label
 const RELATIONSHIP_TYPES = {
@@ -130,8 +155,8 @@ const RELATIONSHIP_TYPES = {
   'situation-response': 'Situation-Response (Sit/R)',
 };
 
-// Only Series, Alternative, Bilateral get a single center label; all others get two (one per end)
-const SINGLE_LABEL_TYPES = new Set(['series', 'alternative', 'bilateral']);
+// Series, Alternative, Bilateral, and unspecified get a single center label; all others get two (one per end)
+const SINGLE_LABEL_TYPES = new Set(['series', 'alternative', 'bilateral', 'unspecified']);
 
 const undoDivideBtn = document.getElementById('undoDivideBtn');
 if (undoDivideBtn) undoDivideBtn.addEventListener('click', undoLastAction);
@@ -311,13 +336,33 @@ function showStatus(message, type) {
   const existing = document.querySelector('.status');
   if (existing) existing.remove();
 
-  const controls = document.querySelector('.fetch-controls');
-  if (!controls) return;
   const el = document.createElement('div');
   el.className = `status ${type}`;
   el.textContent = message;
-  controls.appendChild(el);
+  document.body.appendChild(el);
   setTimeout(() => el.remove(), 5000);
+}
+
+// Save/restore scroll to prevent jump when re-rendering (split, etc.)
+function saveScrollState() {
+  const state = { x: window.scrollX, y: window.scrollY, scrollables: [] };
+  let el = propositionsContainer;
+  while (el && el !== document.body) {
+    const style = getComputedStyle(el);
+    const oy = style.overflowY;
+    if ((oy === 'auto' || oy === 'scroll' || oy === 'overlay') && el.scrollHeight > el.clientHeight) {
+      state.scrollables.push({ el, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop });
+    }
+    el = el.parentElement;
+  }
+  return state;
+}
+function restoreScrollState(state) {
+  if (!state) return;
+  window.scrollTo(state.x, state.y);
+  (state.scrollables || []).forEach(({ el, scrollLeft, scrollTop }) => {
+    if (el && el.scrollTo) { el.scrollLeft = scrollLeft; el.scrollTop = scrollTop; }
+  });
 }
 
 // Render propositions as editable blocks
@@ -333,6 +378,7 @@ function renderPropositions() {
     return;
   }
 
+  const scrollState = saveScrollState();
   propositionsContainer.innerHTML = '';
 
   while (verseRefs.length < propositions.length) verseRefs.push(String(verseRefs.length + 1));
@@ -408,6 +454,10 @@ function renderPropositions() {
   });
 
   updateArcPositions();
+  // Restore scroll after layout (and ResizeObserver-triggered renderArcs) to prevent jump
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => restoreScrollState(scrollState));
+  });
 }
 
 // Resolve proposition index at viewport coordinates (for Connect-to mode; avoids arc overlay / boundary issues)
@@ -532,14 +582,7 @@ function handlePropositionClick(index) {
       showStatus('Bracket cancelled. Select a different first item.', 'error');
       return;
     }
-    if (arcFrom.type === 'range' && arcFrom.arcIdx != null) {
-      arcCanvas?.classList.remove('connect-mode');
-      reparentBracketToProposition(arcFrom.arcIdx, index);
-      arcSelectStep = 0;
-      arcFrom = null;
-      clearPropositionHighlights();
-      return;
-    }
+    // Bracket first then proposition (or proposition first then bracket): create a new bracket spanning both
     const toStart = Math.min(fromStart, index);
     const toEnd = Math.max(fromEnd, index);
     showRelationshipPicker(toStart, toEnd);
@@ -578,48 +621,11 @@ function showRelationshipPicker(from, to) {
   clearPropositionHighlights();
   arcSelectStep = 0;
   arcFrom = null;
-  const blocks = propositionsContainer.querySelectorAll('.proposition-block');
-  const positions = Array.from(blocks).map((b) => b.getBoundingClientRect());
-  const wrapper = propositionsContainer.parentElement;
-  const wr = wrapper.getBoundingClientRect();
-  const centerY = (positions[from].top + positions[from].bottom + positions[to].top + positions[to].bottom) / 4 - wr.top;
-  const centerX = wr.width / 2;
-  const picker = document.createElement('div');
-  picker.id = 'relationshipPicker';
-  picker.className = 'label-picker relationship-picker';
-  picker.innerHTML = '<p class="picker-title">Choose relationship</p>';
-
-  const typeKeys = Object.keys(RELATIONSHIP_TYPES).filter((k) => k !== 'action-result');
-  typeKeys.forEach((typeKey) => {
-    const btn = document.createElement('button');
-    btn.textContent = RELATIONSHIP_TYPES[typeKey] ?? typeKey;
-    btn.title = RELATIONSHIP_TYPES[typeKey];
-    btn.className = typeKey;
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })) });
-      arcs.push({ from, to, type: typeKey, labelsSwapped: false });
-      renderArcs();
-      picker.remove();
-      document.removeEventListener('click', dismiss);
-      showStatus(`Bracket added: ${RELATIONSHIP_TYPES[typeKey]}`, 'success');
-    });
-    picker.appendChild(btn);
-  });
-
-  const dismiss = (e) => {
-    if (picker.parentNode && picker.contains(e.target)) return;
-    picker.remove();
-    document.removeEventListener('click', dismiss);
-    showStatus('Bracket cancelled.', 'error');
-  };
-  setTimeout(() => document.addEventListener('click', dismiss), 0);
-
-  picker.style.left = `${Math.max(8, Math.min(centerX - 210, wrapper.offsetWidth - 430))}px`;
-  picker.style.top = `${Math.max(8, centerY - 80)}px`;
-  wrapper.appendChild(picker);
-  const maxTop = wrapper.offsetHeight - picker.offsetHeight - 8;
-  if (parseFloat(picker.style.top) > maxTop) picker.style.top = `${maxTop}px`;
+  // Add unlabelled bracket (dashed + ?); user clicks the bracket to choose relationship
+  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })) });
+  arcs.push({ from, to, type: 'unspecified', labelsSwapped: false });
+  renderArcs();
+  showStatus('Bracket added. Click the bracket to choose relationship.', 'success');
 }
 
 function highlightPropositionRange(from, to, on) {
@@ -756,6 +762,7 @@ const BRACKET_LABELS = {
   'question-answer': 'Q/A*',
   concessive: 'Csv',
   'situation-response': 'Sit/R*',
+  unspecified: '?',
 };
 
 // Bracket geometry constants (shared for getConnectionPoints and renderArcs)
@@ -945,7 +952,21 @@ function renderArcs() {
     path.setAttribute('stroke-width', BRACKET_STROKE);
     path.setAttribute('stroke-linecap', 'square');
     path.setAttribute('stroke-linejoin', 'miter');
+    if (type === 'unspecified') path.setAttribute('stroke-dasharray', '6,4');
     g.appendChild(path);
+    if (hasComment) {
+      const highlightPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      highlightPath.setAttribute('d', d);
+      highlightPath.setAttribute('class', 'bracket-comment-highlight');
+      highlightPath.setAttribute('fill', 'none');
+      highlightPath.setAttribute('stroke', '#e8c968');
+      highlightPath.setAttribute('stroke-opacity', '0.55');
+      highlightPath.setAttribute('stroke-width', '14');
+      highlightPath.setAttribute('stroke-linecap', 'square');
+      highlightPath.setAttribute('stroke-linejoin', 'miter');
+      highlightPath.setAttribute('pointer-events', 'none');
+      g.appendChild(highlightPath);
+    }
 
     const labels = getBracketLabels(type, labelsSwapped ?? false);
     if (labels.single !== undefined) {
@@ -979,29 +1000,26 @@ function renderArcs() {
       labelsLayer.appendChild(bottomLabel);
     }
 
-    if (hasComment) {
-      const centerY = topY + (bottomY - topY) / 2;
-      const left = BRACKET_X - 22;
-      const top = centerY - 6;
-      const note = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      note.setAttribute('d', `M ${left},${top} L ${left + 10},${top} L ${left + 10},${top + 4} L ${left + 6},${top + 4} L ${left + 6},${top + 12} L ${left},${top + 12} Z`);
-      note.setAttribute('class', 'bracket-comment-note');
-      labelsLayer.appendChild(note);
-    }
-
     g.style.pointerEvents = 'all';
     g.style.cursor = 'pointer';
     arcCanvas.appendChild(g);
 
+    g.addEventListener('mouseenter', () => g.classList.add('bracket-hover'));
+    g.addEventListener('mouseleave', () => g.classList.remove('bracket-hover'));
     g.addEventListener('click', (e) => {
       e.stopPropagation();
+      const centerY = topY + (bottomY - topY) / 2;
+      const centerX = BRACKET_X + BRACKET_WIDTH / 2;
       if (e.detail === 2) {
         arcSelectStep = 0;
         arcFrom = null;
         clearPropositionHighlights();
-        showLabelPicker(idx, topY + (bottomY - topY) / 2, BRACKET_X + BRACKET_WIDTH / 2);
+        showLabelPicker(idx, centerY, centerX);
+      } else if (type === 'unspecified') {
+        // Unlabelled bracket: single click opens relationship picker to choose type
+        showLabelPicker(idx, centerY, centerX);
       } else {
-        showBracketActions(idx, topY + (bottomY - topY) / 2, BRACKET_X + BRACKET_WIDTH / 2);
+        showBracketActions(idx, centerY, centerX);
       }
     });
     g.addEventListener('contextmenu', (e) => {
@@ -1061,7 +1079,7 @@ function renderArcs() {
   });
 
   arcs.forEach((arc, idx) => {
-    if (innerBracketIndices.has(idx)) return; // Only show nodes on outermost brackets
+    const isInner = innerBracketIndices.has(idx);
 
     const { from, to, type, labelsSwapped } = arc;
     const { topY, topLeft, bottomY, bottomLeft } = getConnectionPoints(from, to, positions, idx);
@@ -1085,7 +1103,7 @@ function renderArcs() {
     circle.setAttribute('cx', nodeX);
     circle.setAttribute('cy', nodeY);
     circle.setAttribute('r', NODE_R);
-    circle.setAttribute('class', 'connection-node bracket-node');
+    circle.setAttribute('class', 'connection-node bracket-node' + (isInner ? ' bracket-node-inner' : ''));
     circle.setAttribute('data-arc-index', idx);
     circle.style.cursor = 'pointer';
     nodesG.appendChild(circle);
@@ -1152,7 +1170,10 @@ function renderCommentPreviews() {
     const textPreview = (c.text || '').length > COMMENT_PREVIEW_MAX
       ? c.text.slice(0, COMMENT_PREVIEW_MAX) + '…'
       : (c.text || '');
-    card.innerHTML = `<div class="comment-context">${escapeHtml(context)}</div><div class="comment-text">${escapeHtml(textPreview)}</div>`;
+    const replyCount = (c.replies || []).length;
+    const replyLabel = replyCount === 1 ? '1 reply' : replyCount > 1 ? `${replyCount} replies` : '';
+    const authorHtml = (c.author || '').trim() ? `<div class="comment-preview-author">${escapeHtml((c.author || '').trim())}</div>` : '';
+    card.innerHTML = `<div class="comment-context">${escapeHtml(context)}</div><div class="comment-text">${escapeHtml(textPreview)}</div>${authorHtml}${replyLabel ? `<div class="comment-preview-reply-count">${escapeHtml(replyLabel)}</div>` : ''}`;
     card.addEventListener('click', () => {
       if (c.type === 'bracket' && c.target != null) {
         const arc = arcs[c.target.arcIdx];
@@ -1162,7 +1183,16 @@ function renderCommentPreviews() {
           const wrapper = arcCanvas?.parentElement;
           if (wrapper) {
             const rect = wrapper.getBoundingClientRect();
-            showCommentPopoverForBracket(c.target.arcIdx, rect.height / 2, rect.width / 2);
+            const blocks = propositionsContainer?.querySelectorAll('.proposition-block');
+            const rFrom = blocks?.[arc.from]?.getBoundingClientRect?.();
+            const rTo = blocks?.[arc.to]?.getBoundingClientRect?.();
+            let centerY = rect.height / 2;
+            let centerX = rect.width / 2;
+            if (rFrom && rTo) {
+              centerY = (rFrom.top + rFrom.bottom + rTo.top + rTo.bottom) / 4 - rect.top;
+              centerX = (rFrom.left + rFrom.right + rTo.left + rTo.right) / 4 - rect.left;
+            }
+            showCommentPopoverForBracket(c.target.arcIdx, centerY, centerX);
           }
         }
       } else if (c.type === 'text' && c.target != null) {
@@ -1175,56 +1205,292 @@ function renderCommentPreviews() {
   });
 }
 
-function showCommentPopoverForText(propIndex, start, end, existingCommentId = null) {
+function makeCommentPopoverDraggableAndResizable(popover) {
+  const wrapper = popover.parentElement;
+  if (!wrapper) return;
+  const titleEl = popover.querySelector('.comment-popover-title');
+  if (titleEl) {
+    titleEl.style.cursor = 'grab';
+    titleEl.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startLeft = parseFloat(popover.style.left) || 0;
+      const startTop = parseFloat(popover.style.top) || 0;
+      titleEl.style.cursor = 'grabbing';
+      const onMove = (e2) => {
+        const dx = e2.clientX - startX;
+        const dy = e2.clientY - startY;
+        const rect = wrapper.getBoundingClientRect();
+        let left = startLeft + dx;
+        let top = startTop + dy;
+        const popRect = popover.getBoundingClientRect();
+        left = Math.max(0, Math.min(left, rect.width - popRect.width));
+        top = Math.max(0, Math.min(top, rect.height - popRect.height));
+        popover.style.left = left + 'px';
+        popover.style.top = top + 'px';
+      };
+      const onUp = () => {
+        titleEl.style.cursor = 'grab';
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        popover._dragJustEnded = true;
+        setTimeout(() => { popover._dragJustEnded = false; }, 0);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+  const resizeHandle = document.createElement('div');
+  resizeHandle.className = 'comment-popover-resize-handle';
+  resizeHandle.setAttribute('aria-label', 'Resize');
+  popover.appendChild(resizeHandle);
+  const minW = 260;
+  const maxW = Math.min(1200, Math.max(360, wrapper.getBoundingClientRect().width * 0.9));
+  const minH = 200;
+  const maxH = Math.min(window.innerHeight * 0.85, wrapper.getBoundingClientRect().height);
+  resizeHandle.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startW = popover.offsetWidth;
+    const startH = popover.offsetHeight;
+    const onMove = (e2) => {
+      const dw = e2.clientX - startX;
+      const dh = e2.clientY - startY;
+      let w = Math.max(minW, Math.min(maxW, startW + dw));
+      let h = Math.max(minH, Math.min(maxH, startH + dh));
+      popover.style.width = w + 'px';
+      popover.style.height = h + 'px';
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+function showCommentPopoverForText(propIndex, start, end, existingCommentId = null, options = {}) {
   const existing = document.getElementById('commentPopover');
   if (existing) existing.remove();
 
   const existingComment = existingCommentId ? getCommentById(existingCommentId) : null;
+  const viewMode = options.viewMode === true || (!!existingComment && options.viewMode !== false);
+  const commentAuthor = (existingComment && existingComment.author) || localStorage.getItem(COMMENT_AUTHOR_KEY) || '';
+
   const popover = document.createElement('div');
   popover.id = 'commentPopover';
   popover.className = 'comment-popover';
-  popover.innerHTML = `
-    <p class="comment-popover-title">${existingComment ? 'View / Edit comment on text' : 'Add comment to highlighted text'}</p>
-    <textarea rows="3" placeholder="Your note…">${existingComment ? escapeHtml(existingComment.text || '') : ''}</textarea>
-    <div class="comment-popover-actions">
-      <button type="button" data-action="save">${existingComment ? 'Update' : 'Save'}</button>
-      ${existingComment ? '<button type="button" data-action="delete" class="secondary">Remove comment</button>' : ''}
-      <button type="button" data-action="cancel" class="secondary">Cancel</button>
-    </div>
-  `;
+
+  if (viewMode) {
+    const metaStr = `${escapeHtml((existingComment.author || '').trim() || '')} · ${existingComment.createdAt ? new Date(existingComment.createdAt).toLocaleString() : ''}`;
+    popover.innerHTML = `
+      <p class="comment-popover-title">Comment on text</p>
+      <div class="comment-body-view">
+        <span class="comment-reply-meta">${metaStr}</span>
+        <div class="comment-body-view-text">${escapeHtml(existingComment.text || '')}</div>
+      </div>
+      <div class="comment-popover-actions">
+        <button type="button" data-action="edit">Edit</button>
+        <button type="button" data-action="delete" class="secondary">Remove comment</button>
+        <button type="button" data-action="cancel" class="secondary">Cancel</button>
+      </div>
+      <div class="comment-replies-section"><p class="comment-replies-title">Replies (${(existingComment.replies || []).length})</p><div class="comment-replies-list" data-comment-id="${existingComment.id}"></div><div class="comment-reply-add"><div class="comment-reply-author-row"><label for="replyAuthorText">Author:</label><input type="text" id="replyAuthorText" class="author-input" placeholder="Your name" value="${escapeHtml(localStorage.getItem(COMMENT_AUTHOR_KEY) || '')}"></div><textarea rows="2" placeholder="Add a reply…"></textarea><button type="button" data-action="add-reply" class="secondary">Reply</button></div></div>
+    `;
+  } else {
+    popover.innerHTML = `
+      <p class="comment-popover-title">${existingComment ? 'View / Edit comment on text' : 'Add comment to highlighted text'}</p>
+      <div class="comment-popover-author-row">
+        <label for="commentAuthorText">Author:</label>
+        <input type="text" id="commentAuthorText" class="author-input" placeholder="Your name" value="${escapeHtml(commentAuthor)}">
+      </div>
+      <textarea rows="3" placeholder="Your note…">${existingComment ? escapeHtml(existingComment.text || '') : ''}</textarea>
+      <div class="comment-popover-actions">
+        <button type="button" data-action="save">${existingComment ? 'Update' : 'Save'}</button>
+        ${existingComment ? '<button type="button" data-action="delete" class="secondary">Remove comment</button>' : ''}
+        <button type="button" data-action="cancel" class="secondary">Cancel</button>
+      </div>
+      ${existingComment ? `<div class="comment-replies-section"><p class="comment-replies-title">Replies (${(existingComment.replies || []).length})</p><div class="comment-replies-list" data-comment-id="${existingComment.id}"></div><div class="comment-reply-add"><div class="comment-reply-author-row"><label for="replyAuthorText">Author:</label><input type="text" id="replyAuthorText" class="author-input" placeholder="Your name" value="${escapeHtml(localStorage.getItem(COMMENT_AUTHOR_KEY) || '')}"></div><textarea rows="2" placeholder="Add a reply…"></textarea><button type="button" data-action="add-reply" class="secondary">Reply</button></div></div>` : ''}
+    `;
+  }
 
   const wrapper = arcCanvas?.parentElement || document.body;
-  const rect = wrapper.getBoundingClientRect();
-  popover.style.left = `${Math.max(8, rect.width / 2 - 140)}px`;
-  popover.style.top = `${Math.max(8, rect.height / 2 - 80)}px`;
+  const wrapperRect = wrapper.getBoundingClientRect();
+  let anchorRect = options.anchorRect || null;
+  if (!anchorRect && existingCommentId && propositionsContainer) {
+    const mark = propositionsContainer.querySelector(`.comment-highlight[data-comment-id="${existingCommentId}"]`);
+    if (mark) anchorRect = mark.getBoundingClientRect();
+  }
+  if (anchorRect) {
+    const gap = 8;
+    const leftOffset = 120;
+    let left = anchorRect.left - wrapperRect.left - leftOffset;
+    let top = anchorRect.bottom - wrapperRect.top + gap;
+    const popoverW = options.lastWidth != null ? options.lastWidth : 640;
+    const popoverH = options.lastHeight != null ? options.lastHeight : 420;
+    left = Math.max(8, Math.min(left, wrapperRect.width - popoverW));
+    top = Math.max(8, Math.min(top, wrapperRect.height - Math.min(popoverH, wrapperRect.height)));
+    popover.style.left = left + 'px';
+    popover.style.top = top + 'px';
+  } else {
+    const rect = wrapperRect;
+    const leftOffset = 120;
+    popover.style.left = `${Math.max(8, rect.width / 2 - 140 - leftOffset)}px`;
+    popover.style.top = `${Math.max(8, rect.height / 2 - 80)}px`;
+  }
   wrapper.appendChild(popover);
+  if (options.lastWidth != null) popover.style.width = options.lastWidth + 'px';
+  if (options.lastHeight != null) popover.style.height = options.lastHeight + 'px';
+  if (options.lastLeft != null) popover.style.left = options.lastLeft;
+  if (options.lastTop != null) popover.style.top = options.lastTop;
+  makeCommentPopoverDraggableAndResizable(popover);
 
+  if (viewMode) {
+    popover.querySelector('[data-action="edit"]').addEventListener('click', () => {
+      const lastWidth = popover.offsetWidth;
+      const lastHeight = popover.offsetHeight;
+      const lastLeft = popover.style.left;
+      const lastTop = popover.style.top;
+      popover.remove();
+      document.removeEventListener('click', dismiss);
+      showCommentPopoverForText(propIndex, start, end, existingComment.id, { viewMode: false, lastWidth, lastHeight, lastLeft, lastTop });
+    });
+    popover.querySelector('[data-action="delete"]').addEventListener('click', () => {
+      comments = comments.filter((c) => c.id !== existingComment.id);
+      popover.remove();
+      document.removeEventListener('click', dismiss);
+      renderPropositions();
+      renderCommentPreviews();
+      showStatus('Comment removed.', 'success');
+    });
+    popover.querySelector('[data-action="cancel"]').addEventListener('click', () => {
+      popover.remove();
+      document.removeEventListener('click', dismiss);
+    });
+    const repliesList = popover.querySelector('.comment-replies-list');
+    const replyCountEl = popover.querySelector('.comment-replies-title');
+    const renderReplies = () => {
+      if (!repliesList) return;
+      repliesList.innerHTML = '';
+      const replies = existingComment.replies || [];
+      replyCountEl.textContent = `Replies (${replies.length})`;
+      replies.forEach((r) => {
+        const div = document.createElement('div');
+        div.className = 'comment-reply-item';
+        div.innerHTML = `<span class="comment-reply-meta">${escapeHtml(r.author || '')} · ${r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</span><p class="comment-reply-text">${escapeHtml(r.text || '')}</p>`;
+        repliesList.appendChild(div);
+      });
+    };
+    renderReplies();
+    const replyTa = popover.querySelector('.comment-reply-add textarea');
+    const replyAuthorInput = popover.querySelector('#replyAuthorText');
+    const addReplyBtn = popover.querySelector('[data-action="add-reply"]');
+    if (addReplyBtn && replyTa) {
+      addReplyBtn.addEventListener('click', () => {
+        const replyText = (replyTa.value || '').trim();
+        if (!replyText) return;
+        const replyAuthor = (replyAuthorInput && replyAuthorInput.value || '').trim() || (localStorage.getItem(COMMENT_AUTHOR_KEY) || '');
+        if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) {}
+        if (!existingComment.replies) existingComment.replies = [];
+        existingComment.replies.push({
+          id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+          text: replyText,
+          author: replyAuthor || undefined,
+          createdAt: new Date().toISOString(),
+        });
+        replyTa.value = '';
+        renderReplies();
+        renderCommentPreviews();
+      });
+    }
+  } else {
   const ta = popover.querySelector('textarea');
+  const authorInput = popover.querySelector('#commentAuthorText');
   ta.focus();
+
+  if (existingComment) {
+    const repliesList = popover.querySelector('.comment-replies-list');
+    const replyCountEl = popover.querySelector('.comment-replies-title');
+    const renderReplies = () => {
+      if (!repliesList) return;
+      repliesList.innerHTML = '';
+      const replies = existingComment.replies || [];
+      replyCountEl.textContent = `Replies (${replies.length})`;
+      replies.forEach((r) => {
+        const div = document.createElement('div');
+        div.className = 'comment-reply-item';
+        div.innerHTML = `<span class="comment-reply-meta">${escapeHtml(r.author || '')} · ${r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</span><p class="comment-reply-text">${escapeHtml(r.text || '')}</p>`;
+        repliesList.appendChild(div);
+      });
+    };
+    renderReplies();
+    const replyTa = popover.querySelector('.comment-reply-add textarea');
+    const replyAuthorInput = popover.querySelector('#replyAuthorText');
+    const addReplyBtn = popover.querySelector('[data-action="add-reply"]');
+    if (addReplyBtn && replyTa) {
+      addReplyBtn.addEventListener('click', () => {
+        const replyText = (replyTa.value || '').trim();
+        if (!replyText) return;
+        const replyAuthor = (replyAuthorInput && replyAuthorInput.value || '').trim() || (localStorage.getItem(COMMENT_AUTHOR_KEY) || '');
+        if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) {}
+        if (!existingComment.replies) existingComment.replies = [];
+        existingComment.replies.push({
+          id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+          text: replyText,
+          author: replyAuthor || undefined,
+          createdAt: new Date().toISOString(),
+        });
+        replyTa.value = '';
+        renderReplies();
+        renderCommentPreviews();
+      });
+    }
+  }
 
   popover.querySelector('[data-action="save"]').addEventListener('click', () => {
     const text = (ta.value || '').trim();
+    const author = (authorInput && authorInput.value || '').trim();
+    if (author) try { localStorage.setItem(COMMENT_AUTHOR_KEY, author); } catch (_) {}
+    let savedCommentId = null;
     if (existingComment) {
       existingComment.text = text;
+      existingComment.author = author || existingComment.author;
       if (!text) comments = comments.filter((c) => c.id !== existingComment.id);
-      else if (existingComment.target && existingComment.target.propIndex === propIndex) {
-        existingComment.target.start = start;
-        existingComment.target.end = end;
+      else {
+        savedCommentId = existingComment.id;
+        if (existingComment.target && existingComment.target.propIndex === propIndex) {
+          existingComment.target.start = start;
+          existingComment.target.end = end;
+        }
       }
     } else if (text) {
+      const newId = nextCommentId();
       comments.push({
-        id: nextCommentId(),
+        id: newId,
         type: 'text',
         target: { propIndex, start, end },
         text,
+        author: author || undefined,
         createdAt: new Date().toISOString(),
+        replies: [],
       });
+      savedCommentId = newId;
     }
+    const lastWidth = popover.offsetWidth;
+    const lastHeight = popover.offsetHeight;
+    const lastLeft = popover.style.left;
+    const lastTop = popover.style.top;
     popover.remove();
     document.removeEventListener('click', dismiss);
     renderPropositions();
     renderCommentPreviews();
     showStatus(existingComment ? (text ? 'Comment updated.' : 'Comment removed.') : 'Comment added.', 'success');
+    if (savedCommentId) showCommentPopoverForText(propIndex, start, end, savedCommentId, { viewMode: true, lastWidth, lastHeight, lastLeft, lastTop });
   });
 
   if (existingComment) {
@@ -1242,8 +1508,10 @@ function showCommentPopoverForText(propIndex, start, end, existingCommentId = nu
     popover.remove();
     document.removeEventListener('click', dismiss);
   });
+  }
 
   const dismiss = (e) => {
+    if (popover._dragJustEnded) return;
     if (popover.parentNode && popover.contains(e.target)) return;
     popover.remove();
     document.removeEventListener('click', dismiss);
@@ -1251,50 +1519,196 @@ function showCommentPopoverForText(propIndex, start, end, existingCommentId = nu
   setTimeout(() => document.addEventListener('click', dismiss), 0);
 }
 
-function showCommentPopoverForBracket(arcIdx, centerY, centerX) {
+function showCommentPopoverForBracket(arcIdx, centerY, centerX, options = {}) {
   const existing = document.getElementById('commentPopover');
   if (existing) existing.remove();
 
   const existingComment = getCommentForBracket(arcIdx);
+  const viewMode = options.viewMode === true || (!!existingComment && options.viewMode !== false);
+  const commentAuthor = (existingComment && existingComment.author) || localStorage.getItem(COMMENT_AUTHOR_KEY) || '';
+
   const popover = document.createElement('div');
   popover.id = 'commentPopover';
   popover.className = 'comment-popover';
-  popover.innerHTML = `
-    <p class="comment-popover-title">${existingComment ? 'View / Edit comment' : 'Add comment to bracket'}</p>
-    <textarea rows="3" placeholder="Your note on this bracket…">${escapeHtml(existingComment?.text || '')}</textarea>
-    <div class="comment-popover-actions">
-      <button type="button" data-action="save">${existingComment ? 'Update' : 'Save'}</button>
-      ${existingComment ? '<button type="button" data-action="delete" class="secondary">Remove comment</button>' : ''}
-      <button type="button" data-action="cancel" class="secondary">Cancel</button>
-    </div>
-  `;
+
+  if (viewMode) {
+    const metaStr = `${escapeHtml((existingComment.author || '').trim() || '')} · ${existingComment.createdAt ? new Date(existingComment.createdAt).toLocaleString() : ''}`;
+    popover.innerHTML = `
+      <p class="comment-popover-title">Comment on bracket</p>
+      <div class="comment-body-view">
+        <span class="comment-reply-meta">${metaStr}</span>
+        <div class="comment-body-view-text">${escapeHtml(existingComment.text || '')}</div>
+      </div>
+      <div class="comment-popover-actions">
+        <button type="button" data-action="edit">Edit</button>
+        <button type="button" data-action="delete" class="secondary">Remove comment</button>
+        <button type="button" data-action="cancel" class="secondary">Cancel</button>
+      </div>
+      <div class="comment-replies-section"><p class="comment-replies-title">Replies (${(existingComment.replies || []).length})</p><div class="comment-replies-list" data-comment-id="${existingComment.id}"></div><div class="comment-reply-add"><div class="comment-reply-author-row"><label for="replyAuthorBracket">Author:</label><input type="text" id="replyAuthorBracket" class="author-input" placeholder="Your name" value="${escapeHtml(localStorage.getItem(COMMENT_AUTHOR_KEY) || '')}"></div><textarea rows="2" placeholder="Add a reply…"></textarea><button type="button" data-action="add-reply" class="secondary">Reply</button></div></div>
+    `;
+  } else {
+    popover.innerHTML = `
+      <p class="comment-popover-title">${existingComment ? 'View / Edit comment' : 'Add comment to bracket'}</p>
+      <div class="comment-popover-author-row">
+        <label for="commentAuthorBracket">Author:</label>
+        <input type="text" id="commentAuthorBracket" class="author-input" placeholder="Your name" value="${escapeHtml(commentAuthor)}">
+      </div>
+      <textarea rows="3" placeholder="Your note on this bracket…">${escapeHtml(existingComment?.text || '')}</textarea>
+      <div class="comment-popover-actions">
+        <button type="button" data-action="save">${existingComment ? 'Update' : 'Save'}</button>
+        ${existingComment ? '<button type="button" data-action="delete" class="secondary">Remove comment</button>' : ''}
+        <button type="button" data-action="cancel" class="secondary">Cancel</button>
+      </div>
+      ${existingComment ? `<div class="comment-replies-section"><p class="comment-replies-title">Replies (${(existingComment.replies || []).length})</p><div class="comment-replies-list" data-comment-id="${existingComment.id}"></div><div class="comment-reply-add"><div class="comment-reply-author-row"><label for="replyAuthorBracket">Author:</label><input type="text" id="replyAuthorBracket" class="author-input" placeholder="Your name" value="${escapeHtml(localStorage.getItem(COMMENT_AUTHOR_KEY) || '')}"></div><textarea rows="2" placeholder="Add a reply…"></textarea><button type="button" data-action="add-reply" class="secondary">Reply</button></div></div>` : ''}
+    `;
+  }
 
   const wrapper = arcCanvas?.parentElement || document.body;
-  popover.style.left = `${Math.max(8, Math.min(centerX - 120, wrapper.offsetWidth - 280))}px`;
-  popover.style.top = `${Math.max(8, centerY - 60)}px`;
+  const defaultW = 640;
+  const leftOffset = 120;
+  const leftBelow = Math.max(8, centerX - Math.floor(defaultW / 2) - leftOffset);
+  const topBelow = centerY + 20;
+  popover.style.left = `${Math.max(8, Math.min(leftBelow, wrapper.offsetWidth - defaultW))}px`;
+  popover.style.top = `${Math.max(8, topBelow)}px`;
   wrapper.appendChild(popover);
+  if (options.lastWidth != null) popover.style.width = options.lastWidth + 'px';
+  if (options.lastHeight != null) popover.style.height = options.lastHeight + 'px';
+  if (options.lastLeft != null) popover.style.left = options.lastLeft;
+  if (options.lastTop != null) popover.style.top = options.lastTop;
+  makeCommentPopoverDraggableAndResizable(popover);
 
+  if (viewMode) {
+    popover.querySelector('[data-action="edit"]').addEventListener('click', () => {
+      const lastWidth = popover.offsetWidth;
+      const lastHeight = popover.offsetHeight;
+      const lastLeft = popover.style.left;
+      const lastTop = popover.style.top;
+      popover.remove();
+      document.removeEventListener('click', dismiss);
+      showCommentPopoverForBracket(arcIdx, centerY, centerX, { viewMode: false, lastWidth, lastHeight, lastLeft, lastTop });
+    });
+    popover.querySelector('[data-action="delete"]').addEventListener('click', () => {
+      comments = comments.filter((c) => c.id !== existingComment.id);
+      popover.remove();
+      document.removeEventListener('click', dismiss);
+      renderCommentPreviews();
+      showStatus('Comment removed.', 'success');
+    });
+    popover.querySelector('[data-action="cancel"]').addEventListener('click', () => {
+      popover.remove();
+      document.removeEventListener('click', dismiss);
+    });
+    const repliesList = popover.querySelector('.comment-replies-list');
+    const replyCountEl = popover.querySelector('.comment-replies-title');
+    const renderReplies = () => {
+      if (!repliesList) return;
+      repliesList.innerHTML = '';
+      const replies = existingComment.replies || [];
+      replyCountEl.textContent = `Replies (${replies.length})`;
+      replies.forEach((r) => {
+        const div = document.createElement('div');
+        div.className = 'comment-reply-item';
+        div.innerHTML = `<span class="comment-reply-meta">${escapeHtml(r.author || '')} · ${r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</span><p class="comment-reply-text">${escapeHtml(r.text || '')}</p>`;
+        repliesList.appendChild(div);
+      });
+    };
+    renderReplies();
+    const replyTa = popover.querySelector('.comment-reply-add textarea');
+    const replyAuthorInput = popover.querySelector('#replyAuthorBracket');
+    const addReplyBtn = popover.querySelector('[data-action="add-reply"]');
+    if (addReplyBtn && replyTa) {
+      addReplyBtn.addEventListener('click', () => {
+        const replyText = (replyTa.value || '').trim();
+        if (!replyText) return;
+        const replyAuthor = (replyAuthorInput && replyAuthorInput.value || '').trim() || (localStorage.getItem(COMMENT_AUTHOR_KEY) || '');
+        if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) {}
+        if (!existingComment.replies) existingComment.replies = [];
+        existingComment.replies.push({
+          id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+          text: replyText,
+          author: replyAuthor || undefined,
+          createdAt: new Date().toISOString(),
+        });
+        replyTa.value = '';
+        renderReplies();
+        renderCommentPreviews();
+      });
+    }
+  } else {
   const ta = popover.querySelector('textarea');
+  const authorInput = popover.querySelector('#commentAuthorBracket');
   ta.focus();
+
+  if (existingComment) {
+    const repliesList = popover.querySelector('.comment-replies-list');
+    const replyCountEl = popover.querySelector('.comment-replies-title');
+    const renderReplies = () => {
+      if (!repliesList) return;
+      repliesList.innerHTML = '';
+      const replies = existingComment.replies || [];
+      replyCountEl.textContent = `Replies (${replies.length})`;
+      replies.forEach((r) => {
+        const div = document.createElement('div');
+        div.className = 'comment-reply-item';
+        div.innerHTML = `<span class="comment-reply-meta">${escapeHtml(r.author || '')} · ${r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</span><p class="comment-reply-text">${escapeHtml(r.text || '')}</p>`;
+        repliesList.appendChild(div);
+      });
+    };
+    renderReplies();
+    const replyTa = popover.querySelector('.comment-reply-add textarea');
+    const replyAuthorInput = popover.querySelector('#replyAuthorBracket');
+    const addReplyBtn = popover.querySelector('[data-action="add-reply"]');
+    if (addReplyBtn && replyTa) {
+      addReplyBtn.addEventListener('click', () => {
+        const replyText = (replyTa.value || '').trim();
+        if (!replyText) return;
+        const replyAuthor = (replyAuthorInput && replyAuthorInput.value || '').trim() || (localStorage.getItem(COMMENT_AUTHOR_KEY) || '');
+        if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) {}
+        if (!existingComment.replies) existingComment.replies = [];
+        existingComment.replies.push({
+          id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+          text: replyText,
+          author: replyAuthor || undefined,
+          createdAt: new Date().toISOString(),
+        });
+        replyTa.value = '';
+        renderReplies();
+        renderCommentPreviews();
+      });
+    }
+  }
 
   popover.querySelector('[data-action="save"]').addEventListener('click', () => {
     const text = (ta.value || '').trim();
+    const author = (authorInput && authorInput.value || '').trim();
+    if (author) try { localStorage.setItem(COMMENT_AUTHOR_KEY, author); } catch (_) {}
+    let reopenViewMode = false;
     if (existingComment) {
       existingComment.text = text;
+      existingComment.author = author || existingComment.author;
       if (!text) comments = comments.filter((c) => c.id !== existingComment.id);
+      else reopenViewMode = true;
     } else if (text) {
       comments.push({
         id: nextCommentId(),
         type: 'bracket',
         target: { arcIdx },
         text,
+        author: author || undefined,
         createdAt: new Date().toISOString(),
+        replies: [],
       });
+      reopenViewMode = true;
     }
+    const lastWidth = popover.offsetWidth;
+    const lastHeight = popover.offsetHeight;
+    const lastLeft = popover.style.left;
+    const lastTop = popover.style.top;
     popover.remove();
     document.removeEventListener('click', dismiss);
     renderCommentPreviews();
     showStatus(existingComment ? (text ? 'Comment updated.' : 'Comment removed.') : 'Comment added.', 'success');
+    if (reopenViewMode) showCommentPopoverForBracket(arcIdx, centerY, centerX, { viewMode: true, lastWidth, lastHeight, lastLeft, lastTop });
   });
 
   if (existingComment) {
@@ -1311,8 +1725,10 @@ function showCommentPopoverForBracket(arcIdx, centerY, centerX) {
     popover.remove();
     document.removeEventListener('click', dismiss);
   });
+  }
 
   const dismiss = (e) => {
+    if (popover._dragJustEnded) return;
     if (popover.parentNode && popover.contains(e.target)) return;
     popover.remove();
     document.removeEventListener('click', dismiss);
@@ -1409,13 +1825,18 @@ function showLabelPicker(arcIdx, centerY, centerX) {
 
   const picker = document.createElement('div');
   picker.id = 'labelPicker';
-  picker.className = 'label-picker';
+  picker.className = 'label-picker relationship-picker';
 
   const wrapper = arcCanvas.parentElement;
+  const title = document.createElement('p');
+  title.className = 'picker-title';
+  title.textContent = 'Choose relationship';
+  picker.appendChild(title);
+
   const typeKeys = Object.keys(RELATIONSHIP_TYPES).filter((k) => k !== 'action-result');
   typeKeys.forEach((typeKey) => {
     const btn = document.createElement('button');
-    btn.textContent = BRACKET_LABELS[typeKey] ?? typeKey.slice(0, 2);
+    btn.textContent = RELATIONSHIP_TYPES[typeKey] ?? typeKey;
     btn.title = RELATIONSHIP_TYPES[typeKey];
     btn.className = typeKey;
     btn.addEventListener('click', (e) => {
@@ -1675,6 +2096,7 @@ function buildArcData() {
     arcs: arcs.map((a) => ({ ...a })),
     comments: comments.map((c) => ({ ...c })),
     copyrightLabel: document.getElementById('copyrightLabel')?.textContent || '',
+    pageAuthor: (document.getElementById('pageAuthor')?.value || '').trim(),
     exportedAt: new Date().toISOString(),
   };
 }
@@ -1744,9 +2166,15 @@ function importArc(data) {
     ? data.verseRefs.slice()
     : propositions.map((_, i) => String(i + 1));
   arcs = Array.isArray(data.arcs) ? data.arcs.map((a) => ({ ...a })) : [];
-  comments = Array.isArray(data.comments) ? data.comments.map((c) => ({ ...c })) : [];
+  comments = Array.isArray(data.comments) ? data.comments.map((c) => ({ ...c, replies: Array.isArray(c.replies) ? c.replies.map((r) => ({ ...r })) : [] })) : [];
 
   if (passageHeader) passageHeader.textContent = passageRef;
+  const pageAuthorInputEl = document.getElementById('pageAuthor');
+  if (pageAuthorInputEl && data.pageAuthor != null) {
+    pageAuthorInputEl.value = data.pageAuthor;
+    try { localStorage.setItem(PAGE_AUTHOR_KEY, String(data.pageAuthor).trim()); } catch (_) {}
+  }
+  if (typeof syncPassageAuthorDisplay === 'function') syncPassageAuthorDisplay();
   const copyrightLabel = document.getElementById('copyrightLabel');
   if (copyrightLabel && data.copyrightLabel) copyrightLabel.textContent = data.copyrightLabel;
   if (propositionsContainer) {
@@ -1921,7 +2349,8 @@ if (propositionsContainer) {
     const fullText = textSpan.textContent || '';
     let end = Math.min(preEnd.toString().length, fullText.length);
     if (start >= end) return;
-    setTimeout(() => showCommentPopoverForText(propIndex, start, end), 10);
+    const anchorRect = range.getBoundingClientRect();
+    setTimeout(() => showCommentPopoverForText(propIndex, start, end, null, { anchorRect }), 10);
   });
 
   propositionsContainer.addEventListener('click', (e) => {

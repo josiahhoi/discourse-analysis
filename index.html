@@ -19,7 +19,7 @@
           <option value="esv">ESV</option>
           <option value="sblgnt">SBL Greek NT</option>
         </select>
-        <input type="text" id="passageInput" placeholder="e.g. John 1:1-5, Romans 8:28" value="Matt 8:14-17">
+        <input type="text" id="passageInput" placeholder="e.g. John 1:1-5, Romans 8:28" value="Heb 7:11-25">
         <button id="fetchBtn" type="button">Fetch Passage</button>
         <div class="api-key-row" id="apiKeyRow">
           <label for="apiKey">ESV API Key:</label>
@@ -53,6 +53,10 @@
         </div>
         <p class="hint-small">Click bracket for Delete / Change label / Select to connect. Double-click bracket to change label.</p>
         <button id="clearArcs" class="secondary">Clear All Brackets</button>
+        <div class="save-load-row save-as-author-row">
+          <label for="pageAuthor">Author:</label>
+          <input type="text" id="pageAuthor" placeholder="Page author (saved with arc)" class="author-input">
+        </div>
         <div class="save-load-row save-load-primary">
           <button id="saveBtn" type="button" title="Save to current file (Ctrl+S). First time: choose location.">Save</button>
           <button id="exportBtn" type="button" class="secondary" title="Download arc as new JSON file">Export</button>
@@ -74,8 +78,11 @@
 
       <section class="workspace">
         <div class="passage-header" id="passageHeader">
-          <span id="passageRef" contenteditable="true" role="textbox" title="Click to edit passage reference">—</span>
-          <span class="copyright" id="copyrightLabel">(ESV)</span>
+          <div class="passage-header-left">
+            <span id="passageRef" contenteditable="true" role="textbox" title="Click to edit passage reference">—</span>
+            <span class="copyright" id="copyrightLabel">(ESV)</span>
+          </div>
+          <span id="passageAuthor" class="passage-author" aria-label="Page author"></span>
         </div>
         <div class="arc-canvas-wrapper">
           <svg id="arcCanvas" class="arc-canvas" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -93,6 +100,7 @@
 
     <footer class="footer">
       <p>ESV via <a href="https://api.esv.org" target="_blank" rel="noopener">api.esv.org</a>. Greek: <a href="https://sblgnt.com" target="_blank" rel="noopener">SBLGNT</a> (CC-BY 4.0).</p>
+      <p class="footer-version">Version 1.1 · Made by Josiah Hoi</p>
     </footer>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>

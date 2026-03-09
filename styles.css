@@ -378,6 +378,12 @@ body {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
+/* Relationship picker in body: fixed so it doesn't affect workspace layout (prevents scroll jump) */
+.relationship-picker-fixed {
+  position: fixed !important;
+  z-index: 1000;
+}
+
 .label-picker button {
   padding: 0.35rem 0.6rem;
   font-size: 0.8rem;
@@ -671,6 +677,13 @@ body {
   background: var(--border);
 }
 
+.comments-preview-card .comment-preview-author {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+  font-style: italic;
+}
+
 .comments-preview-card .comment-context {
   color: var(--text-muted);
   font-size: 0.75rem;
@@ -694,11 +707,26 @@ body {
 }
 
 .passage-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
   margin-bottom: 0.75rem;
   font-family: var(--font-serif);
   font-size: 1.1rem;
   font-style: italic;
   color: var(--accent);
+}
+
+.passage-header-left {
+  min-width: 0;
+}
+
+.passage-author {
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  font-style: normal;
+  color: var(--text-muted);
 }
 
 .passage-header [contenteditable="true"] {
@@ -752,10 +780,13 @@ body {
   z-index: 2;
 }
 
-/* In Connect-to mode, ensure arc canvas never captures clicks so proposition blocks receive them */
+/* In Connect-to mode, let clicks pass through to proposition blocks — but keep connection nodes (circles) clickable so "S node then verse 4 node" works */
 .arc-canvas.connect-mode,
 .arc-canvas.connect-mode * {
   pointer-events: none !important;
+}
+.arc-canvas.connect-mode .connection-node {
+  pointer-events: all !important;
 }
 
 .arc-canvas path {
@@ -767,30 +798,30 @@ body {
   cursor: pointer;
 }
 
-/* Brackets with comments: bolder stroke and visible comment dot */
-.arc-canvas .bracket-group.has-comment path:not([stroke="transparent"]) {
-  stroke-width: 2.5;
-  filter: drop-shadow(0 0 1px currentColor);
+/* Brackets with comments: yellow transparent highlight overlay on the line */
+.arc-canvas .bracket-group.has-comment .bracket-comment-highlight {
+  pointer-events: none;
+  stroke: #e8c968;
+  stroke-opacity: 0.55;
+  stroke-width: 14 !important;
 }
 
-.arc-canvas .bracket-comment-note {
-  fill: var(--comment-note);
-  stroke: var(--comment-note-shadow);
-  stroke-width: 0.8;
-  pointer-events: none;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
+/* Bracket with comment: slightly stronger highlight on hover */
+.arc-canvas .bracket-group.has-comment.bracket-hover .bracket-comment-highlight {
+  stroke-opacity: 0.7;
 }
 
 /* Connection nodes: clickable dots for propositions and brackets */
 .arc-canvas .connection-node {
-  fill: var(--accent);
-  stroke: var(--surface-elevated);
+  fill: color-mix(in srgb, var(--accent) 55%, transparent);
+  stroke: color-mix(in srgb, var(--surface-elevated) 60%, transparent);
   stroke-width: 2;
-  transition: fill 0.15s;
+  transition: fill 0.15s, stroke 0.15s;
 }
 
 .arc-canvas .connection-node:hover {
-  fill: var(--text);
+  fill: color-mix(in srgb, var(--accent) 85%, transparent);
+  stroke: color-mix(in srgb, var(--surface-elevated) 90%, transparent);
 }
 
 .arc-canvas .bracket-label {
@@ -822,6 +853,7 @@ body {
 .arc-canvas path.question-answer { stroke: #a060e8; }
 .arc-canvas path.concessive { stroke: #e86080; }
 .arc-canvas path.situation-response { stroke: #e88060; }
+.arc-canvas path.unspecified { stroke: var(--arc-custom); }
 
 .arc-canvas path.hover {
   stroke-width: 3;
@@ -923,12 +955,57 @@ body {
   text-decoration: underline;
 }
 
-/* Error/status messages */
+.footer-version {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Save as / Author row — shared styling for page author and comment author inputs */
+.save-as-author-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.save-as-author-row label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.author-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+
+[data-theme="light"] .author-input {
+  background: #fff;
+}
+
+.author-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Error/status messages — fixed so removing after 5s doesn't cause scroll jump */
 .status {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
   padding: 0.75rem 1rem;
-  margin: 1rem 0;
+  margin: 0;
   border-radius: var(--radius);
   font-size: 0.9rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .status.error {
@@ -951,9 +1028,36 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 0.75rem;
+  padding-bottom: 1.5rem; /* room for resize handle */
   min-width: 260px;
-  max-width: 360px;
+  max-width: 90vw;
+  width: 640px;
+  min-height: 200px;
+  height: 420px;
+  max-height: 85vh;
+  overflow-y: auto;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.comment-body-view {
+  margin-bottom: 0.5rem;
+}
+
+.comment-body-view .comment-reply-meta {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.comment-body-view-text {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .comment-popover-title {
@@ -961,6 +1065,85 @@ body {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-muted);
+  user-select: none;
+}
+
+.comment-popover-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  height: 20px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, var(--border) 50%, var(--border) 55%, transparent 55%);
+  border-radius: 0 0 var(--radius) 0;
+}
+.comment-popover-resize-handle:hover {
+  background: linear-gradient(135deg, transparent 50%, var(--text-muted) 50%, var(--text-muted) 55%, transparent 55%);
+}
+
+.comment-popover-author-row,
+.comment-reply-author-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.comment-popover-author-row label,
+.comment-reply-author-row label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.comment-popover-author-row .author-input,
+.comment-reply-author-row .author-input {
+  flex: 1;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.comment-replies-section {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.comment-replies-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.comment-replies-list {
+  margin-bottom: 0.5rem;
+}
+
+.comment-reply-item {
+  font-size: 0.8rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.comment-reply-item:last-child {
+  border-bottom: none;
+}
+
+.comment-reply-meta {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.comment-reply-text {
+  margin: 0.15rem 0 0;
+  font-size: 0.85rem;
+}
+
+.comment-reply-add textarea {
+  margin-bottom: 0.35rem;
+  min-height: 2.5em;
 }
 
 .comment-popover textarea {
@@ -1008,6 +1191,12 @@ body {
 .comment-popover-actions button[data-action="save"]:hover {
   background: var(--accent-dim);
   border-color: var(--accent-dim);
+}
+
+.comment-preview-reply-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
 }
 
 /* Comment highlight in proposition text */
