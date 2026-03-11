@@ -422,6 +422,13 @@ body {
 .label-picker button.concessive { border-color: #e86080; color: #e86080; }
 .label-picker button.situation-response { border-color: #e88060; color: #e88060; }
 
+.label-picker button.picker-delete-bracket {
+  margin-top: 0.5rem;
+  width: 100%;
+  border-color: var(--arc-alternative);
+  color: var(--arc-alternative);
+}
+
 .relationship-picker .picker-title {
   width: 100%;
   margin: 0 0 0.5rem;

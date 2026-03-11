@@ -641,6 +641,10 @@ function clearPropositionHighlights() {
 
 function splitAtClick(block, index, e) {
   const textSpan = block.querySelector('.proposition-text') ?? block;
+  // Use current DOM content so we split what's on screen (avoids stale propositions and wrong offset)
+  const currentText = (textSpan.textContent ?? '').trim() || '(empty)';
+  propositions[index] = currentText;
+
   const caretRange = document.caretRangeFromPoint?.(e.clientX, e.clientY);
   const caretPos = document.caretPositionFromPoint?.(e.clientX, e.clientY);
   let node, offset;
@@ -665,9 +669,14 @@ function splitAtClick(block, index, e) {
 
 function splitPropositionAtCaret(block, index) {
   const textSpan = block.querySelector('.proposition-text') ?? block;
+  // Use current DOM content so we split what's on screen
+  const currentText = (textSpan.textContent ?? '').trim() || '(empty)';
+  propositions[index] = currentText;
+
   const sel = window.getSelection();
   if (!sel.rangeCount) return;
   const r = sel.getRangeAt(0);
+  if (!block.contains(r.startContainer)) return;
   const measureRange = document.createRange();
   measureRange.setStart(textSpan, 0);
   measureRange.setEnd(r.startContainer, r.startOffset);
@@ -1849,6 +1858,26 @@ function showLabelPicker(arcIdx, centerY, centerX) {
     });
     picker.appendChild(btn);
   });
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.type = 'button';
+  deleteBtn.className = 'secondary picker-delete-bracket';
+  deleteBtn.textContent = 'Delete bracket';
+  deleteBtn.title = 'Remove this bracket';
+  deleteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    arcs.splice(arcIdx, 1);
+    comments = comments.filter((c) => c.type !== 'bracket' || c.target?.arcIdx !== arcIdx);
+    comments.forEach((c) => {
+      if (c.type === 'bracket' && c.target?.arcIdx > arcIdx) c.target.arcIdx--;
+    });
+    renderArcs();
+    renderCommentPreviews();
+    picker.remove();
+    document.removeEventListener('click', dismiss);
+    showStatus('Bracket removed.', 'success');
+  });
+  picker.appendChild(deleteBtn);
 
   picker.style.left = `${Math.max(8, Math.min(centerX - 210, wrapper.offsetWidth - 430))}px`;
   picker.style.top = `${Math.max(8, centerY - 130)}px`;
