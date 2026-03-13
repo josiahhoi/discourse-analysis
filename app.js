@@ -48,6 +48,7 @@ let connectBracketToArcIdx = null; // when set, next proposition click is the re
 let _connectCancelListener = null;
 let undoStack = []; // { action: 'divide'|'bracket', propositions, verseRefs, arcs } snapshots
 let comments = []; // { id, type: 'bracket'|'text', target: { arcIdx }|{ propIndex, start, end }, text, author?, createdAt, replies?: { id, text, author?, createdAt }[] }
+let isRenderingPropositions = false; // true during renderPropositions so focusout doesn't overwrite (Electron)
 let commentMode = false;
 
 // DOM
@@ -170,7 +171,7 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     saveArc();
   }
-});
+}, true);
 
 function formatArcType(type) {
   return RELATIONSHIP_TYPES[type] || type.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-');
@@ -378,6 +379,7 @@ function renderPropositions() {
     return;
   }
 
+  isRenderingPropositions = true;
   const scrollState = saveScrollState();
   propositionsContainer.innerHTML = '';
 
@@ -421,8 +423,35 @@ function renderPropositions() {
     block.appendChild(textSpan);
 
     block.addEventListener('focusout', () => {
+      if (isRenderingPropositions || !block.isConnected || !propositionsContainer?.contains(block)) return; // Don't overwrite during re-render (Electron) or when block was removed
       propositions[i] = (block.querySelector('.proposition-text')?.textContent ?? '').trim() || '(empty)';
     });
+
+    block.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        const textSpan = block.querySelector('.proposition-text') ?? block;
+        const currentText = (textSpan.textContent ?? '').trim() || '(empty)';
+        const sel = window.getSelection();
+        let offset = null;
+        if (sel?.rangeCount) {
+          const r = sel.getRangeAt(0);
+          if (block.contains(r.startContainer)) {
+            try {
+              const measureRange = document.createRange();
+              measureRange.setStart(textSpan, 0);
+              measureRange.setEnd(r.startContainer, r.startOffset);
+              offset = measureRange.toString().length;
+            } catch (_) {}
+          }
+        }
+        if (offset != null && offset > 0 && offset < currentText.length) {
+          propositions[i] = currentText;
+          splitPropositionAtOffset(i, offset);
+        }
+      }
+    }, true);
 
     block.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -436,17 +465,8 @@ function renderPropositions() {
         idx = parseInt(block.dataset.index, 10);
       }
       const inBracketFlow = arcSelectStep === 1 || connectBracketToArcIdx !== null;
-      if (!inBracketFlow && clickedText && e.detail === 2) {
-        splitAtClick(block, idx, e);
-      } else if (!clickedText || inBracketFlow) {
+      if (inBracketFlow || !clickedText) {
         handlePropositionClick(idx);
-      }
-    });
-
-    block.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        splitPropositionAtCaret(block, i);
       }
     });
 
@@ -456,7 +476,10 @@ function renderPropositions() {
   updateArcPositions();
   // Restore scroll after layout (and ResizeObserver-triggered renderArcs) to prevent jump
   requestAnimationFrame(() => {
-    requestAnimationFrame(() => restoreScrollState(scrollState));
+    requestAnimationFrame(() => {
+      restoreScrollState(scrollState);
+      isRenderingPropositions = false;
+    });
   });
 }
 
@@ -639,48 +662,20 @@ function clearPropositionHighlights() {
   document.querySelectorAll('.proposition-block.arc-selected').forEach((b) => b.classList.remove('arc-selected'));
 }
 
-function splitAtClick(block, index, e) {
-  const textSpan = block.querySelector('.proposition-text') ?? block;
-  // Use current DOM content so we split what's on screen (avoids stale propositions and wrong offset)
-  const currentText = (textSpan.textContent ?? '').trim() || '(empty)';
-  propositions[index] = currentText;
-
-  const caretRange = document.caretRangeFromPoint?.(e.clientX, e.clientY);
-  const caretPos = document.caretPositionFromPoint?.(e.clientX, e.clientY);
-  let node, offset;
-  if (caretRange) {
-    node = caretRange.startContainer;
-    offset = caretRange.startOffset;
-  } else if (caretPos) {
-    node = caretPos.offsetNode;
-    offset = caretPos.offset;
-  } else return;
-  if (!block.contains(node)) return;
-  const measureRange = document.createRange();
-  measureRange.setStart(textSpan, 0);
-  try {
-    measureRange.setEnd(node, offset);
-  } catch (_) {
-    return;
-  }
-  const charOffset = measureRange.toString().length;
-  splitPropositionAtOffset(index, charOffset);
-}
-
 function splitPropositionAtCaret(block, index) {
   const textSpan = block.querySelector('.proposition-text') ?? block;
-  // Use current DOM content so we split what's on screen
   const currentText = (textSpan.textContent ?? '').trim() || '(empty)';
   propositions[index] = currentText;
 
   const sel = window.getSelection();
-  if (!sel.rangeCount) return;
+  if (!sel?.rangeCount) return;
   const r = sel.getRangeAt(0);
   if (!block.contains(r.startContainer)) return;
   const measureRange = document.createRange();
   measureRange.setStart(textSpan, 0);
   measureRange.setEnd(r.startContainer, r.startOffset);
   const offset = measureRange.toString().length;
+  if (offset <= 0 || offset >= currentText.length) return;
   splitPropositionAtOffset(index, offset);
 }
 
