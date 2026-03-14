@@ -57,13 +57,16 @@
           <label for="pageAuthor">Author:</label>
           <input type="text" id="pageAuthor" placeholder="Page author (saved with arc)" class="author-input">
         </div>
+        <div class="save-load-row save-filename-row">
+          <label for="exportFilename">File name:</label>
+          <input type="text" id="exportFilename" placeholder="Custom file name" class="filename-input">
+        </div>
         <div class="save-load-row save-load-primary">
           <button id="saveBtn" type="button" title="Save to current file (Ctrl+S). First time: choose location.">Save</button>
           <button id="exportBtn" type="button" class="secondary" title="Download arc as new JSON file">Export</button>
         </div>
         <div class="save-load-row">
           <button id="copyForWordBtn" type="button" class="secondary" title="Copy diagram as image (Ctrl+V to paste)">Copy image</button>
-          <button id="copyOutlineBtn" type="button" class="secondary" title="Copy as text outline—each proposition & bracket on its own line for commenting in Word">Copy outline</button>
         </div>
         <div class="save-load-row">
           <button id="openFileBtn" type="button" class="secondary" title="Open JSON file (enables Save to update it)">Open</button>

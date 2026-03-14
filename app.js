@@ -2111,6 +2111,81 @@ function nextCommentId() {
   return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
 }
 
+function getBookAbbreviation(bookName) {
+  const map = {
+    'genesis': 'gen', 'exodus': 'exod', 'leviticus': 'lev', 'numbers': 'num', 'deuteronomy': 'deut',
+    'joshua': 'josh', 'judges': 'judg', 'ruth': 'ruth', '1 samuel': '1sam', '2 samuel': '2sam',
+    '1 kings': '1kgs', '2 kings': '2kgs', '1 chronicles': '1chr', '2 chronicles': '2chr',
+    'ezra': 'ezra', 'nehemiah': 'neh', 'esther': 'esth', 'job': 'job', 'psalm': 'ps', 'psalms': 'ps',
+    'proverbs': 'prov', 'ecclesiastes': 'eccl', 'song of solomon': 'song', 'isaiah': 'isa',
+    'jeremiah': 'jer', 'lamentations': 'lam', 'ezekiel': 'ezek', 'daniel': 'dan',
+    'hosea': 'hos', 'joel': 'joel', 'amos': 'amos', 'obadiah': 'obad', 'jonah': 'jonah',
+    'micah': 'mic', 'nahum': 'nah', 'habakkuk': 'hab', 'zephaniah': 'zeph', 'haggai': 'hag',
+    'zechariah': 'zech', 'malachi': 'mal',
+    'matthew': 'matt', 'mark': 'mark', 'luke': 'luke', 'john': 'john', 'acts': 'acts',
+    'romans': 'rom', '1 corinthians': '1cor', '2 corinthians': '2cor', 'galatians': 'gal',
+    'ephesians': 'eph', 'philippians': 'phil', 'colossians': 'col', '1 thessalonians': '1thess',
+    '2 thessalonians': '2thess', '1 timothy': '1tim', '2 timothy': '2tim', 'titus': 'titus',
+    'philemon': 'phlm', 'hebrews': 'heb', 'james': 'jas', '1 peter': '1pet', '2 peter': '2pet',
+    '1 john': '1john', '2 john': '2john', '3 john': '3john', 'jude': 'jude', 'revelation': 'rev'
+  };
+  const normalized = bookName.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+  return map[normalized] || normalized.replace(/\s+/g, '').substring(0, 3);
+}
+
+function getExportFilename(defaultOnly = false) {
+  const customInput = document.getElementById('exportFilename');
+  if (!defaultOnly && customInput && customInput.value.trim()) {
+    return customInput.value.trim();
+  }
+  
+  const ref = passageRef || 'passage';
+  const match = ref.match(/^([\d\s]*[a-zA-Z]+)\s+(\d+)(?::(\d+)(?:-(\d+))?)?/);
+  let defaultPassagePrefix = ref.replace(/\s+|:/g, '-');
+  
+  if (match) {
+    const book = getBookAbbreviation(match[1]);
+    const chap = match[2];
+    const sv = match[3] || '1';
+    const ev = match[4] || sv;
+    defaultPassagePrefix = `${book}-${chap}-${sv}-${ev}`;
+  }
+  
+  let authorPart = 'unknown';
+  const authorName = (document.getElementById('pageAuthor')?.value || '').trim();
+  if (authorName) {
+    const parts = authorName.trim().split(/\s+/);
+    if (parts.length > 1) {
+      const last = parts[parts.length - 1].toLowerCase().replace(/[^a-z]/g, '');
+      const firstInitial = parts[0].charAt(0).toLowerCase();
+      authorPart = `${last}${firstInitial}`;
+    } else {
+      authorPart = authorName.toLowerCase().replace(/[^a-z]/g, '');
+    }
+  }
+
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const datePart = `${yyyy}${mm}${dd}`;
+
+  let translation = 'esv';
+  const versionSelect = document.getElementById('versionSelect');
+  if (versionSelect) {
+    translation = versionSelect.value || 'esv';
+  }
+
+  return `${defaultPassagePrefix}.${translation}.${authorPart}.${datePart}`;
+}
+
+function updateFilenamePlaceholder() {
+  const input = document.getElementById('exportFilename');
+  if (input) {
+    input.placeholder = getExportFilename(true);
+  }
+}
+
 function buildArcData() {
   return {
     version: 1,
@@ -2143,7 +2218,7 @@ async function saveArc() {
       addToRecent(data);
       showStatus('Saved.', 'success');
     } else if ('showSaveFilePicker' in window) {
-      const name = `arc-${(passageRef || 'passage').replace(/\s+|:/g, '-')}.json`;
+      const name = `${getExportFilename()}.json`;
       saveFileHandle = await window.showSaveFilePicker({
         suggestedName: name,
         types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
@@ -2169,7 +2244,7 @@ function exportArc() {
   }
   const data = buildArcData();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const name = `arc-${(passageRef || 'passage').replace(/\s+|:/g, '-')}.json`;
+  const name = `${getExportFilename()}.json`;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = name;
@@ -2248,7 +2323,7 @@ async function copyDiagramForWord() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `arc-${(passageRef || 'passage').replace(/\s+|:/g, '-')}.png`;
+        a.download = `${getExportFilename()}.png`;
         a.click();
         URL.revokeObjectURL(url);
         showStatus('Clipboard blocked. Image downloaded instead—insert into Word.', 'success');
@@ -2262,37 +2337,8 @@ async function copyDiagramForWord() {
 const copyForWordBtn = document.getElementById('copyForWordBtn');
 if (copyForWordBtn) copyForWordBtn.addEventListener('click', copyDiagramForWord);
 
-function copyOutlineForWord() {
-  if (propositions.length === 0) {
-    showStatus('Nothing to copy. Fetch or import a passage first.', 'error');
-    return;
-  }
-  const ref = passageHeader?.textContent || passageRef || 'Arc';
-  const copyright = document.getElementById('copyrightLabel')?.textContent || '';
-  const lines = [`${ref} ${copyright}`.trim(), ''];
-  propositions.forEach((text, i) => {
-    const v = verseRefs[i] ?? String(i + 1);
-    lines.push(`${v} ${text}`);
-  });
-  lines.push('');
-  arcs.forEach((a) => {
-    const label = BRACKET_LABELS[a.type] ?? a.type;
-    const fromRef = verseRefs[a.from] ?? String(a.from + 1);
-    const toRef = verseRefs[a.to] ?? String(a.to + 1);
-    lines.push(`[${label}] ${fromRef}–${toRef}`);
-  });
-  const text = lines.join('\n');
-  navigator.clipboard.writeText(text).then(
-    () => showStatus('Outline copied. Paste into Word—each line can be commented on.', 'success'),
-    () => showStatus('Clipboard copy failed.', 'error')
-  );
-}
-
-const copyOutlineBtn = document.getElementById('copyOutlineBtn');
-if (copyOutlineBtn) copyOutlineBtn.addEventListener('click', copyOutlineForWord);
-
 const saveBtn = document.getElementById('saveBtn');
-if (saveBtn) saveBtn.addEventListener('click', saveArc);
+if (saveBtn) saveBtn.addEventListener('click', () => saveArc());
 if (exportBtn) exportBtn.addEventListener('click', exportArc);
 
 async function openArcFile() {
@@ -2338,6 +2384,22 @@ if (importFileBtn && importFileInput) {
 
 renderRecentList();
 renderCommentPreviews();
+
+// Update filename placeholder logic
+if (passageHeader) {
+  const obs = new MutationObserver(updateFilenamePlaceholder);
+  obs.observe(passageHeader, { childList: true, characterData: true, subtree: true });
+}
+const pageAuthorInputForFilename = document.getElementById('pageAuthor');
+if (pageAuthorInputForFilename) {
+  pageAuthorInputForFilename.addEventListener('input', updateFilenamePlaceholder);
+}
+const versionSelectForFilename = document.getElementById('versionSelect');
+if (versionSelectForFilename) {
+  versionSelectForFilename.addEventListener('change', updateFilenamePlaceholder);
+}
+// Init placeholder
+updateFilenamePlaceholder();
 
 // Comment mode toggle
 const commentModeBtn = document.getElementById('commentModeBtn');
