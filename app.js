@@ -50,6 +50,7 @@ let undoStack = []; // { action: 'divide'|'bracket', propositions, verseRefs, ar
 let comments = []; // { id, type: 'bracket'|'text', target: { arcIdx }|{ propIndex, start, end }, text, author?, createdAt, replies?: { id, text, author?, createdAt }[] }
 let isRenderingPropositions = false; // true during renderPropositions so focusout doesn't overwrite (Electron)
 let commentMode = false;
+let textEditMode = false;
 
 // DOM
 const passageInput = document.getElementById('passageInput');
@@ -424,10 +425,21 @@ function renderPropositions() {
 
     block.addEventListener('focusout', () => {
       if (isRenderingPropositions || !block.isConnected || !propositionsContainer?.contains(block)) return; // Don't overwrite during re-render (Electron) or when block was removed
-      propositions[i] = (block.querySelector('.proposition-text')?.textContent ?? '').trim() || '(empty)';
+      if (textEditMode) {
+        propositions[i] = (block.querySelector('.proposition-text')?.innerText ?? '').replace(/\n$/, '') || '(empty)';
+      } else {
+        propositions[i] = (block.querySelector('.proposition-text')?.textContent ?? '').trim() || '(empty)';
+      }
     });
 
     block.addEventListener('keydown', (e) => {
+      if (textEditMode) {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          document.execCommand('insertText', false, '\t');
+        }
+        return; // Allow Enter and text to be natively edited, do not divide
+      }
       if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         e.stopPropagation();
@@ -455,6 +467,7 @@ function renderPropositions() {
 
     block.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (textEditMode) return; // Allow normal text selection
       const clickedText = e.target.closest('.proposition-text');
       if (commentMode && clickedText) return; // Comment mode: allow text selection only
       let idx;
@@ -762,7 +775,7 @@ const BRACKET_LABELS = {
   'action-manner': 'Ac*/Mn',
   comparison: '*/Cf',
   'negative-positive': '-/+*',
-  'idea-explanation': 'Id*/Exp',
+  'idea-explanation': 'Id/Exp*',
   'question-answer': 'Q/A*',
   concessive: 'Csv',
   'situation-response': 'Sit/R*',
@@ -2401,14 +2414,42 @@ if (versionSelectForFilename) {
 // Init placeholder
 updateFilenamePlaceholder();
 
-// Comment mode toggle
+// Comment and Text Edit mode toggles
+const textEditModeBtn = document.getElementById('textEditModeBtn');
+if (textEditModeBtn) {
+  textEditModeBtn.addEventListener('click', () => {
+    textEditMode = !textEditMode;
+    textEditModeBtn.classList.toggle('active', textEditMode);
+    textEditModeBtn.title = textEditMode ? 'Text edit mode on: edit text directly, use Tab for indent, Enter for newlines.' : 'Toggle text edit mode: edit text freely with newlines and indentation. No brackets or dividing.';
+    if (textEditMode) {
+      if (commentMode) document.getElementById('commentModeBtn')?.click();
+      arcCanvas?.classList.remove('connect-mode');
+      arcSelectStep = 0;
+      arcFrom = null;
+      if (typeof clearPropositionHighlights === 'function') clearPropositionHighlights();
+      showStatus('Text Edit mode on. Brackets disabled; Enter adds linebreaks, Tab indents.', 'success');
+    } else {
+      showStatus('Text Edit mode off.', 'success');
+    }
+  });
+}
+
 const commentModeBtn = document.getElementById('commentModeBtn');
 if (commentModeBtn) {
   commentModeBtn.addEventListener('click', () => {
     commentMode = !commentMode;
     commentModeBtn.classList.toggle('active', commentMode);
     commentModeBtn.title = commentMode ? 'Comment mode on: highlight text to add a comment, or click a bracket and choose Add comment' : 'Toggle comment mode';
-    showStatus(commentMode ? 'Comment mode on. Highlight text or click a bracket to add a comment.' : 'Comment mode off.', 'success');
+    if (commentMode) {
+      if (textEditMode) document.getElementById('textEditModeBtn')?.click();
+      arcCanvas?.classList.remove('connect-mode');
+      arcSelectStep = 0;
+      arcFrom = null;
+      if (typeof clearPropositionHighlights === 'function') clearPropositionHighlights();
+      showStatus(commentMode ? 'Comment mode on. Highlight text or click a bracket to add a comment.' : 'Comment mode off.', 'success');
+    } else {
+      showStatus('Comment mode off.', 'success');
+    }
   });
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "discourse-analysis",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "Discourse Analysis — diagram the logical structure of Scripture",
   "main": "main.js",
   "scripts": {
@@ -30,11 +30,17 @@
     },
     "mac": {
       "category": "public.app-category.education",
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "icon": null
     },
     "win": {
-      "target": ["nsis", "portable"],
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": null
     },
     "nsis": {

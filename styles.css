@@ -356,7 +356,7 @@ body {
   margin-bottom: 0.5rem;
 }
 
-#commentModeBtn.active {
+#commentModeBtn.active, #textEditModeBtn.active {
   background: rgba(201, 168, 108, 0.2);
   color: var(--accent);
   border-color: var(--accent);
@@ -702,6 +702,7 @@ body {
   line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -915,6 +916,7 @@ body {
 
 .proposition-block .proposition-text {
   outline: none;
+  white-space: pre-wrap;
 }
 
 /* Greek text (SBLGNT) - slightly larger for readability */
