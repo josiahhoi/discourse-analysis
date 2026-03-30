@@ -684,6 +684,12 @@ body {
   background: var(--border);
 }
 
+.comments-preview-card.comment-hover-active {
+  background: rgba(201, 168, 108, 0.15);
+  box-shadow: 0 0 0 1px var(--accent);
+  border-left-color: var(--accent);
+}
+
 .comments-preview-card .comment-preview-author {
   color: var(--text-muted);
   font-size: 0.75rem;
@@ -904,6 +910,7 @@ body {
   min-height: 1.8em;
   border-radius: 4px;
   outline: none;
+  border: 1px solid var(--border);
   transition: background 0.15s;
 }
 

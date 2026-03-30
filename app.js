@@ -414,6 +414,16 @@ function renderPropositions() {
           mark.className = 'comment-highlight';
           mark.dataset.commentId = c.id;
           mark.textContent = text.slice(s, e);
+          mark.addEventListener('mouseenter', () => {
+            const card = document.querySelector(`.comments-preview-card[data-comment-id="${c.id}"]`);
+            if (card) {
+              card.classList.add('comment-hover-active');
+              card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+          });
+          mark.addEventListener('mouseleave', () => {
+            document.querySelectorAll('.comments-preview-card.comment-hover-active').forEach(c => c.classList.remove('comment-hover-active'));
+          });
           textSpan.appendChild(mark);
           pos = e;
         }
@@ -423,13 +433,29 @@ function renderPropositions() {
     block.appendChild(refSpan);
     block.appendChild(textSpan);
 
+    let textBeforeEdit = null;
+    block.addEventListener('focusin', () => {
+      textBeforeEdit = propositions[i];
+    });
+
+    block.addEventListener('input', () => {
+      updateArcPositions();
+    });
+
     block.addEventListener('focusout', () => {
       if (isRenderingPropositions || !block.isConnected || !propositionsContainer?.contains(block)) return; // Don't overwrite during re-render (Electron) or when block was removed
+      
+      let currentText;
       if (textEditMode) {
-        propositions[i] = (block.querySelector('.proposition-text')?.innerText ?? '').replace(/\n$/, '') || '(empty)';
+        currentText = (block.querySelector('.proposition-text')?.innerText ?? '').replace(/\n$/, '') || '(empty)';
       } else {
-        propositions[i] = (block.querySelector('.proposition-text')?.textContent ?? '').trim() || '(empty)';
+        currentText = (block.querySelector('.proposition-text')?.textContent ?? '').trim() || '(empty)';
       }
+
+      if (textBeforeEdit !== null && currentText !== textBeforeEdit) {
+        undoStack.push({ action: 'text edit', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })) });
+      }
+      propositions[i] = currentText;
     });
 
     block.addEventListener('keydown', (e) => {
@@ -1021,8 +1047,23 @@ function renderArcs() {
     g.style.cursor = 'pointer';
     arcCanvas.appendChild(g);
 
-    g.addEventListener('mouseenter', () => g.classList.add('bracket-hover'));
-    g.addEventListener('mouseleave', () => g.classList.remove('bracket-hover'));
+    g.addEventListener('mouseenter', () => {
+      g.classList.add('bracket-hover');
+      if (hasComment) {
+        const comment = getCommentForBracket(idx);
+        if (comment) {
+          const card = document.querySelector(`.comments-preview-card[data-comment-id="${comment.id}"]`);
+          if (card) {
+            card.classList.add('comment-hover-active');
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }
+      }
+    });
+    g.addEventListener('mouseleave', () => {
+      g.classList.remove('bracket-hover');
+      document.querySelectorAll('.comments-preview-card.comment-hover-active').forEach(c => c.classList.remove('comment-hover-active'));
+    });
     g.addEventListener('click', (e) => {
       e.stopPropagation();
       const centerY = topY + (bottomY - topY) / 2;
