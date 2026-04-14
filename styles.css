@@ -366,9 +366,12 @@ body {
 
 .comment-mode-row {
   margin-bottom: 0.5rem;
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap; /* in case flex items get squished */
 }
 
-#commentModeBtn.active, #textEditModeBtn.active {
+#commentModeBtn.active, #textEditModeBtn.active, #arrowModeBtn.active {
   background: rgba(201, 168, 108, 0.2);
   color: var(--accent);
   border-color: var(--accent);
@@ -1283,4 +1286,24 @@ body {
 
 .proposition-text mark.comment-highlight:hover {
   background: var(--comment-note-55);
+}
+
+/* Word Arrow Highlight Overlay */
+.word-highlight-overlay {
+  position: absolute;
+  background: rgba(201, 168, 108, 0.4);
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 50;
+  transition: all 0.05s linear;
+}
+.word-highlight-overlay.pending {
+  background: rgba(201, 168, 108, 0.7);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.word-arrow-group {
+  cursor: pointer;
+}
+.word-arrow-group:hover path {
+  stroke-width: 3;
 }

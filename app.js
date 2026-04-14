@@ -52,6 +52,10 @@ let isRenderingPropositions = false; // true during renderPropositions so focuso
 let commentMode = false;
 let textEditMode = false;
 let formatTags = []; // { type: 'bold'|'underline', propIndex, start, end }
+let arrowMode = false;
+let wordArrows = []; // { fromProp, fromStart, fromEnd, toProp, toStart, toEnd }
+let pendingArrowStart = null; // { propIndex, start, end }
+let arrowHighlight = null; // DOM element for hovering word overlay
 
 // DOM
 const passageInput = document.getElementById('passageInput');
@@ -403,13 +407,19 @@ function renderPropositions() {
     textSpan.spellcheck = false;
     const textComments = comments.filter((c) => c.type === 'text' && c.target && c.target.propIndex === i);
     const textFormats = formatTags.filter((f) => f.propIndex === i);
+    const textArrows = [];
+    wordArrows.forEach((wa, idx) => {
+      if (wa.fromProp === i) textArrows.push({ start: wa.fromStart, end: wa.fromEnd, type: 'arrow-anchor', id: `arrow-${idx}-from` });
+      if (wa.toProp === i) textArrows.push({ start: wa.toStart, end: wa.toEnd, type: 'arrow-anchor', id: `arrow-${idx}-to` });
+    });
 
-    if (textComments.length === 0 && textFormats.length === 0) {
+    if (textComments.length === 0 && textFormats.length === 0 && textArrows.length === 0) {
       textSpan.textContent = text;
     } else {
       const allTags = [];
       textComments.forEach(c => allTags.push({ ...c.target, type: 'comment', tag: c }));
       textFormats.forEach(f => allTags.push({ ...f, tag: f }));
+      textArrows.forEach(a => allTags.push({ ...a, tag: a }));
 
       let events = [];
       allTags.forEach((t, tid) => {
@@ -456,6 +466,17 @@ function renderPropositions() {
               });
               if (!wrapper) wrapper = currentInner = mark;
               else { currentInner.appendChild(mark); currentInner = mark; }
+            }
+          });
+
+          activeIds.forEach(id => {
+            const t = allTags[id];
+            if (t.type === 'arrow-anchor') {
+              const span = document.createElement('span');
+              span.className = 'arrow-anchor';
+              span.dataset.arrowId = t.tag.id;
+              if (!wrapper) wrapper = currentInner = span;
+              else { currentInner.appendChild(span); currentInner = span; }
             }
           });
 
@@ -530,7 +551,7 @@ function renderPropositions() {
       }
 
       if (textBeforeEdit !== null && currentText !== textBeforeEdit) {
-        undoStack.push({ action: 'text edit', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })) });
+        undoStack.push({ action: 'text edit', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
       }
       propositions[i] = currentText;
       formatTags = formatTags.filter(f => f.propIndex !== i).concat(newFormatTags);
@@ -643,7 +664,7 @@ function reparentBracketToProposition(arcIdx, targetIndex) {
     return;
   }
 
-  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })) });
+  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
 
   // Shrink any arc that contains [from, to] (spans past at least one end) so it no longer contains it (cut at P).
   arcs.forEach((a, i) => {
@@ -762,7 +783,7 @@ function showRelationshipPicker(from, to) {
   arcSelectStep = 0;
   arcFrom = null;
   // Add unlabelled bracket (dashed + ?); user clicks the bracket to choose relationship
-  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })) });
+  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
   arcs = arcs.map(a => {
     const overlaps = a.from <= to && a.to >= from;
     const isEnclosingOrEnclosed = (a.from <= from && a.to >= to) || (from <= a.from && to >= a.to);
@@ -825,7 +846,7 @@ function splitPropositionAtOffset(index, offset) {
   const before = text.slice(0, offset).trim();
   const after = text.slice(offset).trim();
   if (!after) return;
-  undoStack.push({ action: 'divide', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })) });
+  undoStack.push({ action: 'divide', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
   const baseRef = verseRefs[index] || String(index + 1);
   const firstRef = /[a-z]$/.test(baseRef) ? baseRef : baseRef + 'a';
   const secondRef = incrementVerseRef(firstRef);
@@ -859,6 +880,31 @@ function splitPropositionAtOffset(index, offset) {
       }
     }
   });
+
+  wordArrows.forEach(wa => {
+    // fromProp shift
+    if (wa.fromProp > index) wa.fromProp += 1;
+    else if (wa.fromProp === index) {
+      if (wa.fromStart >= offset) {
+        wa.fromProp += 1;
+        wa.fromStart -= offset;
+        wa.fromEnd -= offset;
+      } else if (wa.fromEnd > offset) {
+        wa.fromEnd = offset;
+      }
+    }
+    // toProp shift
+    if (wa.toProp > index) wa.toProp += 1;
+    else if (wa.toProp === index) {
+      if (wa.toStart >= offset) {
+        wa.toProp += 1;
+        wa.toStart -= offset;
+        wa.toEnd -= offset;
+      } else if (wa.toEnd > offset) {
+        wa.toEnd = offset;
+      }
+    }
+  });
   renderPropositions();
   showStatus('Divided. Use Undo divide to merge back.', 'success');
 }
@@ -873,6 +919,7 @@ function undoLastAction() {
   verseRefs = prev.verseRefs ?? propositions.map((_, i) => String(i + 1));
   arcs = prev.arcs;
   formatTags = prev.formatTags ? prev.formatTags.map(t => ({...t})) : [];
+  wordArrows = prev.wordArrows ? prev.wordArrows.map(w => ({...w})) : [];
   renderPropositions();
   showStatus(`Undid last ${prev.action}.`, 'success');
 }
@@ -1027,6 +1074,67 @@ function getBracketLabels(type, labelsSwapped = false) {
 }
 
 // Draw visible SVG brackets between propositions
+function renderWordArrows(wrapper) {
+  const wrapperRect = wrapper.getBoundingClientRect();
+  wordArrows.forEach((wa, idx) => {
+    const fromEl = document.querySelector(`.arrow-anchor[data-arrow-id="arrow-${idx}-from"]`);
+    const toEl = document.querySelector(`.arrow-anchor[data-arrow-id="arrow-${idx}-to"]`);
+    if (!fromEl || !toEl) return;
+
+    const fromR = fromEl.getBoundingClientRect();
+    const toR = toEl.getBoundingClientRect();
+
+    const x1 = fromR.left + fromR.width / 2 - wrapperRect.left;
+    const y1 = fromR.bottom - wrapperRect.top;
+    const x2 = toR.left + toR.width / 2 - wrapperRect.left;
+    const y2 = toR.bottom - wrapperRect.top;
+
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('class', 'word-arrow-group');
+
+    // 90 degree arrow logic
+    // We go down a bit, then horizontal, then up (if needed) to targets.
+    // If on same line, we drop down by say 15px.
+    const drop = 15;
+    let d;
+    if (Math.abs(y1 - y2) < 5) {
+      // Same line: U-shape
+      d = `M ${x1} ${y1} V ${y1 + drop} H ${x2} V ${y2}`;
+    } else {
+      // Different lines: Step shape
+      // We'll go to midway-ish point or just use y1+drop and then x2
+      d = `M ${x1} ${y1} V ${y1 + drop} H ${x2} V ${y2}`;
+    }
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'var(--accent)');
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('marker-end', 'url(#arrowhead)');
+    g.appendChild(path);
+
+    // Hit area
+    const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    hit.setAttribute('d', d);
+    hit.setAttribute('fill', 'none');
+    hit.setAttribute('stroke', 'transparent');
+    hit.setAttribute('stroke-width', '10');
+    hit.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      undoStack.push({ action: 'delete arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map(a => ({...a})), formatTags: formatTags.map(f => ({...f})), wordArrows: wordArrows.map(w => ({...w})) });
+      wordArrows.splice(idx, 1);
+      renderPropositions();
+      renderArcs();
+      showStatus('Arrow removed.', 'success');
+    });
+    g.appendChild(hit);
+
+    arcCanvas.appendChild(g);
+  });
+}
+
 function renderArcs() {
   if (!propositionsContainer?.parentElement || !arcCanvas) return;
   const wrapper = propositionsContainer.parentElement;
@@ -1037,6 +1145,21 @@ function renderArcs() {
   arcCanvas.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
 
   arcCanvas.innerHTML = '';
+  // Add defs back because innerHTML='' clears them
+  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+  const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+  marker.setAttribute('id', 'arrowhead');
+  marker.setAttribute('markerWidth', '10');
+  marker.setAttribute('markerHeight', '7');
+  marker.setAttribute('refX', '9');
+  marker.setAttribute('refY', '3.5');
+  marker.setAttribute('orient', 'auto');
+  const poly = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  poly.setAttribute('d', 'M0,0 L10,3.5 L0,7 Z');
+  poly.setAttribute('fill', 'currentColor');
+  marker.appendChild(poly);
+  defs.appendChild(marker);
+  arcCanvas.appendChild(defs);
 
   const blocks = propositionsContainer.querySelectorAll('.proposition-block');
   const positions = Array.from(blocks).map((b) => {
@@ -1060,6 +1183,8 @@ function renderArcs() {
 
   const labelsLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
   labelsLayer.setAttribute('class', 'bracket-labels-layer');
+
+  renderWordArrows(wrapper);
 
   arcs.forEach((arc, idx) => {
     const { from, to, type, labelsSwapped } = arc;
@@ -1159,7 +1284,7 @@ function renderArcs() {
       el.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })) });
+        undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
         arcs.splice(idx, 1);
         renderArcs();
         showStatus('Bracket removed.', 'success');
@@ -1945,7 +2070,7 @@ function showBracketActions(arcIdx, centerY, centerX) {
 
   popover.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
     e.stopPropagation();
-    undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })) });
+    undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
     arcs.splice(arcIdx, 1);
     comments = comments.filter((c) => c.type !== 'bracket' || c.target?.arcIdx !== arcIdx);
     comments.forEach((c) => { if (c.type === 'bracket' && c.target?.arcIdx > arcIdx) c.target.arcIdx--; });
@@ -1965,7 +2090,7 @@ function showBracketActions(arcIdx, centerY, centerX) {
   if (swapBtn) {
     swapBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })) });
+      undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
       arcs[arcIdx].labelsSwapped = !arcs[arcIdx].labelsSwapped;
       renderArcs();
       clearAndDismiss();
@@ -2066,6 +2191,7 @@ function startNewArc() {
   verseRefs = [];
   arcs = [];
   formatTags = [];
+  wordArrows = [];
   undoStack = [];
   comments = [];
   arcSelectStep = 0;
@@ -2151,7 +2277,7 @@ if (newArcBtn) newArcBtn.addEventListener('click', () => handleNewArc());
 // Clear brackets
 if (clearArcsBtn) clearArcsBtn.addEventListener('click', () => {
   if (arcs.length === 0) return;
-  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })) });
+  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
   arcs = [];
   renderArcs();
   arcSelectStep = 0;
@@ -2378,6 +2504,7 @@ function buildArcData() {
     verseRefs,
     arcs: arcs.map((a) => ({ ...a })),
     formatTags: formatTags.map((t) => ({ ...t })),
+    wordArrows: wordArrows.map((w) => ({ ...w })),
     comments: comments.map((c) => ({ ...c })),
     copyrightLabel: document.getElementById('copyrightLabel')?.textContent || '',
     pageAuthor: (document.getElementById('pageAuthor')?.value || '').trim(),
@@ -2451,6 +2578,7 @@ function importArc(data) {
     : propositions.map((_, i) => String(i + 1));
   arcs = Array.isArray(data.arcs) ? data.arcs.map((a) => ({ ...a })) : [];
   formatTags = Array.isArray(data.formatTags) ? data.formatTags.map((t) => ({ ...t })) : [];
+  wordArrows = Array.isArray(data.wordArrows) ? data.wordArrows.map((w) => ({ ...w })) : [];
   comments = Array.isArray(data.comments) ? data.comments.map((c) => ({ ...c, replies: Array.isArray(c.replies) ? c.replies.map((r) => ({ ...r })) : [] })) : [];
 
   if (passageHeader) passageHeader.textContent = passageRef;
@@ -2606,13 +2734,64 @@ updateFilenamePlaceholder();
 
 // Comment and Text Edit mode toggles
 const textEditModeBtn = document.getElementById('textEditModeBtn');
+const commentModeBtn = document.getElementById('commentModeBtn');
+const arrowModeBtn = document.getElementById('arrowModeBtn');
+
+function getWordAtEvent(e) {
+  let range;
+  if (document.caretPositionFromPoint) {
+    const pos = document.caretPositionFromPoint(e.clientX, e.clientY);
+    if (!pos || pos.offsetNode.nodeType !== Node.TEXT_NODE) return null;
+    range = document.createRange();
+    range.setStart(pos.offsetNode, pos.offset);
+  } else if (document.caretRangeFromPoint) {
+    range = document.caretRangeFromPoint(e.clientX, e.clientY);
+  }
+  if (!range || range.startContainer.nodeType !== Node.TEXT_NODE) return null;
+
+  const node = range.startContainer;
+  const text = node.textContent;
+  const offset = range.startOffset;
+
+  let start = offset, end = offset;
+  while (start > 0 && /\w/.test(text[start - 1])) start--;
+  while (end < text.length && /\w/.test(text[end])) end++;
+
+  if (start === end) return null;
+
+  // Find line-relative offset
+  let block = node.parentElement;
+  while (block && !block.classList.contains('proposition-block')) block = block.parentElement;
+  if (!block) return null;
+
+  const propIndex = parseInt(block.dataset.index);
+  const textSpan = block.querySelector('.proposition-text');
+  
+  // Calculate offset relative to entire text in proposition-text
+  // We can use a range from start of textSpan to start of our node
+  const preRange = document.createRange();
+  preRange.setStartBefore(textSpan.firstChild);
+  preRange.setEnd(node, start);
+  const relativeStart = preRange.toString().length;
+  
+  preRange.setEnd(node, end);
+  const relativeEnd = preRange.toString().length;
+
+  range.setStart(node, start);
+  range.setEnd(node, end);
+  const rect = range.getBoundingClientRect();
+
+  return { propIndex, start: relativeStart, end: relativeEnd, rect };
+}
+
 if (textEditModeBtn) {
   textEditModeBtn.addEventListener('click', () => {
     textEditMode = !textEditMode;
     textEditModeBtn.classList.toggle('active', textEditMode);
     textEditModeBtn.title = textEditMode ? 'Text edit mode on: edit text directly, use Tab for indent, Enter for newlines.' : 'Toggle text edit mode: edit text freely with newlines and indentation. No brackets or dividing.';
     if (textEditMode) {
-      if (commentMode) document.getElementById('commentModeBtn')?.click();
+      if (commentMode) commentModeBtn?.click();
+      if (arrowMode) arrowModeBtn?.click();
       arcCanvas?.classList.remove('connect-mode');
       arcSelectStep = 0;
       arcFrom = null;
@@ -2624,14 +2803,14 @@ if (textEditModeBtn) {
   });
 }
 
-const commentModeBtn = document.getElementById('commentModeBtn');
 if (commentModeBtn) {
   commentModeBtn.addEventListener('click', () => {
     commentMode = !commentMode;
     commentModeBtn.classList.toggle('active', commentMode);
     commentModeBtn.title = commentMode ? 'Comment mode on: highlight text to add a comment, or click a bracket and choose Add comment' : 'Toggle comment mode';
     if (commentMode) {
-      if (textEditMode) document.getElementById('textEditModeBtn')?.click();
+      if (textEditMode) textEditModeBtn?.click();
+      if (arrowMode) arrowModeBtn?.click();
       arcCanvas?.classList.remove('connect-mode');
       arcSelectStep = 0;
       arcFrom = null;
@@ -2643,9 +2822,82 @@ if (commentModeBtn) {
   });
 }
 
-// Text selection in comment mode: add comment on selected text
+if (arrowModeBtn) {
+  arrowModeBtn.addEventListener('click', () => {
+    arrowMode = !arrowMode;
+    arrowModeBtn.classList.toggle('active', arrowMode);
+    if (arrowMode) {
+      if (textEditMode) textEditModeBtn?.click();
+      if (commentMode) commentModeBtn?.click();
+      pendingArrowStart = null;
+      showStatus('Arrow mode on. Click a word to start, then another word to finish.', 'success');
+    } else {
+      if (arrowHighlight) arrowHighlight.remove();
+      arrowHighlight = null;
+      pendingArrowStart = null;
+      showStatus('Arrow mode off.', 'success');
+    }
+  });
+}
+
+// Text selection and word arrow interaction
 if (propositionsContainer) {
+  propositionsContainer.addEventListener('mousemove', (e) => {
+    if (!arrowMode) return;
+    const word = getWordAtEvent(e);
+    if (word) {
+      if (!arrowHighlight) {
+        arrowHighlight = document.createElement('div');
+        arrowHighlight.className = 'word-highlight-overlay';
+        document.body.appendChild(arrowHighlight);
+      }
+      arrowHighlight.style.left = word.rect.left + window.scrollX + 'px';
+      arrowHighlight.style.top = word.rect.top + window.scrollY + 'px';
+      arrowHighlight.style.width = word.rect.width + 'px';
+      arrowHighlight.style.height = word.rect.height + 'px';
+      arrowHighlight.style.display = 'block';
+      arrowHighlight.classList.toggle('pending', pendingArrowStart !== null);
+    } else {
+      if (arrowHighlight) arrowHighlight.style.display = 'none';
+    }
+  });
+
+  propositionsContainer.addEventListener('mouseleave', () => {
+    if (arrowHighlight) arrowHighlight.style.display = 'none';
+  });
+
+  propositionsContainer.addEventListener('mousedown', (e) => {
+    if (!arrowMode) return;
+    const word = getWordAtEvent(e);
+    if (!word) return;
+
+    if (!pendingArrowStart) {
+      pendingArrowStart = word;
+      showStatus('Start word selected. Now click the target word.', 'success');
+    } else {
+      if (pendingArrowStart.propIndex === word.propIndex && pendingArrowStart.start === word.start) {
+        pendingArrowStart = null;
+        showStatus('Arrow cancelled.', 'info');
+        return;
+      }
+      undoStack.push({ action: 'add arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map(a => ({...a})), formatTags: formatTags.map(f => ({...f})), wordArrows: wordArrows.map(w => ({...w})) });
+      wordArrows.push({
+        fromProp: pendingArrowStart.propIndex,
+        fromStart: pendingArrowStart.start,
+        fromEnd: pendingArrowStart.end,
+        toProp: word.propIndex,
+        toStart: word.start,
+        toEnd: word.end
+      });
+      pendingArrowStart = null;
+      renderPropositions();
+      renderArcs();
+      showStatus('Arrow created.', 'success');
+    }
+  });
+
   propositionsContainer.addEventListener('mouseup', () => {
+    if (arrowMode) return;
     if (!commentMode || propositions.length === 0) return;
     const sel = window.getSelection();
     if (!sel.rangeCount || sel.isCollapsed) return;

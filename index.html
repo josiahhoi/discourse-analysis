@@ -44,8 +44,9 @@
         <h3>Logical Relationships</h3>
         <p class="hint">Split: click in text to place the cursor, then press Enter. Single click to edit. Click nodes or verse refs to create brackets. Based on <a href="https://s3.amazonaws.com/cdn.gospelpaths.com/tenants/5/1738104708694-The18LogicalRelationshipsEngnewlogo.pdf" target="_blank" rel="noopener">BibleArc's 18 relationships</a>.</p>
         <div class="comment-mode-row">
-          <button id="textEditModeBtn" type="button" class="undo-btn" title="Toggle text edit mode: edit text freely with newlines and indentation. No brackets or dividing.">Text Edit mode</button>
-          <button id="commentModeBtn" type="button" class="undo-btn" title="Toggle comment mode: highlight text or click a bracket to add a comment">Comment mode</button>
+          <button id="textEditModeBtn" type="button" class="undo-btn" title="Toggle text edit mode: edit text freely with newlines and indentation. No brackets or dividing.">Text Edit</button>
+          <button id="commentModeBtn" type="button" class="undo-btn" title="Toggle comment mode: highlight text or click a bracket to add a comment">Comment</button>
+          <button id="arrowModeBtn" type="button" class="undo-btn" title="Toggle arrow mode: draw word-to-word arrows by clicking the start and end words">Arrow mode</button>
         </div>
         <button id="undoDivideBtn" type="button" class="undo-btn" title="Undo last divide or bracket">Undo</button>
         <div class="save-load-row">
@@ -102,7 +103,13 @@
           </div>
         </div>
         <div class="arc-canvas-wrapper">
-          <svg id="arcCanvas" class="arc-canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+          <svg id="arcCanvas" class="arc-canvas" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                <path d="M0,0 L10,3.5 L0,7 Z" fill="currentColor" />
+              </marker>
+            </defs>
+          </svg>
           <div class="propositions bracket-gutter" id="propositions">
             <textarea id="propositionEditor" placeholder="Fetch or import a passage, then click in Divide mode to split the text where you want."></textarea>
           </div>
