@@ -20,6 +20,12 @@
   --radius: 8px;
   --font-serif: 'Cormorant Garamond', Georgia, serif;
   --font-sans: 'Source Sans 3', system-ui, sans-serif;
+  --accent-15: rgba(201, 168, 108, 0.15);
+  --surface-elevated-20: rgba(46, 46, 50, 0.20);
+  --accent-50: rgba(201, 168, 108, 0.50);
+  --surface-elevated-60: rgba(46, 46, 50, 0.60);
+  --comment-note-40: rgba(232, 201, 104, 0.40);
+  --comment-note-55: rgba(232, 201, 104, 0.55);
 }
 
 [data-theme="light"] {
@@ -41,6 +47,12 @@
   --label-text: #1a1a1c;
   --comment-note: #e8d468;
   --comment-note-shadow: #c4a84a;
+  --accent-15: rgba(139, 115, 73, 0.15);
+  --surface-elevated-20: rgba(255, 255, 255, 0.20);
+  --accent-50: rgba(139, 115, 73, 0.50);
+  --surface-elevated-60: rgba(255, 255, 255, 0.60);
+  --comment-note-40: rgba(232, 212, 104, 0.40);
+  --comment-note-55: rgba(232, 212, 104, 0.55);
 }
 
 [data-theme="light"] .status.success {
@@ -871,15 +883,15 @@ body {
 
 /* Connection nodes: clickable dots for propositions and brackets */
 .arc-canvas .connection-node {
-  fill: color-mix(in srgb, var(--accent) 15%, transparent);
-  stroke: color-mix(in srgb, var(--surface-elevated) 20%, transparent);
+  fill: var(--accent-15);
+  stroke: var(--surface-elevated-20);
   stroke-width: 2;
   transition: fill 0.15s, stroke 0.15s;
 }
 
 .arc-canvas .connection-node:hover {
-  fill: color-mix(in srgb, var(--accent) 50%, transparent);
-  stroke: color-mix(in srgb, var(--surface-elevated) 60%, transparent);
+  fill: var(--accent-50);
+  stroke: var(--surface-elevated-60);
 }
 
 .arc-canvas .bracket-label {
@@ -1261,7 +1273,7 @@ body {
 
 /* Comment highlight in proposition text */
 .proposition-text mark.comment-highlight {
-  background: color-mix(in srgb, var(--comment-note) 40%, transparent);
+  background: var(--comment-note-40);
   color: inherit;
   padding: 0 0.1em;
   border-radius: 2px;
@@ -1270,5 +1282,5 @@ body {
 }
 
 .proposition-text mark.comment-highlight:hover {
-  background: color-mix(in srgb, var(--comment-note) 55%, transparent);
+  background: var(--comment-note-55);
 }
