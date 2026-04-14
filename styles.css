@@ -734,6 +734,50 @@ body {
 
 .passage-header-left {
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.passage-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.sidebar-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.sidebar-toggle-btn svg {
+  transition: transform 0.2s ease;
+}
+
+.sidebar-toggle-btn.flipped svg {
+  transform: rotate(180deg);
+}
+
+.sidebar-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+[data-theme="light"] .sidebar-toggle-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.sidebar-hidden {
+  display: none !important;
 }
 
 .passage-author {
@@ -827,15 +871,15 @@ body {
 
 /* Connection nodes: clickable dots for propositions and brackets */
 .arc-canvas .connection-node {
-  fill: color-mix(in srgb, var(--accent) 55%, transparent);
-  stroke: color-mix(in srgb, var(--surface-elevated) 60%, transparent);
+  fill: color-mix(in srgb, var(--accent) 15%, transparent);
+  stroke: color-mix(in srgb, var(--surface-elevated) 20%, transparent);
   stroke-width: 2;
   transition: fill 0.15s, stroke 0.15s;
 }
 
 .arc-canvas .connection-node:hover {
-  fill: color-mix(in srgb, var(--accent) 85%, transparent);
-  stroke: color-mix(in srgb, var(--surface-elevated) 90%, transparent);
+  fill: color-mix(in srgb, var(--accent) 50%, transparent);
+  stroke: color-mix(in srgb, var(--surface-elevated) 60%, transparent);
 }
 
 .arc-canvas .bracket-label {
@@ -870,7 +914,7 @@ body {
 .arc-canvas path.unspecified { stroke: var(--arc-custom); }
 
 .arc-canvas path.hover {
-  stroke-width: 3;
+  stroke-width: 12;
 }
 
 .propositions {
@@ -951,7 +995,7 @@ body {
 }
 
 .arc-canvas .bracket-group.bracket-hover path {
-  stroke-width: 2;
+  stroke-width: 8;
 }
 
 /* Footer */

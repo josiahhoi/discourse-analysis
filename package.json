@@ -1,52 +1,52 @@
-{
-  "name": "discourse-analysis",
-  "version": "2.0.0",
-  "description": "Discourse Analysis — diagram the logical structure of Scripture",
-  "main": "main.js",
-  "scripts": {
-    "start": "electron .",
-    "build": "electron-builder",
-    "build:mac": "electron-builder --mac",
-    "build:win": "electron-builder --win",
-    "build:all": "electron-builder --mac --win"
-  },
-  "author": "",
-  "license": "MIT",
-  "devDependencies": {
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1"
-  },
-  "build": {
-    "appId": "com.discourseanalysis.app",
-    "productName": "Discourse Analysis",
-    "files": [
-      "index.html",
-      "styles.css",
-      "app.js",
-      "main.js"
-    ],
-    "directories": {
-      "output": "dist"
+  T{
+    "name": "discourse-analysis",
+    "version": "2.1.1",
+    "description": "Discourse Analysis — diagram the logical structure of Scripture",
+    "main": "main.js",
+    "scripts": {
+      "start": "electron .",
+      "build": "electron-builder",
+      "build:mac": "electron-builder --mac",
+      "build:win": "electron-builder --win",
+      "build:all": "electron-builder --mac --win"
     },
-    "mac": {
-      "category": "public.app-category.education",
-      "target": [
-        "dmg",
-        "zip"
+    "author": "",
+    "license": "MIT",
+    "devDependencies": {
+      "electron": "^28.0.0",
+      "electron-builder": "^24.9.1"
+    },
+    "build": {
+      "appId": "com.discourseanalysis.app",
+      "productName": "Discourse Analysis",
+      "files": [
+        "index.html",
+        "styles.css",
+        "app.js",
+        "main.js"
       ],
-      "icon": null
-    },
-    "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ],
-      "icon": null
-    },
-    "nsis": {
-      "oneClick": true,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": false
+      "directories": {
+        "output": "dist"
+      },
+      "mac": {
+        "category": "public.app-category.education",
+        "target": [
+          "dmg",
+          "zip"
+        ],
+        "icon": null
+      },
+      "win": {
+        "target": [
+          "nsis",
+          "portable"
+        ],
+        "icon": null
+      },
+      "nsis": {
+        "oneClick": true,
+        "perMachine": false,
+        "allowToChangeInstallationDirectory": false
+      }
     }
   }
-}

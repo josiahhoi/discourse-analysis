@@ -68,6 +68,7 @@
         </div>
         <div class="save-load-row">
           <button id="copyForWordBtn" type="button" class="secondary" title="Copy diagram as image (Ctrl+V to paste)">Copy image</button>
+          <button id="copyDataBtn" type="button" class="secondary" title="Copy arc data as text to clipboard">Copy data</button>
         </div>
         <div class="save-load-row">
           <button id="openFileBtn" type="button" class="secondary" title="Open JSON file (enables Save to update it)">Open</button>
@@ -83,10 +84,22 @@
       <section class="workspace">
         <div class="passage-header" id="passageHeader">
           <div class="passage-header-left">
+            <button id="toggleLeftSidebarBtn" class="sidebar-toggle-btn" title="Toggle Sidebar">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
             <span id="passageRef" contenteditable="true" role="textbox" title="Click to edit passage reference">—</span>
             <span class="copyright" id="copyrightLabel">(ESV)</span>
           </div>
-          <span id="passageAuthor" class="passage-author" aria-label="Page author"></span>
+          <div class="passage-header-right">
+            <span id="passageAuthor" class="passage-author" aria-label="Page author"></span>
+            <button id="toggleRightSidebarBtn" class="sidebar-toggle-btn" title="Toggle Comments">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="arc-canvas-wrapper">
           <svg id="arcCanvas" class="arc-canvas" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -104,7 +117,7 @@
 
     <footer class="footer">
       <p>ESV via <a href="https://api.esv.org" target="_blank" rel="noopener">api.esv.org</a>. Greek: <a href="https://sblgnt.com" target="_blank" rel="noopener">SBLGNT</a> (CC-BY 4.0).</p>
-      <p class="footer-version">Version 2.0.0 · Made by Josiah Hoi</p>
+      <p class="footer-version">Version 2.1.1 · Made by Josiah Hoi</p>
     </footer>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>

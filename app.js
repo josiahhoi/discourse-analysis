@@ -685,6 +685,15 @@ function showRelationshipPicker(from, to) {
   arcFrom = null;
   // Add unlabelled bracket (dashed + ?); user clicks the bracket to choose relationship
   undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })) });
+  arcs = arcs.map(a => {
+    const overlaps = a.from <= to && a.to >= from;
+    const isEnclosingOrEnclosed = (a.from <= from && a.to >= to) || (from <= a.from && to >= a.to);
+    if (overlaps && !isEnclosingOrEnclosed) {
+      return { ...a, from: Math.min(a.from, from), to: Math.max(a.to, to) };
+    }
+    return a;
+  });
+
   arcs.push({ from, to, type: 'unspecified', labelsSwapped: false });
   renderArcs();
   showStatus('Bracket added. Click the bracket to choose relationship.', 'success');
@@ -756,7 +765,7 @@ function splitPropositionAtOffset(index, offset) {
   }
   arcs = arcs.map(({ from, to, type, labelsSwapped }) => ({
     from: from >= index + 1 ? from + 1 : from,
-    to: to >= index + 1 ? to + 1 : to,
+    to: to >= index ? to + 1 : to,
     type,
     labelsSwapped: labelsSwapped ?? false,
   }));
@@ -960,7 +969,6 @@ function renderArcs() {
 
   const labelsLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
   labelsLayer.setAttribute('class', 'bracket-labels-layer');
-  labelsLayer.style.pointerEvents = 'none';
 
   arcs.forEach((arc, idx) => {
     const { from, to, type, labelsSwapped } = arc;
@@ -987,6 +995,7 @@ function renderArcs() {
     hitPath.setAttribute('stroke-width', 16);
     hitPath.setAttribute('stroke-linecap', 'square');
     hitPath.setAttribute('stroke-linejoin', 'miter');
+    hitPath.setAttribute('pointer-events', 'stroke');
     g.appendChild(hitPath);
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', d);
@@ -1011,6 +1020,61 @@ function renderArcs() {
       g.appendChild(highlightPath);
     }
 
+    const attachBracketEvents = (el, setPointerEvents = true) => {
+      if (setPointerEvents) el.style.pointerEvents = 'all';
+      el.style.cursor = 'pointer';
+      el.addEventListener('mouseenter', () => {
+        if (g) g.classList.add('bracket-hover');
+        if (hasComment) {
+          const comment = getCommentForBracket(idx);
+          if (comment) {
+            const card = document.querySelector(`.comments-preview-card[data-comment-id="${comment.id}"]`);
+            if (card) {
+              card.classList.add('comment-hover-active');
+              card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+          }
+        }
+        for (let j = arc.from; j <= arc.to; j++) {
+          const block = propositionsContainer.querySelector(`[data-index="${j}"]`);
+          if (block) block.classList.add('arc-hover');
+        }
+      });
+      el.addEventListener('mouseleave', () => {
+        if (g) g.classList.remove('bracket-hover');
+        document.querySelectorAll('.comments-preview-card.comment-hover-active').forEach(c => c.classList.remove('comment-hover-active'));
+        document.querySelectorAll('.proposition-block.arc-hover').forEach((b) => b.classList.remove('arc-hover'));
+      });
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const centerY = topY + (bottomY - topY) / 2;
+        const centerX = BRACKET_X + BRACKET_WIDTH / 2;
+        if (commentMode) {
+          showCommentPopoverForBracket(idx, centerY, centerX);
+          return;
+        }
+        if (e.detail === 2) {
+          arcSelectStep = 0;
+          arcFrom = null;
+          clearPropositionHighlights();
+          showLabelPicker(idx, centerY, centerX);
+        } else if (type === 'unspecified') {
+          // Unlabelled bracket: single click opens relationship picker to choose type
+          showLabelPicker(idx, centerY, centerX);
+        } else {
+          showBracketActions(idx, centerY, centerX);
+        }
+      });
+      el.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })) });
+        arcs.splice(idx, 1);
+        renderArcs();
+        showStatus('Bracket removed.', 'success');
+      });
+    };
+
     const labels = getBracketLabels(type, labelsSwapped ?? false);
     if (labels.single !== undefined) {
       const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -1021,6 +1085,7 @@ function renderArcs() {
       textEl.setAttribute('font-size', '12');
       textEl.setAttribute('class', `bracket-label ${type}`);
       textEl.textContent = labels.single;
+      attachBracketEvents(textEl, false);
       labelsLayer.appendChild(textEl);
     } else {
       const topLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -1039,55 +1104,14 @@ function renderArcs() {
       bottomLabel.setAttribute('font-size', '12');
       bottomLabel.setAttribute('class', `bracket-label ${type}`);
       bottomLabel.textContent = labels.bottom;
+      attachBracketEvents(topLabel, false);
+      attachBracketEvents(bottomLabel, false);
       labelsLayer.appendChild(topLabel);
       labelsLayer.appendChild(bottomLabel);
     }
 
-    g.style.pointerEvents = 'all';
-    g.style.cursor = 'pointer';
+    attachBracketEvents(g, false);
     arcCanvas.appendChild(g);
-
-    g.addEventListener('mouseenter', () => {
-      g.classList.add('bracket-hover');
-      if (hasComment) {
-        const comment = getCommentForBracket(idx);
-        if (comment) {
-          const card = document.querySelector(`.comments-preview-card[data-comment-id="${comment.id}"]`);
-          if (card) {
-            card.classList.add('comment-hover-active');
-            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          }
-        }
-      }
-    });
-    g.addEventListener('mouseleave', () => {
-      g.classList.remove('bracket-hover');
-      document.querySelectorAll('.comments-preview-card.comment-hover-active').forEach(c => c.classList.remove('comment-hover-active'));
-    });
-    g.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const centerY = topY + (bottomY - topY) / 2;
-      const centerX = BRACKET_X + BRACKET_WIDTH / 2;
-      if (e.detail === 2) {
-        arcSelectStep = 0;
-        arcFrom = null;
-        clearPropositionHighlights();
-        showLabelPicker(idx, centerY, centerX);
-      } else if (type === 'unspecified') {
-        // Unlabelled bracket: single click opens relationship picker to choose type
-        showLabelPicker(idx, centerY, centerX);
-      } else {
-        showBracketActions(idx, centerY, centerX);
-      }
-    });
-    g.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })) });
-      arcs.splice(idx, 1);
-      renderArcs();
-      showStatus('Bracket removed.', 'success');
-    });
   });
 
   arcCanvas.appendChild(labelsLayer);
@@ -1765,6 +1789,7 @@ function showCommentPopoverForBracket(arcIdx, centerY, centerX, options = {}) {
     popover.remove();
     document.removeEventListener('click', dismiss);
     renderCommentPreviews();
+    renderArcs();
     showStatus(existingComment ? (text ? 'Comment updated.' : 'Comment removed.') : 'Comment added.', 'success');
     if (reopenViewMode) showCommentPopoverForBracket(arcIdx, centerY, centerX, { viewMode: true, lastWidth, lastHeight, lastLeft, lastTop });
   });
@@ -1775,6 +1800,7 @@ function showCommentPopoverForBracket(arcIdx, centerY, centerX, options = {}) {
       popover.remove();
       document.removeEventListener('click', dismiss);
       renderCommentPreviews();
+      renderArcs();
       showStatus('Comment removed.', 'success');
     });
   }
@@ -2075,6 +2101,18 @@ if (importBtn) importBtn.addEventListener('click', () => {
   if (!raw) {
     showStatus('Paste some text first.', 'error');
     return;
+  }
+
+  // Try to parse as exported JSON arc text
+  try {
+    const data = JSON.parse(raw);
+    if (data && typeof data === 'object' && Array.isArray(data.propositions)) {
+      importArc(data);
+      pasteText.value = '';
+      return;
+    }
+  } catch (e) {
+    // Normal text parsing continues below if it's not JSON
   }
   const passageRefInput = document.getElementById('importPassageRef');
   const startVerseInput = document.getElementById('importStartVerse');
@@ -2391,6 +2429,23 @@ async function copyDiagramForWord() {
 const copyForWordBtn = document.getElementById('copyForWordBtn');
 if (copyForWordBtn) copyForWordBtn.addEventListener('click', copyDiagramForWord);
 
+const copyDataBtn = document.getElementById('copyDataBtn');
+if (copyDataBtn) {
+  copyDataBtn.addEventListener('click', async () => {
+    if (propositions.length === 0) {
+      showStatus('Nothing to copy. Fetch or import a passage first.', 'error');
+      return;
+    }
+    const data = buildArcData();
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(data));
+      showStatus('Arc data copied to clipboard. Paste into the "Paste passage text" box to import elsewhere.', 'success');
+    } catch (err) {
+      showStatus('Could not access clipboard. Please use Export instead.', 'error');
+    }
+  });
+}
+
 const saveBtn = document.getElementById('saveBtn');
 if (saveBtn) saveBtn.addEventListener('click', () => saveArc());
 if (exportBtn) exportBtn.addEventListener('click', exportArc);
@@ -2548,3 +2603,23 @@ if (propositionsContainer?.parentElement) {
 // Initial placeholder (when no passage yet)
 const propEditor = document.getElementById('propositionEditor');
 if (propEditor) propEditor.placeholder = 'Fetch or import a passage, then use Divide mode to click and split the text.';
+
+// Sidebar Toggles
+const toggleLeftSidebarBtn = document.getElementById('toggleLeftSidebarBtn');
+const toggleRightSidebarBtn = document.getElementById('toggleRightSidebarBtn');
+const leftSidebar = document.querySelector('.arc-types');
+const rightSidebar = document.querySelector('.comments-preview');
+
+if (toggleLeftSidebarBtn && leftSidebar) {
+  toggleLeftSidebarBtn.addEventListener('click', () => {
+    leftSidebar.classList.toggle('sidebar-hidden');
+    toggleLeftSidebarBtn.classList.toggle('flipped');
+  });
+}
+
+if (toggleRightSidebarBtn && rightSidebar) {
+  toggleRightSidebarBtn.addEventListener('click', () => {
+    rightSidebar.classList.toggle('sidebar-hidden');
+    toggleRightSidebarBtn.classList.toggle('flipped');
+  });
+}
