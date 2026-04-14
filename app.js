@@ -51,6 +51,7 @@ let comments = []; // { id, type: 'bracket'|'text', target: { arcIdx }|{ propInd
 let isRenderingPropositions = false; // true during renderPropositions so focusout doesn't overwrite (Electron)
 let commentMode = false;
 let textEditMode = false;
+let formatTags = []; // { type: 'bold'|'underline', propIndex, start, end }
 
 // DOM
 const passageInput = document.getElementById('passageInput');
@@ -400,34 +401,76 @@ function renderPropositions() {
     textSpan.className = 'proposition-text';
     textSpan.contentEditable = 'true';
     textSpan.spellcheck = false;
-    const textComments = comments.filter((c) => c.type === 'text' && c.target && c.target.propIndex === i).sort((a, b) => (a.target.start - b.target.start));
-    if (textComments.length === 0) {
+    const textComments = comments.filter((c) => c.type === 'text' && c.target && c.target.propIndex === i);
+    const textFormats = formatTags.filter((f) => f.propIndex === i);
+
+    if (textComments.length === 0 && textFormats.length === 0) {
       textSpan.textContent = text;
     } else {
+      const allTags = [];
+      textComments.forEach(c => allTags.push({ ...c.target, type: 'comment', tag: c }));
+      textFormats.forEach(f => allTags.push({ ...f, tag: f }));
+
+      let events = [];
+      allTags.forEach((t, tid) => {
+        events.push({ pos: Math.max(0, t.start), type: 'start', tid });
+        events.push({ pos: Math.min(text.length, t.end), type: 'end', tid });
+      });
+      events.sort((a, b) => a.pos === b.pos ? (a.type === b.type ? 0 : (a.type === 'start' ? 1 : -1)) : a.pos - b.pos);
+
       let pos = 0;
-      for (const c of textComments) {
-        const s = Math.max(pos, c.target.start);
-        const e = Math.min(text.length, c.target.end);
-        if (s < e) {
-          if (s > pos) textSpan.appendChild(document.createTextNode(text.slice(pos, s)));
-          const mark = document.createElement('mark');
-          mark.className = 'comment-highlight';
-          mark.dataset.commentId = c.id;
-          mark.textContent = text.slice(s, e);
-          mark.addEventListener('mouseenter', () => {
-            const card = document.querySelector(`.comments-preview-card[data-comment-id="${c.id}"]`);
-            if (card) {
-              card.classList.add('comment-hover-active');
-              card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      let activeTags = new Set();
+
+      events.forEach(e => {
+        if (e.pos > pos) {
+          const chunk = text.slice(pos, e.pos);
+          let node = document.createTextNode(chunk);
+          let wrapper = null;
+          let currentInner = null;
+
+          const activeIds = Array.from(activeTags);
+          activeIds.forEach(id => {
+            const t = allTags[id];
+            if (t.type === 'bold' || t.type === 'underline') {
+              const el = document.createElement(t.type === 'underline' ? 'u' : 'b');
+              if (!wrapper) wrapper = currentInner = el;
+              else { currentInner.appendChild(el); currentInner = el; }
             }
           });
-          mark.addEventListener('mouseleave', () => {
-            document.querySelectorAll('.comments-preview-card.comment-hover-active').forEach(c => c.classList.remove('comment-hover-active'));
+
+          activeIds.forEach(id => {
+            const t = allTags[id];
+            if (t.type === 'comment') {
+              const mark = document.createElement('mark');
+              mark.className = 'comment-highlight';
+              mark.dataset.commentId = t.tag.id;
+              mark.addEventListener('mouseenter', () => {
+                const card = document.querySelector(`.comments-preview-card[data-comment-id="${t.tag.id}"]`);
+                if (card) {
+                  card.classList.add('comment-hover-active');
+                  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+              });
+              mark.addEventListener('mouseleave', () => {
+                document.querySelectorAll('.comments-preview-card.comment-hover-active').forEach(c => c.classList.remove('comment-hover-active'));
+              });
+              if (!wrapper) wrapper = currentInner = mark;
+              else { currentInner.appendChild(mark); currentInner = mark; }
+            }
           });
-          textSpan.appendChild(mark);
-          pos = e;
+
+          if (currentInner) {
+            currentInner.appendChild(node);
+            textSpan.appendChild(wrapper);
+          } else {
+            textSpan.appendChild(node);
+          }
+          pos = e.pos;
         }
-      }
+        if (e.type === 'start') activeTags.add(e.tid);
+        else activeTags.delete(e.tid);
+      });
+
       if (pos < text.length) textSpan.appendChild(document.createTextNode(text.slice(pos)));
     }
     block.appendChild(refSpan);
@@ -444,18 +487,53 @@ function renderPropositions() {
 
     block.addEventListener('focusout', () => {
       if (isRenderingPropositions || !block.isConnected || !propositionsContainer?.contains(block)) return; // Don't overwrite during re-render (Electron) or when block was removed
-      
-      let currentText;
+
+      let extractedText = '';
+      let newFormatTags = [];
+      const textSpanEl = block.querySelector('.proposition-text');
+      if (textSpanEl) {
+        function traverse(node) {
+          if (node.nodeType === Node.TEXT_NODE) {
+            extractedText += node.textContent;
+          } else if (node.nodeType === Node.ELEMENT_NODE) {
+            if (node.tagName === 'BR') extractedText += '\n';
+            else if (node.tagName === 'DIV' && extractedText.length > 0 && !extractedText.endsWith('\n')) extractedText += '\n';
+
+            let start = extractedText.length;
+            node.childNodes.forEach(traverse);
+            let end = extractedText.length;
+
+            if (start < end) {
+              let type = null;
+              if (node.tagName === 'B' || node.tagName === 'STRONG') type = 'bold';
+              else if (node.tagName === 'U') type = 'underline';
+              if (type) newFormatTags.push({ type, propIndex: i, start, end });
+            }
+          }
+        }
+        textSpanEl.childNodes.forEach(traverse);
+      }
+
+      let currentText = extractedText;
       if (textEditMode) {
-        currentText = (block.querySelector('.proposition-text')?.innerText ?? '').replace(/\n$/, '') || '(empty)';
+        currentText = currentText.replace(/\n$/, '') || '(empty)';
       } else {
-        currentText = (block.querySelector('.proposition-text')?.textContent ?? '').trim() || '(empty)';
+        const trimmed = currentText.trimStart();
+        const diff = currentText.length - trimmed.length;
+        currentText = trimmed.trim() || '(empty)';
+        if (diff > 0) {
+          newFormatTags.forEach(f => {
+            f.start = Math.max(0, f.start - diff);
+            f.end = Math.max(0, f.end - diff);
+          });
+        }
       }
 
       if (textBeforeEdit !== null && currentText !== textBeforeEdit) {
-        undoStack.push({ action: 'text edit', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })) });
+        undoStack.push({ action: 'text edit', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })) });
       }
       propositions[i] = currentText;
+      formatTags = formatTags.filter(f => f.propIndex !== i).concat(newFormatTags);
     });
 
     block.addEventListener('keydown', (e) => {
@@ -565,7 +643,7 @@ function reparentBracketToProposition(arcIdx, targetIndex) {
     return;
   }
 
-  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })) });
+  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })) });
 
   // Shrink any arc that contains [from, to] (spans past at least one end) so it no longer contains it (cut at P).
   arcs.forEach((a, i) => {
@@ -684,7 +762,7 @@ function showRelationshipPicker(from, to) {
   arcSelectStep = 0;
   arcFrom = null;
   // Add unlabelled bracket (dashed + ?); user clicks the bracket to choose relationship
-  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })) });
+  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })) });
   arcs = arcs.map(a => {
     const overlaps = a.from <= to && a.to >= from;
     const isEnclosingOrEnclosed = (a.from <= from && a.to >= to) || (from <= a.from && to >= a.to);
@@ -747,7 +825,7 @@ function splitPropositionAtOffset(index, offset) {
   const before = text.slice(0, offset).trim();
   const after = text.slice(offset).trim();
   if (!after) return;
-  undoStack.push({ action: 'divide', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })) });
+  undoStack.push({ action: 'divide', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })) });
   const baseRef = verseRefs[index] || String(index + 1);
   const firstRef = /[a-z]$/.test(baseRef) ? baseRef : baseRef + 'a';
   const secondRef = incrementVerseRef(firstRef);
@@ -769,6 +847,18 @@ function splitPropositionAtOffset(index, offset) {
     type,
     labelsSwapped: labelsSwapped ?? false,
   }));
+  formatTags.forEach(f => {
+    if (f.propIndex > index) f.propIndex += 1;
+    else if (f.propIndex === index) {
+      if (f.start >= offset) {
+        f.propIndex += 1;
+        f.start -= offset;
+        f.end -= offset;
+      } else if (f.end > offset) {
+        f.end = offset;
+      }
+    }
+  });
   renderPropositions();
   showStatus('Divided. Use Undo divide to merge back.', 'success');
 }
@@ -782,6 +872,7 @@ function undoLastAction() {
   propositions = prev.propositions;
   verseRefs = prev.verseRefs ?? propositions.map((_, i) => String(i + 1));
   arcs = prev.arcs;
+  formatTags = prev.formatTags ? prev.formatTags.map(t => ({...t})) : [];
   renderPropositions();
   showStatus(`Undid last ${prev.action}.`, 'success');
 }
@@ -1068,7 +1159,7 @@ function renderArcs() {
       el.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })) });
+        undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })) });
         arcs.splice(idx, 1);
         renderArcs();
         showStatus('Bracket removed.', 'success');
@@ -1854,7 +1945,7 @@ function showBracketActions(arcIdx, centerY, centerX) {
 
   popover.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
     e.stopPropagation();
-    undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })) });
+    undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })) });
     arcs.splice(arcIdx, 1);
     comments = comments.filter((c) => c.type !== 'bracket' || c.target?.arcIdx !== arcIdx);
     comments.forEach((c) => { if (c.type === 'bracket' && c.target?.arcIdx > arcIdx) c.target.arcIdx--; });
@@ -1874,7 +1965,7 @@ function showBracketActions(arcIdx, centerY, centerX) {
   if (swapBtn) {
     swapBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })) });
+      undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })) });
       arcs[arcIdx].labelsSwapped = !arcs[arcIdx].labelsSwapped;
       renderArcs();
       clearAndDismiss();
@@ -1974,6 +2065,7 @@ function startNewArc() {
   propositions = [];
   verseRefs = [];
   arcs = [];
+  formatTags = [];
   undoStack = [];
   comments = [];
   arcSelectStep = 0;
@@ -2059,7 +2151,7 @@ if (newArcBtn) newArcBtn.addEventListener('click', () => handleNewArc());
 // Clear brackets
 if (clearArcsBtn) clearArcsBtn.addEventListener('click', () => {
   if (arcs.length === 0) return;
-  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })) });
+  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })) });
   arcs = [];
   renderArcs();
   arcSelectStep = 0;
@@ -2285,6 +2377,7 @@ function buildArcData() {
     propositions,
     verseRefs,
     arcs: arcs.map((a) => ({ ...a })),
+    formatTags: formatTags.map((t) => ({ ...t })),
     comments: comments.map((c) => ({ ...c })),
     copyrightLabel: document.getElementById('copyrightLabel')?.textContent || '',
     pageAuthor: (document.getElementById('pageAuthor')?.value || '').trim(),
@@ -2357,6 +2450,7 @@ function importArc(data) {
     ? data.verseRefs.slice()
     : propositions.map((_, i) => String(i + 1));
   arcs = Array.isArray(data.arcs) ? data.arcs.map((a) => ({ ...a })) : [];
+  formatTags = Array.isArray(data.formatTags) ? data.formatTags.map((t) => ({ ...t })) : [];
   comments = Array.isArray(data.comments) ? data.comments.map((c) => ({ ...c, replies: Array.isArray(c.replies) ? c.replies.map((r) => ({ ...r })) : [] })) : [];
 
   if (passageHeader) passageHeader.textContent = passageRef;
