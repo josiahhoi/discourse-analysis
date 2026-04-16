@@ -1,6 +1,6 @@
 # Bible Arc
 
-A Bible study tool for diagramming the logical structure of Scripture using **arcing** — splitting passages into propositions and drawing logic arcs between them. Similar to [BibleArc](https://biblearc.com).
+A Bible study tool for diagramming the logical structure of Scripture using **bracketing** — splitting passages into propositions and drawing logic arcs between them. Similar to [BibleArc](https://biblearc.com).
 
 ## Features
 
