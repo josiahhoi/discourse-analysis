@@ -1,14 +1,14 @@
-  T{
+{
     "name": "discourse-analysis",
-    "version": "2.1.1",
+    "version": "2.2.1",
     "description": "Discourse Analysis — diagram the logical structure of Scripture",
     "main": "main.js",
     "scripts": {
       "start": "electron .",
-      "build": "electron-builder",
-      "build:mac": "electron-builder --mac",
-      "build:win": "electron-builder --win",
-      "build:all": "electron-builder --mac --win"
+      "build": "electron-builder --mac --arm64 && electron-builder --win --x64",
+      "build:mac": "electron-builder --mac --arm64",
+      "build:win": "electron-builder --win --x64",
+      "build:all": "npm run build"
     },
     "author": "",
     "license": "MIT",
@@ -31,22 +31,18 @@
       "mac": {
         "category": "public.app-category.education",
         "target": [
-          "dmg",
           "zip"
         ],
-        "icon": null
+        "icon": "build/icon.png"
       },
       "win": {
         "target": [
-          "nsis",
           "portable"
         ],
-        "icon": null
+        "icon": "build/icon.png"
       },
-      "nsis": {
-        "oneClick": true,
-        "perMachine": false,
-        "allowToChangeInstallationDirectory": false
+      "portable": {
+        "artifactName": "${productName} ${version} ${arch} Portable.${ext}"
       }
     }
   }

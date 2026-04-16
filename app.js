@@ -63,6 +63,26 @@ const fetchBtn = document.getElementById('fetchBtn');
 const apiKeyInput = document.getElementById('apiKey');
 const passageRefEl = document.getElementById('passageRef');
 const passageHeader = passageRefEl;
+
+const pasteText = document.getElementById('pasteText');
+const importBtn = document.getElementById('importBtn');
+const importPassageRef = document.getElementById('importPassageRef');
+const importStartVerse = document.getElementById('importStartVerse');
+
+const saveBtn = document.getElementById('saveBtn');
+const saveAsBtn = document.getElementById('saveAsBtn');
+const openFileBtn = document.getElementById('openFileBtn');
+const importFileInput = document.getElementById('importFileInput');
+
+const copyForWordBtn = document.getElementById('copyForWordBtn');
+const copyDataBtn = document.getElementById('copyDataBtn');
+
+const newArcBtn = document.getElementById('newArcBtn');
+const propositionEditor = document.getElementById('propositionEditor');
+const propositionsContainer = document.getElementById('propositions');
+const arcCanvas = document.getElementById('arcCanvas');
+const clearArcsBtn = document.getElementById('clearArcs');
+
 if (passageRefEl) {
   const syncPassageRef = () => {
     const val = (passageRefEl.textContent || '').trim();
@@ -72,10 +92,6 @@ if (passageRefEl) {
   passageRefEl.addEventListener('blur', syncPassageRef);
   passageRefEl.addEventListener('input', syncPassageRef);
 }
-const propositionEditor = document.getElementById('propositionEditor');
-const propositionsContainer = document.getElementById('propositions');
-const arcCanvas = document.getElementById('arcCanvas');
-const clearArcsBtn = document.getElementById('clearArcs');
 
 // Load API key from localStorage
 if (apiKeyInput) {
@@ -1084,35 +1100,78 @@ function renderWordArrows(wrapper) {
     const fromR = fromEl.getBoundingClientRect();
     const toR = toEl.getBoundingClientRect();
 
-    const x1 = fromR.left + fromR.width / 2 - wrapperRect.left;
-    const y1 = fromR.bottom - wrapperRect.top;
-    const x2 = toR.left + toR.width / 2 - wrapperRect.left;
-    const y2 = toR.bottom - wrapperRect.top;
+    // word boundaries relative to wrapper
+    const fL = fromR.left - wrapperRect.left;
+    const fR = fromR.right - wrapperRect.left;
+    const fM = fromR.top + fromR.height / 2 - wrapperRect.top;
+
+    const tL = toR.left - wrapperRect.left;
+    const tR = toR.right - wrapperRect.left;
+    const tM = toR.top + toR.height / 2 - wrapperRect.top;
+    const tT = toR.top - wrapperRect.top;
+    const tB = toR.bottom - wrapperRect.top;
+    const tC = toR.left + toR.width / 2 - wrapperRect.left;
+
+    const fC = fromR.left + fromR.width / 2 - wrapperRect.left;
+    const fT = fromR.top - wrapperRect.top;
+    const fB = fromR.bottom - wrapperRect.top;
+
+    let x1, y1, x2, y2, isLastHorizontal;
+    
+    if (tM < fM - 10) {
+      // UPWARDS: Horizontal then Vertical (Arrival at bottom center)
+      x1 = (tC < fL) ? fL : (tC > fR ? fR : fC);
+      y1 = fM;
+      x2 = tC;
+      y2 = tB + 2;
+      isLastHorizontal = false;
+    } else if (tM > fM + 10) {
+      // DOWNWARDS: Vertical then Horizontal (Arrival at left/right side)
+      x1 = fC;
+      y1 = fB;
+      y2 = tM;
+      x2 = (fC > tC) ? tR + 2 : tL - 2;
+      isLastHorizontal = true;
+    } else {
+      // SAME LINE: Horizontal only
+      x1 = (tC < fL) ? fL : fR;
+      y1 = fM;
+      x2 = (tC < fL) ? tR + 2 : tL - 2;
+      y2 = fM;
+      isLastHorizontal = true;
+    }
+
+    const d = (isLastHorizontal && y1 !== y2) 
+      ? `M ${x1} ${y1} V ${y2} H ${x2}` 
+      : `M ${x1} ${y1} H ${x2} V ${y2}`;
 
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g.setAttribute('class', 'word-arrow-group');
-
-    // 90 degree arrow logic
-    // We go down a bit, then horizontal, then up (if needed) to targets.
-    // If on same line, we drop down by say 15px.
-    const drop = 15;
-    let d;
-    if (Math.abs(y1 - y2) < 5) {
-      // Same line: U-shape
-      d = `M ${x1} ${y1} V ${y1 + drop} H ${x2} V ${y2}`;
-    } else {
-      // Different lines: Step shape
-      // We'll go to midway-ish point or just use y1+drop and then x2
-      d = `M ${x1} ${y1} V ${y1 + drop} H ${x2} V ${y2}`;
-    }
+    g.style.color = 'var(--accent)';
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', d);
     path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', 'var(--accent)');
+    path.setAttribute('stroke', 'currentColor');
     path.setAttribute('stroke-width', '2');
-    path.setAttribute('marker-end', 'url(#arrowhead)');
     g.appendChild(path);
+
+    // Manual Arrowhead (Polygon) - using polygon to avoid CSS 'path' specificity issue
+    let points = '';
+    const hL = 7; // head length
+    const hW = 3.5;  // head half-width
+    if (isLastHorizontal) {
+      if (x2 < x1) points = `${x2},${y2} ${x2+hL},${y2-hW} ${x2+hL},${y2+hW}`; // Left
+      else points = `${x2},${y2} ${x2-hL},${y2-hW} ${x2-hL},${y2+hW}`; // Right
+    } else {
+      if (y2 < y1) points = `${x2},${y2} ${x2-hW},${y2+hL} ${x2+hW},${y2+hL}`; // Up
+      else points = `${x2},${y2} ${x2-hW},${y2-hL} ${x2+hW},${y2-hL}`; // Down
+    }
+    const head = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    head.setAttribute('points', points);
+    head.setAttribute('fill', 'var(--accent)');
+    head.style.fill = 'var(--accent)';
+    g.appendChild(head);
 
     // Hit area
     const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -1145,21 +1204,7 @@ function renderArcs() {
   arcCanvas.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
 
   arcCanvas.innerHTML = '';
-  // Add defs back because innerHTML='' clears them
-  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-  const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-  marker.setAttribute('id', 'arrowhead');
-  marker.setAttribute('markerWidth', '10');
-  marker.setAttribute('markerHeight', '7');
-  marker.setAttribute('refX', '9');
-  marker.setAttribute('refY', '3.5');
-  marker.setAttribute('orient', 'auto');
-  const poly = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  poly.setAttribute('d', 'M0,0 L10,3.5 L0,7 Z');
-  poly.setAttribute('fill', 'currentColor');
-  marker.appendChild(poly);
-  defs.appendChild(marker);
-  arcCanvas.appendChild(defs);
+  // (defs and marker removed, now handled inline in renderWordArrows)
 
   const blocks = propositionsContainer.querySelectorAll('.proposition-block');
   const positions = Array.from(blocks).map((b) => {
@@ -1241,6 +1286,10 @@ function renderArcs() {
       el.style.cursor = 'pointer';
       el.addEventListener('mouseenter', () => {
         if (g) g.classList.add('bracket-hover');
+        // Bold the labels for this bracket
+        arcCanvas.querySelectorAll(`.bracket-label[data-arc-index="${idx}"]`).forEach(lbl => {
+          lbl.style.fontWeight = 'bold';
+        });
         if (hasComment) {
           const comment = getCommentForBracket(idx);
           if (comment) {
@@ -1258,6 +1307,10 @@ function renderArcs() {
       });
       el.addEventListener('mouseleave', () => {
         if (g) g.classList.remove('bracket-hover');
+        // Un-bold the labels for this bracket
+        arcCanvas.querySelectorAll(`.bracket-label[data-arc-index="${idx}"]`).forEach(lbl => {
+          lbl.style.fontWeight = '';
+        });
         document.querySelectorAll('.comments-preview-card.comment-hover-active').forEach(c => c.classList.remove('comment-hover-active'));
         document.querySelectorAll('.proposition-block.arc-hover').forEach((b) => b.classList.remove('arc-hover'));
       });
@@ -1300,6 +1353,7 @@ function renderArcs() {
       textEl.setAttribute('dominant-baseline', 'central');
       textEl.setAttribute('font-size', '12');
       textEl.setAttribute('class', `bracket-label ${type}`);
+      textEl.setAttribute('data-arc-index', idx);
       textEl.textContent = labels.single;
       attachBracketEvents(textEl, false);
       labelsLayer.appendChild(textEl);
@@ -1311,6 +1365,7 @@ function renderArcs() {
       topLabel.setAttribute('dominant-baseline', 'central');
       topLabel.setAttribute('font-size', '12');
       topLabel.setAttribute('class', `bracket-label ${type}`);
+      topLabel.setAttribute('data-arc-index', idx);
       topLabel.textContent = labels.top;
       const bottomLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       bottomLabel.setAttribute('x', BRACKET_X - 4);
@@ -1319,6 +1374,7 @@ function renderArcs() {
       bottomLabel.setAttribute('dominant-baseline', 'central');
       bottomLabel.setAttribute('font-size', '12');
       bottomLabel.setAttribute('class', `bracket-label ${type}`);
+      bottomLabel.setAttribute('data-arc-index', idx);
       bottomLabel.textContent = labels.bottom;
       attachBracketEvents(topLabel, false);
       attachBracketEvents(bottomLabel, false);
@@ -2271,7 +2327,7 @@ async function handleNewArc() {
   });
 }
 
-const newArcBtn = document.getElementById('newArcBtn');
+// New Arc listener logic already handled elsewhere
 if (newArcBtn) newArcBtn.addEventListener('click', () => handleNewArc());
 
 // Clear brackets
@@ -2287,9 +2343,6 @@ if (clearArcsBtn) clearArcsBtn.addEventListener('click', () => {
 });
 
 // Import pasted text
-const pasteText = document.getElementById('pasteText');
-const importBtn = document.getElementById('importBtn');
-
 function parsePastedText(raw, defaultStartVerse = '1') {
   const verseParts = raw.split(/(?=\[\d+(?::\d+)?\])/);
   const props = [];
@@ -2357,10 +2410,6 @@ if (importBtn) importBtn.addEventListener('click', () => {
 });
 
 // Export / Import arc as JSON file + Recent list
-const exportBtn = document.getElementById('exportBtn');
-const openFileBtn = document.getElementById('openFileBtn');
-const importFileBtn = document.getElementById('importFileBtn');
-const importFileInput = document.getElementById('importFileInput');
 const recentListEl = document.getElementById('recentList');
 
 const RECENT_KEY = 'biblearc_recent';
@@ -2450,8 +2499,10 @@ function getExportFilename(defaultOnly = false) {
   }
   
   const ref = passageRef || 'passage';
-  const match = ref.match(/^([\d\s]*[a-zA-Z]+)\s+(\d+)(?::(\d+)(?:-(\d+))?)?/);
-  let defaultPassagePrefix = ref.replace(/\s+|:/g, '-');
+  // Normalize dashes (em-dash, en-dash) to regular hyphen for parsing
+  const normalizedRef = ref.replace(/[\u2013\u2014]/g, '-');
+  const match = normalizedRef.match(/^([\d\s]*[a-zA-Z][a-zA-Z\s.]*[a-zA-Z])\s+(\d+)(?::(\d+)(?:-(\d+))?)?/);
+  let defaultPassagePrefix = ref.replace(/[\s:]+/g, '-');
   
   if (match) {
     const book = getBookAbbreviation(match[1]);
@@ -2522,22 +2573,26 @@ async function saveArc() {
   const data = buildArcData();
   const json = JSON.stringify(data, null, 2);
 
+  // Fallback for local files where File System Access API is blocked
+  const isLocalFile = window.location.protocol === 'file:';
+
   try {
-    if (saveFileHandle && 'createWritable' in saveFileHandle) {
+    if (!isLocalFile && saveFileHandle && 'createWritable' in saveFileHandle) {
       const writable = await saveFileHandle.createWritable();
       await writable.write(json);
       await writable.close();
       addToRecent(data);
       showStatus('Saved.', 'success');
-    } else if ('showSaveFilePicker' in window) {
+    } else if (!isLocalFile && 'showSaveFilePicker' in window) {
       const name = `${getExportFilename()}.json`;
-      saveFileHandle = await window.showSaveFilePicker({
+      const handle = await window.showSaveFilePicker({
         suggestedName: name,
         types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
       });
-      const writable = await saveFileHandle.createWritable();
+      const writable = await handle.createWritable();
       await writable.write(json);
       await writable.close();
+      saveFileHandle = handle;
       addToRecent(data);
       showStatus('Saved.', 'success');
     } else {
@@ -2545,6 +2600,47 @@ async function saveArc() {
     }
   } catch (err) {
     if (err.name === 'AbortError') return;
+    if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+      console.warn('File System Access API blocked, falling back to download:', err);
+      exportArc();
+      return;
+    }
+    showStatus(err.message || 'Save failed.', 'error');
+  }
+}
+
+async function saveArcAs() {
+  if (propositions.length === 0) {
+    showStatus('Nothing to save. Fetch or import a passage first.', 'error');
+    return;
+  }
+  const data = buildArcData();
+  const json = JSON.stringify(data, null, 2);
+  const isLocalFile = window.location.protocol === 'file:';
+
+  try {
+    if (!isLocalFile && 'showSaveFilePicker' in window) {
+      const name = `${getExportFilename()}.json`;
+      const handle = await window.showSaveFilePicker({
+        suggestedName: name,
+        types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(json);
+      await writable.close();
+      saveFileHandle = handle;
+      addToRecent(data);
+      showStatus('Saved as new file.', 'success');
+    } else {
+      exportArc();
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+      console.warn('File System Access API blocked, falling back to download:', err);
+      exportArc();
+      return;
+    }
     showStatus(err.message || 'Save failed.', 'error');
   }
 }
@@ -2648,10 +2744,8 @@ async function copyDiagramForWord() {
   }
 }
 
-const copyForWordBtn = document.getElementById('copyForWordBtn');
 if (copyForWordBtn) copyForWordBtn.addEventListener('click', copyDiagramForWord);
 
-const copyDataBtn = document.getElementById('copyDataBtn');
 if (copyDataBtn) {
   copyDataBtn.addEventListener('click', async () => {
     if (propositions.length === 0) {
@@ -2668,9 +2762,8 @@ if (copyDataBtn) {
   });
 }
 
-const saveBtn = document.getElementById('saveBtn');
 if (saveBtn) saveBtn.addEventListener('click', () => saveArc());
-if (exportBtn) exportBtn.addEventListener('click', exportArc);
+if (saveAsBtn) saveAsBtn.addEventListener('click', () => saveArcAs());
 
 async function openArcFile() {
   if ('showOpenFilePicker' in window) {
@@ -2694,8 +2787,7 @@ async function openArcFile() {
 
 if (openFileBtn) openFileBtn.addEventListener('click', openArcFile);
 
-if (importFileBtn && importFileInput) {
-  importFileBtn.addEventListener('click', () => importFileInput.click());
+if (importFileInput) {
   importFileInput.addEventListener('change', () => {
     const file = importFileInput.files?.[0];
     if (!file) return;
@@ -2788,6 +2880,7 @@ if (textEditModeBtn) {
   textEditModeBtn.addEventListener('click', () => {
     textEditMode = !textEditMode;
     textEditModeBtn.classList.toggle('active', textEditMode);
+    document.body.classList.toggle('text-edit-mode-active', textEditMode);
     textEditModeBtn.title = textEditMode ? 'Text edit mode on: edit text directly, use Tab for indent, Enter for newlines.' : 'Toggle text edit mode: edit text freely with newlines and indentation. No brackets or dividing.';
     if (textEditMode) {
       if (commentMode) commentModeBtn?.click();
@@ -2969,3 +3062,20 @@ if (toggleRightSidebarBtn && rightSidebar) {
     toggleRightSidebarBtn.classList.toggle('flipped');
   });
 }
+
+// Update filename placeholder logic
+function attachFilenameObservers() {
+  const pRef = document.getElementById('passageRef');
+  const pAuthor = document.getElementById('pageAuthor');
+  
+  if (pRef) {
+    const obs = new MutationObserver(updateFilenamePlaceholder);
+    obs.observe(pRef, { childList: true, characterData: true, subtree: true });
+    pRef.addEventListener('input', updateFilenamePlaceholder);
+  }
+  if (pAuthor) {
+    pAuthor.addEventListener('input', updateFilenamePlaceholder);
+  }
+  updateFilenamePlaceholder();
+}
+attachFilenameObservers();

@@ -43,15 +43,8 @@
       <aside class="arc-types">
         <h3>Logical Relationships</h3>
         <p class="hint">Split: click in text to place the cursor, then press Enter. Single click to edit. Click nodes or verse refs to create brackets. Based on <a href="https://s3.amazonaws.com/cdn.gospelpaths.com/tenants/5/1738104708694-The18LogicalRelationshipsEngnewlogo.pdf" target="_blank" rel="noopener">BibleArc's 18 relationships</a>.</p>
-        <div class="comment-mode-row">
-          <button id="textEditModeBtn" type="button" class="undo-btn" title="Toggle text edit mode: edit text freely with newlines and indentation. No brackets or dividing.">Text Edit</button>
-          <button id="commentModeBtn" type="button" class="undo-btn" title="Toggle comment mode: highlight text or click a bracket to add a comment">Comment</button>
-          <button id="arrowModeBtn" type="button" class="undo-btn" title="Toggle arrow mode: draw word-to-word arrows by clicking the start and end words">Arrow mode</button>
-        </div>
-        <button id="undoDivideBtn" type="button" class="undo-btn" title="Undo last divide or bracket">Undo</button>
         <div class="save-load-row">
           <button id="themeToggle" type="button" title="Toggle light/dark mode">Light / Dark</button>
-          <button id="newArcBtn" type="button" title="Start a new arc (prompts to save current)">New</button>
         </div>
         <p class="hint-small">Click bracket for Delete / Change label / Select to connect. Double-click bracket to change label.</p>
         <button id="clearArcs" class="secondary">Clear All Brackets</button>
@@ -61,21 +54,21 @@
         </div>
         <div class="save-load-row save-filename-row">
           <label for="exportFilename">File name:</label>
-          <input type="text" id="exportFilename" placeholder="Custom file name" class="filename-input">
+          <input type="text" id="exportFilename" placeholder="Auto-generated filename..." class="filename-input">
         </div>
         <div class="save-load-row save-load-primary">
+          <button id="newArcBtn" type="button" class="secondary" title="Start a new arc (prompts to save current)">New</button>
+          <button id="openFileBtn" type="button" class="secondary" title="Open JSON file (enables Save to update it)">Open</button>
+        </div>
+        <div class="save-load-row">
           <button id="saveBtn" type="button" title="Save to current file (Ctrl+S). First time: choose location.">Save</button>
-          <button id="exportBtn" type="button" class="secondary" title="Download arc as new JSON file">Export</button>
+          <button id="saveAsBtn" type="button" class="secondary" title="Save current arc as a new JSON file">Save As</button>
         </div>
         <div class="save-load-row">
           <button id="copyForWordBtn" type="button" class="secondary" title="Copy diagram as image (Ctrl+V to paste)">Copy image</button>
           <button id="copyDataBtn" type="button" class="secondary" title="Copy arc data as text to clipboard">Copy data</button>
         </div>
-        <div class="save-load-row">
-          <button id="openFileBtn" type="button" class="secondary" title="Open JSON file (enables Save to update it)">Open</button>
-          <button id="importFileBtn" type="button" class="secondary" title="Load arc from JSON file">Import file</button>
-          <input type="file" id="importFileInput" accept=".json,application/json" hidden>
-        </div>
+        <input type="file" id="importFileInput" accept=".json,application/json" hidden>
         <details class="recent-section" id="recentSection">
           <summary>Recent</summary>
           <ul id="recentList" class="recent-list"></ul>
@@ -92,6 +85,13 @@
             </button>
             <span id="passageRef" contenteditable="true" role="textbox" title="Click to edit passage reference">—</span>
             <span class="copyright" id="copyrightLabel">(ESV)</span>
+          </div>
+          <div class="workspace-toolbar" id="workspaceToolbar">
+            <button id="textEditModeBtn" type="button" class="toolbar-btn" title="Toggle text edit mode: edit text freely with newlines and indentation.">Text Edit</button>
+            <button id="commentModeBtn" type="button" class="toolbar-btn" title="Toggle comment mode: add comments to text or brackets.">Comment</button>
+            <button id="arrowModeBtn" type="button" class="toolbar-btn" title="Toggle arrow mode: draw word-to-word arrows.">Add Arrows</button>
+            <div class="toolbar-divider"></div>
+            <button id="undoDivideBtn" type="button" class="toolbar-btn undo-action-btn" title="Undo last action">Undo</button>
           </div>
           <div class="passage-header-right">
             <span id="passageAuthor" class="passage-author" aria-label="Page author"></span>
@@ -124,7 +124,7 @@
 
     <footer class="footer">
       <p>ESV via <a href="https://api.esv.org" target="_blank" rel="noopener">api.esv.org</a>. Greek: <a href="https://sblgnt.com" target="_blank" rel="noopener">SBLGNT</a> (CC-BY 4.0).</p>
-      <p class="footer-version">Version 2.1.1 · Made by Josiah Hoi</p>
+      <p class="footer-version">Version 2.2.1 · Made by Josiah Hoi, based on the method taught by Dr. Daniel M. Gurtner.</p>
     </footer>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>

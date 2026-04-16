@@ -269,6 +269,7 @@ body {
   width: 220px;
   max-height: 85vh;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 1rem;
   background: var(--surface);
   border-radius: var(--radius);
@@ -738,7 +739,7 @@ body {
 .passage-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 1rem;
   margin-bottom: 0.75rem;
   font-family: var(--font-serif);
@@ -748,6 +749,7 @@ body {
 }
 
 .passage-header-left {
+  flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -755,10 +757,61 @@ body {
 }
 
 .passage-header-right {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 0.75rem;
   flex-shrink: 0;
+  justify-content: flex-end;
+}
+
+.workspace-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: var(--surface-elevated);
+  padding: 2px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  font-style: normal;
+}
+
+.toolbar-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.toolbar-btn:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.toolbar-btn.active {
+  background: var(--surface);
+  color: var(--accent);
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 1.25rem;
+  background: var(--border);
+  margin: 0 0.25rem;
+}
+
+.undo-action-btn:active {
+  transform: scale(0.95);
 }
 
 .sidebar-toggle-btn {
@@ -851,6 +904,7 @@ body {
   height: 100%;
   pointer-events: none;
   z-index: 2;
+  overflow: visible;
 }
 
 /* In Connect-to mode, let clicks pass through to proposition blocks — but keep connection nodes (circles) clickable so "S node then verse 4 node" works */
@@ -978,6 +1032,20 @@ body {
   font-size: 0.9em;
   margin-right: 0.35em;
   user-select: none;
+  padding: 1px 4px;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+
+body.text-edit-mode-active .proposition-block {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: var(--accent);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+body.text-edit-mode-active .verse-ref {
+  color: rgba(0,0,0,0.5) !important;
 }
 
 .proposition-block .proposition-text {
@@ -1010,7 +1078,7 @@ body {
 }
 
 .arc-canvas .bracket-group.bracket-hover path {
-  stroke-width: 8;
+  stroke-width: 4;
 }
 
 /* Footer */
@@ -1067,6 +1135,34 @@ body {
 
 .author-input::placeholder {
   color: var(--text-muted);
+}
+
+.save-filename-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+}
+
+.save-filename-row label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.filename-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+
+[data-theme="light"] .filename-input {
+  background: #fff;
 }
 
 /* Error/status messages — fixed so removing after 5s doesn't cause scroll jump */
