@@ -1,6 +1,6 @@
 /**
- * Bible Arc — Proposition arcing tool with ESV API and SBL Greek NT integration
- * Fetches passages, splits into propositions, draws logic arcs between them.
+ * Bible Bracket — Proposition bracketing tool with ESV API and SBL Greek NT integration
+ * Fetches passages, splits into propositions, draws logic brackets between them.
  */
 
 const ESV_API = 'https://api.esv.org/v3/passage/text/';
@@ -41,13 +41,13 @@ const SBLGNT_BOOKS = {
 let passageRef = '';
 let propositions = [];
 let verseRefs = []; // e.g. ['1', '2', '18a', '18b']
-let arcs = [];
-let arcSelectStep = 0;
-let arcFrom = null; // { type: 'single', index } or { type: 'range', from, to }
-let connectBracketToArcIdx = null; // when set, next proposition click is the reparent target
+let brackets = [];
+let bracketSelectStep = 0;
+let bracketFrom = null; // { type: 'single', index } or { type: 'range', from, to }
+let connectBracketToBracketIdx = null; // when set, next proposition click is the reparent target
 let _connectCancelListener = null;
-let undoStack = []; // { action: 'divide'|'bracket', propositions, verseRefs, arcs } snapshots
-let comments = []; // { id, type: 'bracket'|'text', target: { arcIdx }|{ propIndex, start, end }, text, author?, createdAt, replies?: { id, text, author?, createdAt }[] }
+let undoStack = []; // { action: 'divide'|'bracket', propositions, verseRefs, brackets } snapshots
+let comments = []; // { id, type: 'bracket'|'text', target: { bracketIdx }|{ propIndex, start, end }, text, author?, createdAt, replies?: { id, text, author?, createdAt }[] }
 let isRenderingPropositions = false; // true during renderPropositions so focusout doesn't overwrite (Electron)
 let commentMode = false;
 let textEditMode = false;
@@ -77,11 +77,11 @@ const importFileInput = document.getElementById('importFileInput');
 const copyForWordBtn = document.getElementById('copyForWordBtn');
 const copyDataBtn = document.getElementById('copyDataBtn');
 
-const newArcBtn = document.getElementById('newArcBtn');
+const newBracketBtn = document.getElementById('newBracketBtn');
 const propositionEditor = document.getElementById('propositionEditor');
 const propositionsContainer = document.getElementById('propositions');
-const arcCanvas = document.getElementById('arcCanvas');
-const clearArcsBtn = document.getElementById('clearArcs');
+const bracketCanvas = document.getElementById('bracketCanvas');
+const clearBracketsBtn = document.getElementById('clearBrackets');
 
 if (passageRefEl) {
   const syncPassageRef = () => {
@@ -96,9 +96,9 @@ if (passageRefEl) {
 // Load API key from localStorage
 if (apiKeyInput) {
   const defaultEsvKey = 'Token c8ccaec8888bfa568c00c545383a7cd28b056af3';
-  apiKeyInput.value = localStorage.getItem('biblearc_esv_api_key') || defaultEsvKey;
+  apiKeyInput.value = localStorage.getItem('biblebracket_esv_api_key') || defaultEsvKey;
   apiKeyInput.addEventListener('change', () => {
-    localStorage.setItem('biblearc_esv_api_key', apiKeyInput.value);
+    localStorage.setItem('biblebracket_esv_api_key', apiKeyInput.value);
   });
 }
 
@@ -106,8 +106,8 @@ if (apiKeyInput) {
 const versionSelect = document.getElementById('versionSelect');
 const apiKeyRow = document.getElementById('apiKeyRow');
 function updateApiKeyVisibility() {
-  if (apiKeyRow && versionSelect) {
-    apiKeyRow.style.display = versionSelect.value === 'sblgnt' ? 'none' : '';
+  if (apiKeyRow) {
+    apiKeyRow.style.display = 'none';
   }
 }
 if (versionSelect) {
@@ -116,9 +116,9 @@ if (versionSelect) {
 }
 
 // Theme toggle (light/dark)
-const THEME_KEY = 'biblearc_theme';
-const COMMENT_AUTHOR_KEY = 'biblearc_comment_author';
-const PAGE_AUTHOR_KEY = 'biblearc_page_author';
+const THEME_KEY = 'biblebracket_theme';
+const COMMENT_AUTHOR_KEY = 'biblebracket_comment_author';
+const PAGE_AUTHOR_KEY = 'biblebracket_page_author';
 function initTheme() {
   const saved = localStorage.getItem(THEME_KEY);
   if (saved === 'light') document.documentElement.setAttribute('data-theme', 'light');
@@ -133,7 +133,7 @@ initTheme();
 const themeToggle = document.getElementById('themeToggle');
 if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
 
-// Page/arc author (persisted in localStorage, included in saved/exported arc, shown top-right in workspace for export/copy)
+// Page/bracket author (persisted in localStorage, included in saved/exported bracket, shown top-right in workspace for export/copy)
 const pageAuthorInput = document.getElementById('pageAuthor');
 const passageAuthorEl = document.getElementById('passageAuthor');
 function syncPassageAuthorDisplay() {
@@ -155,7 +155,7 @@ if (pageAuthorInput) {
   });
 }
 
-// 18 Logical Relationships (BibleArc) - type key -> display label
+// 18 Logical Relationships (BibleBracket) - type key -> display label
 const RELATIONSHIP_TYPES = {
   series: 'Series (S)',
   progression: 'Progression (P)',
@@ -171,7 +171,7 @@ const RELATIONSHIP_TYPES = {
   locative: 'Locative (L)',
   'action-manner': 'Action-Manner (Ac/Mn)',
   comparison: 'Comparison (Cf)',
-  'negative-positive': 'Negative-Positive (✓)',
+  'negative-positive': 'Negative-Positive (-/+)',
   'idea-explanation': 'Idea-Explanation (Id/Exp)',
   'question-answer': 'Question-Answer (Q/A)',
   concessive: 'Concessive (Csv)',
@@ -191,11 +191,11 @@ document.addEventListener('keydown', (e) => {
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 's') {
     e.preventDefault();
-    saveArc();
+    saveBracket();
   }
 }, true);
 
-function formatArcType(type) {
+function formatBracketType(type) {
   return RELATIONSHIP_TYPES[type] || type.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-');
 }
 
@@ -345,8 +345,8 @@ async function fetchPassage() {
     if (passageHeader) passageHeader.textContent = passageRef;
     undoStack = [];
     renderPropositions();
-    arcs = [];
-    renderArcs();
+    brackets = [];
+    renderBrackets();
   } catch (err) {
     showStatus(err.message || 'Failed to fetch passage', 'error');
   } finally {
@@ -397,7 +397,7 @@ function renderPropositions() {
     ta.placeholder = 'Fetch or import a passage, then use Divide mode to click and split the text.';
     ta.className = 'proposition-editor';
     propositionsContainer.appendChild(ta);
-    arcCanvas.innerHTML = '';
+    bracketCanvas.innerHTML = '';
     return;
   }
 
@@ -519,7 +519,7 @@ function renderPropositions() {
     });
 
     block.addEventListener('input', () => {
-      updateArcPositions();
+      updateBracketPositions();
     });
 
     block.addEventListener('focusout', () => {
@@ -567,7 +567,7 @@ function renderPropositions() {
       }
 
       if (textBeforeEdit !== null && currentText !== textBeforeEdit) {
-        undoStack.push({ action: 'text edit', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
+        undoStack.push({ action: 'text edit', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
       }
       propositions[i] = currentText;
       formatTags = formatTags.filter(f => f.propIndex !== i).concat(newFormatTags);
@@ -612,13 +612,13 @@ function renderPropositions() {
       const clickedText = e.target.closest('.proposition-text');
       if (commentMode && clickedText) return; // Comment mode: allow text selection only
       let idx;
-      if (connectBracketToArcIdx !== null) {
+      if (connectBracketToBracketIdx !== null) {
         idx = getPropositionIndexAtPoint(e.clientX, e.clientY);
         if (idx < 0) idx = parseInt(block.dataset.index, 10);
       } else {
         idx = parseInt(block.dataset.index, 10);
       }
-      const inBracketFlow = arcSelectStep === 1 || connectBracketToArcIdx !== null;
+      const inBracketFlow = bracketSelectStep === 1 || connectBracketToBracketIdx !== null;
       if (inBracketFlow || !clickedText) {
         handlePropositionClick(idx);
       }
@@ -627,8 +627,8 @@ function renderPropositions() {
     propositionsContainer.appendChild(block);
   });
 
-  updateArcPositions();
-  // Restore scroll after layout (and ResizeObserver-triggered renderArcs) to prevent jump
+  updateBracketPositions();
+  // Restore scroll after layout (and ResizeObserver-triggered renderBrackets) to prevent jump
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       restoreScrollState(scrollState);
@@ -637,7 +637,7 @@ function renderPropositions() {
   });
 }
 
-// Resolve proposition index at viewport coordinates (for Connect-to mode; avoids arc overlay / boundary issues)
+// Resolve proposition index at viewport coordinates (for Connect-to mode; avoids bracket overlay / boundary issues)
 function getPropositionIndexAtPoint(clientX, clientY) {
   const blocks = propositionsContainer?.querySelectorAll('.proposition-block');
   if (!blocks?.length) return -1;
@@ -659,20 +659,20 @@ function getPropositionIndexAtPoint(clientX, clientY) {
 }
 
 function findBracketContainingProposition(index) {
-  const candidates = arcs
-    .map((arc, idx) => ({ arc, idx }))
-    .filter(({ arc }) => arc.from <= index && index <= arc.to && arc.from !== arc.to);
+  const candidates = brackets
+    .map((bracket, idx) => ({ bracket, idx }))
+    .filter(({ bracket }) => bracket.from <= index && index <= bracket.to && bracket.from !== bracket.to);
   if (candidates.length === 0) return null;
-  candidates.sort((a, b) => (a.arc.to - a.arc.from) - (b.arc.to - b.arc.from));
+  candidates.sort((a, b) => (a.bracket.to - a.bracket.from) - (b.bracket.to - b.bracket.from));
   return candidates[0].idx;
 }
 
-// Reparent a bracket so it is "connected to" target proposition; refactors containing arcs so slots update.
-function reparentBracketToProposition(arcIdx, targetIndex) {
-  if (arcIdx < 0 || arcIdx >= arcs.length) return;
-  const arc = arcs[arcIdx];
-  const from = arc.from;
-  const to = arc.to;
+// Reparent a bracket so it is "connected to" target proposition; refactors containing brackets so slots update.
+function reparentBracketToProposition(bracketIdx, targetIndex) {
+  if (bracketIdx < 0 || bracketIdx >= brackets.length) return;
+  const bracket = brackets[bracketIdx];
+  const from = bracket.from;
+  const to = bracket.to;
   const P = targetIndex;
 
   if (P >= from && P <= to) {
@@ -680,11 +680,11 @@ function reparentBracketToProposition(arcIdx, targetIndex) {
     return;
   }
 
-  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
+  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
 
-  // Shrink any arc that contains [from, to] (spans past at least one end) so it no longer contains it (cut at P).
-  arcs.forEach((a, i) => {
-    if (i === arcIdx) return;
+  // Shrink any bracket that contains [from, to] (spans past at least one end) so it no longer contains it (cut at P).
+  brackets.forEach((a, i) => {
+    if (i === bracketIdx) return;
     const contains = a.from <= from && a.to >= to && (a.from < from || a.to > to);
     if (!contains) return;
     if (P < from) {
@@ -694,28 +694,28 @@ function reparentBracketToProposition(arcIdx, targetIndex) {
     }
   });
 
-  // Remove the arc we're reparenting (replace it with the new span).
-  arcs.splice(arcIdx, 1);
+  // Remove the bracket we're reparenting (replace it with the new span).
+  brackets.splice(bracketIdx, 1);
 
-  // Remove arcs that became invalid (from >= to).
-  for (let i = arcs.length - 1; i >= 0; i--) {
-    if (arcs[i].from >= arcs[i].to) arcs.splice(i, 1);
+  // Remove brackets that became invalid (from >= to).
+  for (let i = brackets.length - 1; i >= 0; i--) {
+    if (brackets[i].from >= brackets[i].to) brackets.splice(i, 1);
   }
 
-  // Add a new arc that spans from P to this bracket, so the bracket becomes a direct child of P.
+  // Add a new bracket that spans from P to this bracket, so the bracket becomes a direct child of P.
   const newFrom = Math.min(P, from);
   const newTo = Math.max(P, to);
-  arcs.push({ from: newFrom, to: newTo, type: arc.type, labelsSwapped: arc.labelsSwapped ?? false });
+  brackets.push({ from: newFrom, to: newTo, type: bracket.type, labelsSwapped: bracket.labelsSwapped ?? false });
 
-  renderArcs();
+  renderBrackets();
   showStatus('Bracket connected. Nesting and slots updated.', 'success');
 }
 
 function handlePropositionClick(index) {
-  if (connectBracketToArcIdx !== null) {
-    reparentBracketToProposition(connectBracketToArcIdx, index);
-    connectBracketToArcIdx = null;
-    arcCanvas?.classList.remove('connect-mode');
+  if (connectBracketToBracketIdx !== null) {
+    reparentBracketToProposition(connectBracketToBracketIdx, index);
+    connectBracketToBracketIdx = null;
+    bracketCanvas?.classList.remove('connect-mode');
     if (_connectCancelListener) {
       document.removeEventListener('click', _connectCancelListener);
       _connectCancelListener = null;
@@ -725,14 +725,14 @@ function handlePropositionClick(index) {
     return;
   }
 
-  if (arcSelectStep === 0) {
+  if (bracketSelectStep === 0) {
     const bracketIdx = findBracketContainingProposition(index);
     if (bracketIdx !== null) {
-      const arc = arcs[bracketIdx];
-      highlightPropositionRange(arc.from, arc.to, true);
+      const bracket = brackets[bracketIdx];
+      highlightPropositionRange(bracket.from, bracket.to, true);
       const blocks = propositionsContainer.querySelectorAll('.proposition-block');
-      const rFrom = blocks[arc.from]?.getBoundingClientRect?.();
-      const rTo = blocks[arc.to]?.getBoundingClientRect?.();
+      const rFrom = blocks[bracket.from]?.getBoundingClientRect?.();
+      const rTo = blocks[bracket.to]?.getBoundingClientRect?.();
       const wr = propositionsContainer.parentElement?.getBoundingClientRect();
       const centerY = rFrom && rTo && wr ? ((rFrom.top + rFrom.bottom + rTo.top + rTo.bottom) / 4 - wr.top) : 0;
       const centerX = propositionsContainer.parentElement ? propositionsContainer.parentElement.offsetWidth / 2 : 0;
@@ -743,18 +743,18 @@ function handlePropositionClick(index) {
 
   const sel = { type: 'single', from: index, to: index };
 
-  if (arcSelectStep === 0) {
-    arcFrom = sel;
-    arcSelectStep = 1;
+  if (bracketSelectStep === 0) {
+    bracketFrom = sel;
+    bracketSelectStep = 1;
     highlightPropositionRange(sel.from, sel.to, true);
     showStatus('Now click the second proposition or bracket group.', 'success');
-  } else if (arcSelectStep === 1) {
-    const fromStart = arcFrom.from;
-    const fromEnd = arcFrom.to;
+  } else if (bracketSelectStep === 1) {
+    const fromStart = bracketFrom.from;
+    const fromEnd = bracketFrom.to;
     if (index >= fromStart && index <= fromEnd) {
-      arcCanvas?.classList.remove('connect-mode');
-      arcSelectStep = 0;
-      arcFrom = null;
+      bracketCanvas?.classList.remove('connect-mode');
+      bracketSelectStep = 0;
+      bracketFrom = null;
       clearPropositionHighlights();
       showStatus('Bracket cancelled. Select a different first item.', 'error');
       return;
@@ -766,41 +766,41 @@ function handlePropositionClick(index) {
   }
 }
 
-function handleBracketGroupClick(arcIdx) {
-  const arc = arcs[arcIdx];
-  const sel = { type: 'range', from: arc.from, to: arc.to, arcIdx };
+function handleBracketGroupClick(bracketIdx) {
+  const bracket = brackets[bracketIdx];
+  const sel = { type: 'range', from: bracket.from, to: bracket.to, bracketIdx };
 
-  if (arcSelectStep === 0) {
-    arcFrom = sel;
-    arcSelectStep = 1;
+  if (bracketSelectStep === 0) {
+    bracketFrom = sel;
+    bracketSelectStep = 1;
     highlightPropositionRange(sel.from, sel.to, true);
-    arcCanvas?.classList.add('connect-mode');
-    showStatus('Click a proposition to connect to, or another bracket to create an arc.', 'success');
-  } else if (arcSelectStep === 1) {
-    const fromStart = arcFrom.from;
-    const fromEnd = arcFrom.to;
-    if (arc.from >= fromStart && arc.to <= fromEnd) {
-      arcCanvas?.classList.remove('connect-mode');
-      arcSelectStep = 0;
-      arcFrom = null;
+    bracketCanvas?.classList.add('connect-mode');
+    showStatus('Click a proposition to connect to, or another bracket to create a bracket.', 'success');
+  } else if (bracketSelectStep === 1) {
+    const fromStart = bracketFrom.from;
+    const fromEnd = bracketFrom.to;
+    if (bracket.from >= fromStart && bracket.to <= fromEnd) {
+      bracketCanvas?.classList.remove('connect-mode');
+      bracketSelectStep = 0;
+      bracketFrom = null;
       clearPropositionHighlights();
       showStatus('Bracket cancelled. Select a different first item.', 'error');
       return;
     }
-    const toStart = Math.min(fromStart, arc.from);
-    const toEnd = Math.max(fromEnd, arc.to);
+    const toStart = Math.min(fromStart, bracket.from);
+    const toEnd = Math.max(fromEnd, bracket.to);
     showRelationshipPicker(toStart, toEnd);
   }
 }
 
 function showRelationshipPicker(from, to) {
-  arcCanvas?.classList.remove('connect-mode');
+  bracketCanvas?.classList.remove('connect-mode');
   clearPropositionHighlights();
-  arcSelectStep = 0;
-  arcFrom = null;
+  bracketSelectStep = 0;
+  bracketFrom = null;
   // Add unlabelled bracket (dashed + ?); user clicks the bracket to choose relationship
-  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
-  arcs = arcs.map(a => {
+  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
+  brackets = brackets.map(a => {
     const overlaps = a.from <= to && a.to >= from;
     const isEnclosingOrEnclosed = (a.from <= from && a.to >= to) || (from <= a.from && to >= a.to);
     if (overlaps && !isEnclosingOrEnclosed) {
@@ -809,20 +809,20 @@ function showRelationshipPicker(from, to) {
     return a;
   });
 
-  arcs.push({ from, to, type: 'unspecified', labelsSwapped: false });
-  renderArcs();
+  brackets.push({ from, to, type: 'unspecified', labelsSwapped: false });
+  renderBrackets();
   showStatus('Bracket added. Click the bracket to choose relationship.', 'success');
 }
 
 function highlightPropositionRange(from, to, on) {
   for (let i = from; i <= to; i++) {
     const block = propositionsContainer.querySelector(`[data-index="${i}"]`);
-    if (block) block.classList.toggle('arc-selected', on);
+    if (block) block.classList.toggle('bracket-selected', on);
   }
 }
 
 function clearPropositionHighlights() {
-  document.querySelectorAll('.proposition-block.arc-selected').forEach((b) => b.classList.remove('arc-selected'));
+  document.querySelectorAll('.proposition-block.bracket-selected').forEach((b) => b.classList.remove('bracket-selected'));
 }
 
 function splitPropositionAtCaret(block, index) {
@@ -862,7 +862,7 @@ function splitPropositionAtOffset(index, offset) {
   const before = text.slice(0, offset).trim();
   const after = text.slice(offset).trim();
   if (!after) return;
-  undoStack.push({ action: 'divide', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
+  undoStack.push({ action: 'divide', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
   const baseRef = verseRefs[index] || String(index + 1);
   const firstRef = /[a-z]$/.test(baseRef) ? baseRef : baseRef + 'a';
   const secondRef = incrementVerseRef(firstRef);
@@ -878,7 +878,7 @@ function splitPropositionAtOffset(index, offset) {
       verseRefs[j] = incrementVerseRef(verseRefs[j]);
     }
   }
-  arcs = arcs.map(({ from, to, type, labelsSwapped }) => ({
+  brackets = brackets.map(({ from, to, type, labelsSwapped }) => ({
     from: from >= index + 1 ? from + 1 : from,
     to: to >= index ? to + 1 : to,
     type,
@@ -933,7 +933,7 @@ function undoLastAction() {
   const prev = undoStack.pop();
   propositions = prev.propositions;
   verseRefs = prev.verseRefs ?? propositions.map((_, i) => String(i + 1));
-  arcs = prev.arcs;
+  brackets = prev.brackets;
   formatTags = prev.formatTags ? prev.formatTags.map(t => ({...t})) : [];
   wordArrows = prev.wordArrows ? prev.wordArrows.map(w => ({...w})) : [];
   renderPropositions();
@@ -941,9 +941,9 @@ function undoLastAction() {
 }
 
 
-function updateArcPositions() {
+function updateBracketPositions() {
   requestAnimationFrame(() => {
-    renderArcs();
+    renderBrackets();
   });
 }
 
@@ -971,7 +971,7 @@ const BRACKET_LABELS = {
   unspecified: '?',
 };
 
-// Bracket geometry constants (shared for getConnectionPoints and renderArcs)
+// Bracket geometry constants (shared for getConnectionPoints and renderBrackets)
 const BRACKET_GEO = {
   PADDING_LEFT: 390, // Space for nested brackets (2x previous)
   GAP: 4,
@@ -982,7 +982,7 @@ const BRACKET_GEO = {
 let _slotForIdx = {};
 let _maxSlot = 0;
 
-function arcContainsForSlot(outer, outerIdx, inner, innerIdx) {
+function bracketContainsForSlot(outer, outerIdx, inner, innerIdx) {
   if (outerIdx === innerIdx) return false;
   const spanContains = outer.from <= inner.from && outer.to >= inner.to && (outer.from < inner.from || outer.to > inner.to);
   const adjacentFrames = outer.to === inner.from && outer.from < inner.from;
@@ -996,40 +996,40 @@ function computeSlotAssignments() {
   const visit = (idx) => {
     if (visited.has(idx)) return;
     visited.add(idx);
-    arcs.forEach((a, i) => {
-      if (arcContainsForSlot(arcs[idx], idx, a, i)) visit(i);
+    brackets.forEach((a, i) => {
+      if (bracketContainsForSlot(brackets[idx], idx, a, i)) visit(i);
     });
     order.push(idx);
   };
-  arcs.forEach((_, i) => visit(i));
+  brackets.forEach((_, i) => visit(i));
   order.forEach((idx) => {
-    const arc = arcs[idx];
-    const contained = arcs
+    const bracket = brackets[idx];
+    const contained = brackets
       .map((a, i) => ({ a, i }))
-      .filter(({ a, i }) => arcContainsForSlot(arc, idx, a, i));
+      .filter(({ a, i }) => bracketContainsForSlot(bracket, idx, a, i));
     if (contained.length === 0) {
       _slotForIdx[idx] = 0;
     } else {
       _slotForIdx[idx] = 1 + Math.max(...contained.map(({ i }) => _slotForIdx[i]));
     }
   });
-  _maxSlot = arcs.length ? Math.max(...Object.values(_slotForIdx)) : 0;
+  _maxSlot = brackets.length ? Math.max(...Object.values(_slotForIdx)) : 0;
 }
 
-function getBracketX(arcIdx) {
-  const slot = _slotForIdx[arcIdx] ?? 0;
+function getBracketX(bracketIdx) {
+  const slot = _slotForIdx[bracketIdx] ?? 0;
   // Slot 0 = rightmost (closer to text); higher slots = further left (outer brackets)
   return BRACKET_GEO.PADDING_LEFT - BRACKET_GEO.GAP - BRACKET_GEO.BRACKET_WIDTH - slot * BRACKET_GEO.SLOT_WIDTH;
 }
 
-function getConnectionPoints(spanFrom, spanTo, positions, excludeArcIdx = -1) {
-  const innerAtTop = arcs
+function getConnectionPoints(spanFrom, spanTo, positions, excludeBracketIdx = -1) {
+  const innerAtTop = brackets
     .map((a, i) => ({ a, i }))
-    .filter(({ a, i }) => i !== excludeArcIdx && a.from === spanFrom && a.to < spanTo)
+    .filter(({ a, i }) => i !== excludeBracketIdx && a.from === spanFrom && a.to < spanTo)
     .sort((x, y) => y.a.to - x.a.to)[0];
-  const innerAtBottom = arcs
+  const innerAtBottom = brackets
     .map((a, i) => ({ a, i }))
-    .filter(({ a, i }) => i !== excludeArcIdx && a.to === spanTo && a.from > spanFrom)
+    .filter(({ a, i }) => i !== excludeBracketIdx && a.to === spanTo && a.from > spanFrom)
     .sort((x, y) => x.a.from - y.a.from)[0];
 
   let topY, topLeft, bottomY, bottomLeft;
@@ -1182,28 +1182,28 @@ function renderWordArrows(wrapper) {
     hit.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      undoStack.push({ action: 'delete arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map(a => ({...a})), formatTags: formatTags.map(f => ({...f})), wordArrows: wordArrows.map(w => ({...w})) });
+      undoStack.push({ action: 'delete arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map(a => ({...a})), formatTags: formatTags.map(f => ({...f})), wordArrows: wordArrows.map(w => ({...w})) });
       wordArrows.splice(idx, 1);
       renderPropositions();
-      renderArcs();
+      renderBrackets();
       showStatus('Arrow removed.', 'success');
     });
     g.appendChild(hit);
 
-    arcCanvas.appendChild(g);
+    bracketCanvas.appendChild(g);
   });
 }
 
-function renderArcs() {
-  if (!propositionsContainer?.parentElement || !arcCanvas) return;
+function renderBrackets() {
+  if (!propositionsContainer?.parentElement || !bracketCanvas) return;
   const wrapper = propositionsContainer.parentElement;
   const rect = wrapper.getBoundingClientRect();
 
-  arcCanvas.setAttribute('width', rect.width);
-  arcCanvas.setAttribute('height', rect.height);
-  arcCanvas.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
+  bracketCanvas.setAttribute('width', rect.width);
+  bracketCanvas.setAttribute('height', rect.height);
+  bracketCanvas.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
 
-  arcCanvas.innerHTML = '';
+  bracketCanvas.innerHTML = '';
   // (defs and marker removed, now handled inline in renderWordArrows)
 
   const blocks = propositionsContainer.querySelectorAll('.proposition-block');
@@ -1231,8 +1231,8 @@ function renderArcs() {
 
   renderWordArrows(wrapper);
 
-  arcs.forEach((arc, idx) => {
-    const { from, to, type, labelsSwapped } = arc;
+  brackets.forEach((bracket, idx) => {
+    const { from, to, type, labelsSwapped } = bracket;
     const a = positions[from];
     const b = positions[to];
     if (!a || !b) return;
@@ -1245,7 +1245,7 @@ function renderArcs() {
 
     const hasComment = !!getCommentForBracket(idx);
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    g.setAttribute('data-arc-index', idx);
+    g.setAttribute('data-bracket-index', idx);
     g.classList.add('bracket-group');
     if (hasComment) g.classList.add('has-comment');
     const d = `M ${topLeft} ${topY} L ${BRACKET_X} ${topY} L ${BRACKET_X} ${bottomY} L ${bottomLeft} ${bottomY}`;
@@ -1287,7 +1287,7 @@ function renderArcs() {
       el.addEventListener('mouseenter', () => {
         if (g) g.classList.add('bracket-hover');
         // Bold the labels for this bracket
-        arcCanvas.querySelectorAll(`.bracket-label[data-arc-index="${idx}"]`).forEach(lbl => {
+        bracketCanvas.querySelectorAll(`.bracket-label[data-bracket-index="${idx}"]`).forEach(lbl => {
           lbl.style.fontWeight = 'bold';
         });
         if (hasComment) {
@@ -1300,19 +1300,19 @@ function renderArcs() {
             }
           }
         }
-        for (let j = arc.from; j <= arc.to; j++) {
+        for (let j = bracket.from; j <= bracket.to; j++) {
           const block = propositionsContainer.querySelector(`[data-index="${j}"]`);
-          if (block) block.classList.add('arc-hover');
+          if (block) block.classList.add('bracket-hover');
         }
       });
       el.addEventListener('mouseleave', () => {
         if (g) g.classList.remove('bracket-hover');
         // Un-bold the labels for this bracket
-        arcCanvas.querySelectorAll(`.bracket-label[data-arc-index="${idx}"]`).forEach(lbl => {
+        bracketCanvas.querySelectorAll(`.bracket-label[data-bracket-index="${idx}"]`).forEach(lbl => {
           lbl.style.fontWeight = '';
         });
         document.querySelectorAll('.comments-preview-card.comment-hover-active').forEach(c => c.classList.remove('comment-hover-active'));
-        document.querySelectorAll('.proposition-block.arc-hover').forEach((b) => b.classList.remove('arc-hover'));
+        document.querySelectorAll('.proposition-block.bracket-hover').forEach((b) => b.classList.remove('bracket-hover'));
       });
       el.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1323,8 +1323,8 @@ function renderArcs() {
           return;
         }
         if (e.detail === 2) {
-          arcSelectStep = 0;
-          arcFrom = null;
+          bracketSelectStep = 0;
+          bracketFrom = null;
           clearPropositionHighlights();
           showLabelPicker(idx, centerY, centerX);
         } else if (type === 'unspecified') {
@@ -1337,9 +1337,9 @@ function renderArcs() {
       el.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
-        arcs.splice(idx, 1);
-        renderArcs();
+        undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
+        brackets.splice(idx, 1);
+        renderBrackets();
         showStatus('Bracket removed.', 'success');
       });
     };
@@ -1353,7 +1353,7 @@ function renderArcs() {
       textEl.setAttribute('dominant-baseline', 'central');
       textEl.setAttribute('font-size', '12');
       textEl.setAttribute('class', `bracket-label ${type}`);
-      textEl.setAttribute('data-arc-index', idx);
+      textEl.setAttribute('data-bracket-index', idx);
       textEl.textContent = labels.single;
       attachBracketEvents(textEl, false);
       labelsLayer.appendChild(textEl);
@@ -1365,7 +1365,7 @@ function renderArcs() {
       topLabel.setAttribute('dominant-baseline', 'central');
       topLabel.setAttribute('font-size', '12');
       topLabel.setAttribute('class', `bracket-label ${type}`);
-      topLabel.setAttribute('data-arc-index', idx);
+      topLabel.setAttribute('data-bracket-index', idx);
       topLabel.textContent = labels.top;
       const bottomLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       bottomLabel.setAttribute('x', BRACKET_X - 4);
@@ -1374,7 +1374,7 @@ function renderArcs() {
       bottomLabel.setAttribute('dominant-baseline', 'central');
       bottomLabel.setAttribute('font-size', '12');
       bottomLabel.setAttribute('class', `bracket-label ${type}`);
-      bottomLabel.setAttribute('data-arc-index', idx);
+      bottomLabel.setAttribute('data-bracket-index', idx);
       bottomLabel.textContent = labels.bottom;
       attachBracketEvents(topLabel, false);
       attachBracketEvents(bottomLabel, false);
@@ -1383,10 +1383,10 @@ function renderArcs() {
     }
 
     attachBracketEvents(g, false);
-    arcCanvas.appendChild(g);
+    bracketCanvas.appendChild(g);
   });
 
-  arcCanvas.appendChild(labelsLayer);
+  bracketCanvas.appendChild(labelsLayer);
 
   // Connection nodes: one per proposition line + one per bracket (at * or center)
   const NODE_R = 6;
@@ -1399,7 +1399,7 @@ function renderArcs() {
 
   // Proposition nodes: only for propositions NOT covered by any bracket
   positions.forEach((pos, i) => {
-    const inBracket = arcs.some((a) => a.from <= i && i <= a.to);
+    const inBracket = brackets.some((a) => a.from <= i && i <= a.to);
     if (inBracket) return; // Hide node when proposition is part of a bracket
 
     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -1419,12 +1419,12 @@ function renderArcs() {
 
   // Bracket nodes: only for outermost brackets (hide nodes for brackets connected to by another)
   const innerBracketIndices = new Set();
-  arcs.forEach((outer, j) => {
-    const innerAtTop = arcs
+  brackets.forEach((outer, j) => {
+    const innerAtTop = brackets
       .map((a, i) => ({ a, i }))
       .filter(({ a, i }) => i !== j && a.from === outer.from && a.to < outer.to)
       .sort((x, y) => y.a.to - x.a.to)[0];
-    const innerAtBottom = arcs
+    const innerAtBottom = brackets
       .map((a, i) => ({ a, i }))
       .filter(({ a, i }) => i !== j && a.to === outer.to && a.from > outer.from)
       .sort((x, y) => x.a.from - y.a.from)[0];
@@ -1432,10 +1432,10 @@ function renderArcs() {
     if (innerAtBottom) innerBracketIndices.add(innerAtBottom.i);
   });
 
-  arcs.forEach((arc, idx) => {
+  brackets.forEach((bracket, idx) => {
     const isInner = innerBracketIndices.has(idx);
 
-    const { from, to, type, labelsSwapped } = arc;
+    const { from, to, type, labelsSwapped } = bracket;
     const { topY, topLeft, bottomY, bottomLeft } = getConnectionPoints(from, to, positions, idx);
     const BRACKET_X = getBracketX(idx);
 
@@ -1458,7 +1458,7 @@ function renderArcs() {
     circle.setAttribute('cy', nodeY);
     circle.setAttribute('r', NODE_R);
     circle.setAttribute('class', 'connection-node bracket-node' + (isInner ? ' bracket-node-inner' : ''));
-    circle.setAttribute('data-arc-index', idx);
+    circle.setAttribute('data-bracket-index', idx);
     circle.style.cursor = 'pointer';
     nodesG.appendChild(circle);
 
@@ -1467,25 +1467,25 @@ function renderArcs() {
       handleBracketGroupClick(idx);
     });
 
-    const bracketGroup = arcCanvas.querySelector(`.bracket-group[data-arc-index="${idx}"]`);
+    const bracketGroup = bracketCanvas.querySelector(`.bracket-group[data-bracket-index="${idx}"]`);
     circle.addEventListener('mouseenter', () => {
       if (bracketGroup) bracketGroup.classList.add('bracket-hover');
-      for (let j = arc.from; j <= arc.to; j++) {
+      for (let j = bracket.from; j <= bracket.to; j++) {
         const block = propositionsContainer.querySelector(`[data-index="${j}"]`);
-        if (block) block.classList.add('arc-hover');
+        if (block) block.classList.add('bracket-hover');
       }
     });
     circle.addEventListener('mouseleave', () => {
       if (bracketGroup) bracketGroup.classList.remove('bracket-hover');
-      document.querySelectorAll('.proposition-block.arc-hover').forEach((b) => b.classList.remove('arc-hover'));
+      document.querySelectorAll('.proposition-block.bracket-hover').forEach((b) => b.classList.remove('bracket-hover'));
     });
   });
 
-  arcCanvas.appendChild(nodesG);
+  bracketCanvas.appendChild(nodesG);
 }
 
-function getCommentForBracket(arcIdx) {
-  return comments.find((c) => c.type === 'bracket' && c.target && c.target.arcIdx === arcIdx) || null;
+function getCommentForBracket(bracketIdx) {
+  return comments.find((c) => c.type === 'bracket' && c.target && c.target.bracketIdx === bracketIdx) || null;
 }
 
 function getCommentById(id) {
@@ -1510,11 +1510,11 @@ function renderCommentPreviews() {
     card.className = 'comments-preview-card';
     card.dataset.commentId = c.id;
     let context = '';
-    if (c.type === 'bracket' && c.target && arcs[c.target.arcIdx]) {
-      const arc = arcs[c.target.arcIdx];
-      const label = BRACKET_LABELS[arc.type] || arc.type;
-      const fromRef = verseRefs[arc.from] ?? String(arc.from + 1);
-      const toRef = verseRefs[arc.to] ?? String(arc.to + 1);
+    if (c.type === 'bracket' && c.target && brackets[c.target.bracketIdx]) {
+      const bracket = brackets[c.target.bracketIdx];
+      const label = BRACKET_LABELS[bracket.type] || bracket.type;
+      const fromRef = verseRefs[bracket.from] ?? String(bracket.from + 1);
+      const toRef = verseRefs[bracket.to] ?? String(bracket.to + 1);
       context = `${label} · ${fromRef}–${toRef}`;
     } else if (c.type === 'text' && c.target != null) {
       const prop = propositions[c.target.propIndex];
@@ -1530,23 +1530,23 @@ function renderCommentPreviews() {
     card.innerHTML = `<div class="comment-context">${escapeHtml(context)}</div><div class="comment-text">${escapeHtml(textPreview)}</div>${authorHtml}${replyLabel ? `<div class="comment-preview-reply-count">${escapeHtml(replyLabel)}</div>` : ''}`;
     card.addEventListener('click', () => {
       if (c.type === 'bracket' && c.target != null) {
-        const arc = arcs[c.target.arcIdx];
-        if (arc != null) {
-          const block = propositionsContainer?.querySelector(`.proposition-block[data-index="${arc.from}"]`);
+        const bracket = brackets[c.target.bracketIdx];
+        if (bracket != null) {
+          const block = propositionsContainer?.querySelector(`.proposition-block[data-index="${bracket.from}"]`);
           if (block) block.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          const wrapper = arcCanvas?.parentElement;
+          const wrapper = bracketCanvas?.parentElement;
           if (wrapper) {
             const rect = wrapper.getBoundingClientRect();
             const blocks = propositionsContainer?.querySelectorAll('.proposition-block');
-            const rFrom = blocks?.[arc.from]?.getBoundingClientRect?.();
-            const rTo = blocks?.[arc.to]?.getBoundingClientRect?.();
+            const rFrom = blocks?.[bracket.from]?.getBoundingClientRect?.();
+            const rTo = blocks?.[bracket.to]?.getBoundingClientRect?.();
             let centerY = rect.height / 2;
             let centerX = rect.width / 2;
             if (rFrom && rTo) {
               centerY = (rFrom.top + rFrom.bottom + rTo.top + rTo.bottom) / 4 - rect.top;
               centerX = (rFrom.left + rFrom.right + rTo.left + rTo.right) / 4 - rect.left;
             }
-            showCommentPopoverForBracket(c.target.arcIdx, centerY, centerX);
+            showCommentPopoverForBracket(c.target.bracketIdx, centerY, centerX);
           }
         }
       } else if (c.type === 'text' && c.target != null) {
@@ -1559,43 +1559,61 @@ function renderCommentPreviews() {
   });
 }
 
+function makePopupDraggable(popover, handleSelector) {
+  const wrapper = popover.parentElement;
+  if (!wrapper) return;
+  const handle = handleSelector ? popover.querySelector(handleSelector) : popover;
+  if (!handle) return;
+
+  handle.style.cursor = 'grab';
+  handle.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    // Don't drag if clicking buttons within the handle
+    if (e.target.tagName === 'BUTTON') return;
+
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startLeft = parseFloat(popover.style.left) || 0;
+    const startTop = parseFloat(popover.style.top) || 0;
+    handle.style.cursor = 'grabbing';
+
+    const onMove = (e2) => {
+      const dx = e2.clientX - startX;
+      const dy = e2.clientY - startY;
+      const rect = wrapper.getBoundingClientRect();
+      const popRect = popover.getBoundingClientRect();
+      
+      let left = startLeft + dx;
+      let top = startTop + dy;
+      
+      // Constraints
+      left = Math.max(0, Math.min(left, rect.width - popRect.width));
+      top = Math.max(0, Math.min(top, rect.height - popRect.height));
+      
+      popover.style.left = left + 'px';
+      popover.style.top = top + 'px';
+    };
+
+    const onUp = () => {
+      handle.style.cursor = 'grab';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      popover._dragJustEnded = true;
+      setTimeout(() => { popover._dragJustEnded = false; }, 0);
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
 function makeCommentPopoverDraggableAndResizable(popover) {
   const wrapper = popover.parentElement;
   if (!wrapper) return;
-  const titleEl = popover.querySelector('.comment-popover-title');
-  if (titleEl) {
-    titleEl.style.cursor = 'grab';
-    titleEl.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-      e.preventDefault();
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const startLeft = parseFloat(popover.style.left) || 0;
-      const startTop = parseFloat(popover.style.top) || 0;
-      titleEl.style.cursor = 'grabbing';
-      const onMove = (e2) => {
-        const dx = e2.clientX - startX;
-        const dy = e2.clientY - startY;
-        const rect = wrapper.getBoundingClientRect();
-        let left = startLeft + dx;
-        let top = startTop + dy;
-        const popRect = popover.getBoundingClientRect();
-        left = Math.max(0, Math.min(left, rect.width - popRect.width));
-        top = Math.max(0, Math.min(top, rect.height - popRect.height));
-        popover.style.left = left + 'px';
-        popover.style.top = top + 'px';
-      };
-      const onUp = () => {
-        titleEl.style.cursor = 'grab';
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        popover._dragJustEnded = true;
-        setTimeout(() => { popover._dragJustEnded = false; }, 0);
-      };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    });
-  }
+  
+  makePopupDraggable(popover, '.comment-popover-title');
+
   const resizeHandle = document.createElement('div');
   resizeHandle.className = 'comment-popover-resize-handle';
   resizeHandle.setAttribute('aria-label', 'Resize');
@@ -1673,7 +1691,7 @@ function showCommentPopoverForText(propIndex, start, end, existingCommentId = nu
     `;
   }
 
-  const wrapper = arcCanvas?.parentElement || document.body;
+  const wrapper = bracketCanvas?.parentElement || document.body;
   const wrapperRect = wrapper.getBoundingClientRect();
   let anchorRect = options.anchorRect || null;
   if (!anchorRect && existingCommentId && propositionsContainer) {
@@ -1873,11 +1891,11 @@ function showCommentPopoverForText(propIndex, start, end, existingCommentId = nu
   setTimeout(() => document.addEventListener('click', dismiss), 0);
 }
 
-function showCommentPopoverForBracket(arcIdx, centerY, centerX, options = {}) {
+function showCommentPopoverForBracket(bracketIdx, centerY, centerX, options = {}) {
   const existing = document.getElementById('commentPopover');
   if (existing) existing.remove();
 
-  const existingComment = getCommentForBracket(arcIdx);
+  const existingComment = getCommentForBracket(bracketIdx);
   const viewMode = options.viewMode === true || (!!existingComment && options.viewMode !== false);
   const commentAuthor = (existingComment && existingComment.author) || localStorage.getItem(COMMENT_AUTHOR_KEY) || '';
 
@@ -1917,7 +1935,7 @@ function showCommentPopoverForBracket(arcIdx, centerY, centerX, options = {}) {
     `;
   }
 
-  const wrapper = arcCanvas?.parentElement || document.body;
+  const wrapper = bracketCanvas?.parentElement || document.body;
   const defaultW = 640;
   const leftOffset = 120;
   const leftBelow = Math.max(8, centerX - Math.floor(defaultW / 2) - leftOffset);
@@ -1939,7 +1957,7 @@ function showCommentPopoverForBracket(arcIdx, centerY, centerX, options = {}) {
       const lastTop = popover.style.top;
       popover.remove();
       document.removeEventListener('click', dismiss);
-      showCommentPopoverForBracket(arcIdx, centerY, centerX, { viewMode: false, lastWidth, lastHeight, lastLeft, lastTop });
+      showCommentPopoverForBracket(bracketIdx, centerY, centerX, { viewMode: false, lastWidth, lastHeight, lastLeft, lastTop });
     });
     popover.querySelector('[data-action="delete"]').addEventListener('click', () => {
       comments = comments.filter((c) => c.id !== existingComment.id);
@@ -2046,7 +2064,7 @@ function showCommentPopoverForBracket(arcIdx, centerY, centerX, options = {}) {
       comments.push({
         id: nextCommentId(),
         type: 'bracket',
-        target: { arcIdx },
+        target: { bracketIdx },
         text,
         author: author || undefined,
         createdAt: new Date().toISOString(),
@@ -2061,9 +2079,9 @@ function showCommentPopoverForBracket(arcIdx, centerY, centerX, options = {}) {
     popover.remove();
     document.removeEventListener('click', dismiss);
     renderCommentPreviews();
-    renderArcs();
+    renderBrackets();
     showStatus(existingComment ? (text ? 'Comment updated.' : 'Comment removed.') : 'Comment added.', 'success');
-    if (reopenViewMode) showCommentPopoverForBracket(arcIdx, centerY, centerX, { viewMode: true, lastWidth, lastHeight, lastLeft, lastTop });
+    if (reopenViewMode) showCommentPopoverForBracket(bracketIdx, centerY, centerX, { viewMode: true, lastWidth, lastHeight, lastLeft, lastTop });
   });
 
   if (existingComment) {
@@ -2072,7 +2090,7 @@ function showCommentPopoverForBracket(arcIdx, centerY, centerX, options = {}) {
       popover.remove();
       document.removeEventListener('click', dismiss);
       renderCommentPreviews();
-      renderArcs();
+      renderBrackets();
       showStatus('Comment removed.', 'success');
     });
   }
@@ -2092,26 +2110,29 @@ function showCommentPopoverForBracket(arcIdx, centerY, centerX, options = {}) {
   setTimeout(() => document.addEventListener('click', dismiss), 0);
 }
 
-function showBracketActions(arcIdx, centerY, centerX) {
-  connectBracketToArcIdx = null;
+function showBracketActions(bracketIdx, centerY, centerX) {
+  connectBracketToBracketIdx = null;
   const existing = document.getElementById('bracketActions');
   if (existing) existing.remove();
 
   const popover = document.createElement('div');
   popover.id = 'bracketActions';
   popover.className = 'bracket-actions';
-  const arc = arcs[arcIdx];
-  const hasTwoLabels = !SINGLE_LABEL_TYPES.has(arc.type);
-  const hasComment = !!getCommentForBracket(arcIdx);
+  const bracket = brackets[bracketIdx];
+  const hasTwoLabels = !SINGLE_LABEL_TYPES.has(bracket.type);
+  const hasComment = !!getCommentForBracket(bracketIdx);
   popover.innerHTML = `
+    <div class="drag-handle" title="Drag to move"></div>
     <button data-action="delete">Delete</button>
     <button data-action="label">Change label</button>
     ${hasTwoLabels ? '<button data-action="swap">Swap labels</button>' : ''}
-    <button data-action="select" title="Select bracket, then click a proposition to connect to (reparents) or another bracket to create arc">Select to connect</button>
+    <button data-action="select" title="Select bracket, then click a proposition to connect to (reparents) or another bracket to create bracket">Select to connect</button>
     <button data-action="comment" title="Add or view a comment on this bracket">${hasComment ? 'View comment' : 'Add comment'}</button>
   `;
 
-  const wrapper = arcCanvas.parentElement;
+  const wrapper = bracketCanvas.parentElement;
+  makePopupDraggable(popover, '.drag-handle');
+
   popover.style.left = `${Math.max(8, Math.min(centerX - 90, wrapper.offsetWidth - 190))}px`;
   popover.style.top = `${Math.max(8, centerY - 50)}px`;
   wrapper.appendChild(popover);
@@ -2126,11 +2147,11 @@ function showBracketActions(arcIdx, centerY, centerX) {
 
   popover.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
     e.stopPropagation();
-    undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
-    arcs.splice(arcIdx, 1);
-    comments = comments.filter((c) => c.type !== 'bracket' || c.target?.arcIdx !== arcIdx);
-    comments.forEach((c) => { if (c.type === 'bracket' && c.target?.arcIdx > arcIdx) c.target.arcIdx--; });
-    renderArcs();
+    undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
+    brackets.splice(bracketIdx, 1);
+    comments = comments.filter((c) => c.type !== 'bracket' || c.target?.bracketIdx !== bracketIdx);
+    comments.forEach((c) => { if (c.type === 'bracket' && c.target?.bracketIdx > bracketIdx) c.target.bracketIdx--; });
+    renderBrackets();
     renderCommentPreviews();
     clearAndDismiss();
     showStatus('Bracket removed.', 'success');
@@ -2139,16 +2160,16 @@ function showBracketActions(arcIdx, centerY, centerX) {
   popover.querySelector('[data-action="label"]').addEventListener('click', (e) => {
     e.stopPropagation();
     clearAndDismiss();
-    showLabelPicker(arcIdx, centerY, centerX);
+    showLabelPicker(bracketIdx, centerY, centerX);
   });
 
   const swapBtn = popover.querySelector('[data-action="swap"]');
   if (swapBtn) {
     swapBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
-      arcs[arcIdx].labelsSwapped = !arcs[arcIdx].labelsSwapped;
-      renderArcs();
+      undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
+      brackets[bracketIdx].labelsSwapped = !brackets[bracketIdx].labelsSwapped;
+      renderBrackets();
       clearAndDismiss();
       showStatus('Labels swapped.', 'success');
     });
@@ -2158,24 +2179,24 @@ function showBracketActions(arcIdx, centerY, centerX) {
     e.stopPropagation();
     popover.remove();
     document.removeEventListener('click', dismiss);
-    handleBracketGroupClick(arcIdx);
+    handleBracketGroupClick(bracketIdx);
   });
 
   popover.querySelector('[data-action="comment"]').addEventListener('click', (e) => {
     e.stopPropagation();
     clearAndDismiss();
-    showCommentPopoverForBracket(arcIdx, centerY, centerX);
+    showCommentPopoverForBracket(bracketIdx, centerY, centerX);
   });
 
   const dismiss = (e) => {
     if (popover.parentNode && popover.contains(e.target)) return;
-    connectBracketToArcIdx = null;
+    connectBracketToBracketIdx = null;
     clearAndDismiss();
   };
   setTimeout(() => document.addEventListener('click', dismiss), 0);
 }
 
-function showLabelPicker(arcIdx, centerY, centerX) {
+function showLabelPicker(bracketIdx, centerY, centerX) {
   const existing = document.getElementById('labelPicker');
   if (existing) existing.remove();
 
@@ -2183,7 +2204,7 @@ function showLabelPicker(arcIdx, centerY, centerX) {
   picker.id = 'labelPicker';
   picker.className = 'label-picker relationship-picker';
 
-  const wrapper = arcCanvas.parentElement;
+  const wrapper = bracketCanvas.parentElement;
   const title = document.createElement('p');
   title.className = 'picker-title';
   title.textContent = 'Choose relationship';
@@ -2197,8 +2218,8 @@ function showLabelPicker(arcIdx, centerY, centerX) {
     btn.className = typeKey;
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      arcs[arcIdx].type = typeKey;
-      renderArcs();
+      brackets[bracketIdx].type = typeKey;
+      renderBrackets();
       picker.remove();
       document.removeEventListener('click', dismiss);
       showStatus(`Label changed to ${RELATIONSHIP_TYPES[typeKey]}`, 'success');
@@ -2213,12 +2234,12 @@ function showLabelPicker(arcIdx, centerY, centerX) {
   deleteBtn.title = 'Remove this bracket';
   deleteBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    arcs.splice(arcIdx, 1);
-    comments = comments.filter((c) => c.type !== 'bracket' || c.target?.arcIdx !== arcIdx);
+    brackets.splice(bracketIdx, 1);
+    comments = comments.filter((c) => c.type !== 'bracket' || c.target?.bracketIdx !== bracketIdx);
     comments.forEach((c) => {
-      if (c.type === 'bracket' && c.target?.arcIdx > arcIdx) c.target.arcIdx--;
+      if (c.type === 'bracket' && c.target?.bracketIdx > bracketIdx) c.target.bracketIdx--;
     });
-    renderArcs();
+    renderBrackets();
     renderCommentPreviews();
     picker.remove();
     document.removeEventListener('click', dismiss);
@@ -2229,6 +2250,8 @@ function showLabelPicker(arcIdx, centerY, centerX) {
   picker.style.left = `${Math.max(8, Math.min(centerX - 210, wrapper.offsetWidth - 430))}px`;
   picker.style.top = `${Math.max(8, centerY - 130)}px`;
   wrapper.appendChild(picker);
+  makePopupDraggable(picker, '.picker-title');
+
   const maxTop = wrapper.offsetHeight - picker.offsetHeight - 8;
   if (parseFloat(picker.style.top) > maxTop) picker.style.top = `${maxTop}px`;
 
@@ -2240,45 +2263,45 @@ function showLabelPicker(arcIdx, centerY, centerX) {
   setTimeout(() => document.addEventListener('click', dismiss), 0);
 }
 
-// New arc: prompt to save current, then start fresh
-function startNewArc() {
+// New bracket: prompt to save current, then start fresh
+function startNewBracket() {
   passageRef = '—';
   propositions = [];
   verseRefs = [];
-  arcs = [];
+  brackets = [];
   formatTags = [];
   wordArrows = [];
   undoStack = [];
   comments = [];
-  arcSelectStep = 0;
-  arcFrom = null;
-  connectBracketToArcIdx = null;
+  bracketSelectStep = 0;
+  bracketFrom = null;
+  connectBracketToBracketIdx = null;
   clearPropositionHighlights();
   if (passageHeader) passageHeader.textContent = passageRef;
   const copyrightLabel = document.getElementById('copyrightLabel');
   if (copyrightLabel) copyrightLabel.textContent = '(ESV)';
   if (propositionsContainer) propositionsContainer.classList.remove('greek-text');
   renderPropositions();
-  renderArcs();
+  renderBrackets();
   document.getElementById('bracketActions')?.remove();
   document.getElementById('labelPicker')?.remove();
   document.getElementById('commentPopover')?.remove();
   renderCommentPreviews();
-  showStatus('New arc started. Fetch or import a passage to begin.', 'success');
+  showStatus('New bracket started. Fetch or import a passage to begin.', 'success');
 }
 
-async function handleNewArc() {
+async function handleNewBracket() {
   const hasContent = propositions.length > 0 && propositions.some((p) => p && p.trim() && p !== '(empty)');
   if (!hasContent) {
-    startNewArc();
+    startNewBracket();
     return;
   }
-  const wrapper = arcCanvas?.parentElement || document.body;
+  const wrapper = bracketCanvas?.parentElement || document.body;
   const dialog = document.createElement('div');
-  dialog.className = 'label-picker new-arc-dialog';
+  dialog.className = 'label-picker new-bracket-dialog';
   dialog.innerHTML = `
-    <p class="picker-title">Save current arc before starting new?</p>
-    <div class="new-arc-buttons">
+    <p class="picker-title">Save current bracket before starting new?</p>
+    <div class="new-bracket-buttons">
       <button type="button" data-action="save">Save</button>
       <button type="button" data-action="discard" class="secondary">Discard</button>
       <button type="button" data-action="cancel" class="secondary">Cancel</button>
@@ -2305,8 +2328,8 @@ async function handleNewArc() {
       e.stopPropagation();
       cleanup();
       try {
-        await saveArc();
-        startNewArc();
+        await saveBracket();
+        startNewBracket();
       } catch (_) {
         showStatus('Save cancelled.', 'error');
       }
@@ -2315,7 +2338,7 @@ async function handleNewArc() {
     dialog.querySelector('[data-action="discard"]').addEventListener('click', (e) => {
       e.stopPropagation();
       cleanup();
-      startNewArc();
+      startNewBracket();
       resolve();
     });
     dialog.querySelector('[data-action="cancel"]').addEventListener('click', (e) => {
@@ -2327,17 +2350,17 @@ async function handleNewArc() {
   });
 }
 
-// New Arc listener logic already handled elsewhere
-if (newArcBtn) newArcBtn.addEventListener('click', () => handleNewArc());
+// New Bracket listener logic already handled elsewhere
+if (newBracketBtn) newBracketBtn.addEventListener('click', () => handleNewBracket());
 
 // Clear brackets
-if (clearArcsBtn) clearArcsBtn.addEventListener('click', () => {
-  if (arcs.length === 0) return;
-  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
-  arcs = [];
-  renderArcs();
-  arcSelectStep = 0;
-  arcFrom = null;
+if (clearBracketsBtn) clearBracketsBtn.addEventListener('click', () => {
+  if (brackets.length === 0) return;
+  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
+  brackets = [];
+  renderBrackets();
+  bracketSelectStep = 0;
+  bracketFrom = null;
   clearPropositionHighlights();
   showStatus('All brackets cleared.', 'success');
 });
@@ -2374,11 +2397,11 @@ if (importBtn) importBtn.addEventListener('click', () => {
     return;
   }
 
-  // Try to parse as exported JSON arc text
+  // Try to parse as exported JSON bracket text
   try {
     const data = JSON.parse(raw);
     if (data && typeof data === 'object' && Array.isArray(data.propositions)) {
-      importArc(data);
+      importBracket(data);
       pasteText.value = '';
       return;
     }
@@ -2404,18 +2427,18 @@ if (importBtn) importBtn.addEventListener('click', () => {
   if (propositionsContainer) propositionsContainer.classList.remove('greek-text');
   undoStack = [];
   renderPropositions();
-  arcs = [];
-  renderArcs();
+  brackets = [];
+  renderBrackets();
   showStatus('Imported. Double-click in text to split / single click to edit. Use nodes or verse refs for brackets.', 'success');
 });
 
-// Export / Import arc as JSON file + Recent list
+// Export / Import bracket as JSON file + Recent list
 const recentListEl = document.getElementById('recentList');
 
-const RECENT_KEY = 'biblearc_recent';
+const RECENT_KEY = 'biblebracket_recent';
 const RECENT_MAX = 10;
 
-function getRecentArcs() {
+function getRecentBrackets() {
   try {
     const raw = localStorage.getItem(RECENT_KEY);
     return raw ? JSON.parse(raw) : [];
@@ -2424,37 +2447,37 @@ function getRecentArcs() {
   }
 }
 
-function saveRecentArcs(items) {
+function saveRecentBrackets(items) {
   try {
     localStorage.setItem(RECENT_KEY, JSON.stringify(items.slice(0, RECENT_MAX)));
   } catch (e) {
-    console.warn('Could not save recent arcs:', e);
+    console.warn('Could not save recent brackets:', e);
   }
 }
 
 function addToRecent(data) {
-  const items = getRecentArcs();
-  const label = data.passageRef || 'Imported arc';
+  const items = getRecentBrackets();
+  const label = data.passageRef || 'Imported bracket';
   const existing = items.findIndex((i) => (i.passageRef || i.data?.passageRef) === label);
   const entry = { passageRef: label, data, accessedAt: Date.now() };
   const next = existing >= 0
     ? [entry, ...items.slice(0, existing), ...items.slice(existing + 1)]
     : [entry, ...items];
-  saveRecentArcs(next);
+  saveRecentBrackets(next);
   renderRecentList();
 }
 
 function renderRecentList() {
   if (!recentListEl) return;
-  const items = getRecentArcs();
+  const items = getRecentBrackets();
   recentListEl.innerHTML = '';
   items.forEach((item, idx) => {
     const li = document.createElement('li');
-    const label = item.passageRef || item.data?.passageRef || 'Arc';
-    li.innerHTML = `<button type="button" class="recent-item" data-idx="${idx}" title="Load this arc">${escapeHtml(label)}</button>`;
+    const label = item.passageRef || item.data?.passageRef || 'Bracket';
+    li.innerHTML = `<button type="button" class="recent-item" data-idx="${idx}" title="Load this bracket">${escapeHtml(label)}</button>`;
     li.querySelector('button').addEventListener('click', () => {
-      const arc = getRecentArcs()[idx];
-      if (arc?.data) importArc(arc.data);
+      const bracket = getRecentBrackets()[idx];
+      if (bracket?.data) importBracket(bracket.data);
     });
     recentListEl.appendChild(li);
   });
@@ -2547,13 +2570,13 @@ function updateFilenamePlaceholder() {
   }
 }
 
-function buildArcData() {
+function buildBracketData() {
   return {
     version: 1,
     passageRef,
     propositions,
     verseRefs,
-    arcs: arcs.map((a) => ({ ...a })),
+    brackets: brackets.map((a) => ({ ...a })),
     formatTags: formatTags.map((t) => ({ ...t })),
     wordArrows: wordArrows.map((w) => ({ ...w })),
     comments: comments.map((c) => ({ ...c })),
@@ -2565,12 +2588,12 @@ function buildArcData() {
 
 let saveFileHandle = null;
 
-async function saveArc() {
+async function saveBracket() {
   if (propositions.length === 0) {
     showStatus('Nothing to save. Fetch or import a passage first.', 'error');
     return;
   }
-  const data = buildArcData();
+  const data = buildBracketData();
   const json = JSON.stringify(data, null, 2);
 
   // Fallback for local files where File System Access API is blocked
@@ -2596,25 +2619,25 @@ async function saveArc() {
       addToRecent(data);
       showStatus('Saved.', 'success');
     } else {
-      exportArc();
+      exportBracket();
     }
   } catch (err) {
     if (err.name === 'AbortError') return;
     if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
       console.warn('File System Access API blocked, falling back to download:', err);
-      exportArc();
+      exportBracket();
       return;
     }
     showStatus(err.message || 'Save failed.', 'error');
   }
 }
 
-async function saveArcAs() {
+async function saveBracketAs() {
   if (propositions.length === 0) {
     showStatus('Nothing to save. Fetch or import a passage first.', 'error');
     return;
   }
-  const data = buildArcData();
+  const data = buildBracketData();
   const json = JSON.stringify(data, null, 2);
   const isLocalFile = window.location.protocol === 'file:';
 
@@ -2632,25 +2655,25 @@ async function saveArcAs() {
       addToRecent(data);
       showStatus('Saved as new file.', 'success');
     } else {
-      exportArc();
+      exportBracket();
     }
   } catch (err) {
     if (err.name === 'AbortError') return;
     if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
       console.warn('File System Access API blocked, falling back to download:', err);
-      exportArc();
+      exportBracket();
       return;
     }
     showStatus(err.message || 'Save failed.', 'error');
   }
 }
 
-function exportArc() {
+function exportBracket() {
   if (propositions.length === 0) {
     showStatus('Nothing to export. Fetch or import a passage first.', 'error');
     return;
   }
-  const data = buildArcData();
+  const data = buildBracketData();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const name = `${getExportFilename()}.json`;
   const a = document.createElement('a');
@@ -2659,23 +2682,31 @@ function exportArc() {
   a.click();
   URL.revokeObjectURL(a.href);
   addToRecent(data);
-  showStatus('Arc exported.', 'success');
+  showStatus('Bracket exported.', 'success');
 }
 
-function importArc(data) {
+function importBracket(data) {
   if (!data || !Array.isArray(data.propositions)) {
-    showStatus('Invalid arc file.', 'error');
+    showStatus('Invalid bracket file.', 'error');
     return;
   }
-  passageRef = data.passageRef || 'Imported arc';
+  passageRef = data.passageRef || 'Imported bracket';
   propositions = data.propositions.slice();
   verseRefs = Array.isArray(data.verseRefs) && data.verseRefs.length === propositions.length
     ? data.verseRefs.slice()
     : propositions.map((_, i) => String(i + 1));
-  arcs = Array.isArray(data.arcs) ? data.arcs.map((a) => ({ ...a })) : [];
+  brackets = (Array.isArray(data.brackets) ? data.brackets : (Array.isArray(data.arcs) ? data.arcs : [])).map((a) => ({ ...a }));
   formatTags = Array.isArray(data.formatTags) ? data.formatTags.map((t) => ({ ...t })) : [];
   wordArrows = Array.isArray(data.wordArrows) ? data.wordArrows.map((w) => ({ ...w })) : [];
-  comments = Array.isArray(data.comments) ? data.comments.map((c) => ({ ...c, replies: Array.isArray(c.replies) ? c.replies.map((r) => ({ ...r })) : [] })) : [];
+  comments = Array.isArray(data.comments) ? data.comments.map((c) => {
+    // Backward compatibility for arcIdx target
+    let target = { ...(c.target || {}) };
+    if (target.arcIdx !== undefined) {
+      target.bracketIdx = target.arcIdx;
+      delete target.arcIdx;
+    }
+    return { ...c, target, replies: Array.isArray(c.replies) ? c.replies.map((r) => ({ ...r })) : [] };
+  }) : [];
 
   if (passageHeader) passageHeader.textContent = passageRef;
   const pageAuthorInputEl = document.getElementById('pageAuthor');
@@ -2690,14 +2721,14 @@ function importArc(data) {
     propositionsContainer.classList.toggle('greek-text', !!data.copyrightLabel?.includes('SBL'));
   }
   undoStack = [];
-  arcSelectStep = 0;
-  arcFrom = null;
+  bracketSelectStep = 0;
+  bracketFrom = null;
   clearPropositionHighlights();
   renderPropositions();
-  renderArcs();
+  renderBrackets();
   renderCommentPreviews();
   addToRecent(data);
-  showStatus('Arc loaded.', 'success');
+  showStatus('Bracket loaded.', 'success');
 }
 
 async function copyDiagramForWord() {
@@ -2715,12 +2746,79 @@ async function copyDiagramForWord() {
     return;
   }
   try {
-    const canvas = await html2canvas(workspace, {
+    // Calculate bounding box of all content within the workspace to crop out empty space
+    const workspaceRect = workspace.getBoundingClientRect();
+    
+    // Elements that MUST be visible (propositions and brackets)
+    const coreElements = [
+      ...Array.from(workspace.querySelectorAll('.proposition-text')),
+      ...Array.from(workspace.querySelectorAll('#bracketCanvas path, #bracketCanvas circle, #bracketCanvas text'))
+    ];
+
+    // Elements that are NICE to have (header info) but shouldn't stretch the width excessively
+    const infoElements = [
+      workspace.querySelector('#passageRef'),
+      workspace.querySelector('#copyrightLabel')
+    ];
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let found = false;
+
+    // First pass: Essential content
+    coreElements.forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        minX = Math.min(minX, r.left);
+        minY = Math.min(minY, r.top);
+        maxX = Math.max(maxX, r.right);
+        maxY = Math.max(maxY, r.bottom);
+        found = true;
+      }
+    });
+
+    // Second pass: Info elements (allow them to expand vertically, but be cautious with width)
+    infoElements.forEach((el) => {
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        minX = Math.min(minX, r.left);
+        minY = Math.min(minY, r.top);
+        // We only let info elements expand the MaxX if they aren't far to the right
+        // compared to our core content (to avoid catching far-right names)
+        if (found) {
+          if (r.right < maxX + 500) {
+            maxX = Math.max(maxX, r.right);
+          }
+        } else {
+          maxX = Math.max(maxX, r.right);
+        }
+        maxY = Math.max(maxY, r.bottom);
+        found = true;
+      }
+    });
+
+    const padding = 16;
+    let options = {
       useCORS: true,
       scale: 2,
       backgroundColor: null,
       logging: false,
-    });
+    };
+
+    if (found) {
+      // Convert to relative coordinates within workspace
+      const x = Math.max(0, minX - workspaceRect.left - padding);
+      const y = Math.max(0, minY - workspaceRect.top - padding);
+      const width = Math.min(workspaceRect.width, (maxX - minX) + (padding * 2));
+      const height = Math.min(workspaceRect.height, (maxY - minY) + (padding * 2));
+      
+      options.x = x;
+      options.y = y;
+      options.width = width;
+      options.height = height;
+    }
+
+    const canvas = await html2canvas(workspace, options);
     canvas.toBlob(async (blob) => {
       if (!blob) {
         showStatus('Copy failed.', 'error');
@@ -2752,20 +2850,20 @@ if (copyDataBtn) {
       showStatus('Nothing to copy. Fetch or import a passage first.', 'error');
       return;
     }
-    const data = buildArcData();
+    const data = buildBracketData();
     try {
       await navigator.clipboard.writeText(JSON.stringify(data));
-      showStatus('Arc data copied to clipboard. Paste into the "Paste passage text" box to import elsewhere.', 'success');
+      showStatus('Bracket data copied to clipboard. Paste into the "Paste passage text" box to import elsewhere.', 'success');
     } catch (err) {
       showStatus('Could not access clipboard. Please use Export instead.', 'error');
     }
   });
 }
 
-if (saveBtn) saveBtn.addEventListener('click', () => saveArc());
-if (saveAsBtn) saveAsBtn.addEventListener('click', () => saveArcAs());
+if (saveBtn) saveBtn.addEventListener('click', () => saveBracket());
+if (saveAsBtn) saveAsBtn.addEventListener('click', () => saveBracketAs());
 
-async function openArcFile() {
+async function openBracketFile() {
   if ('showOpenFilePicker' in window) {
     try {
       const [handle] = await window.showOpenFilePicker({
@@ -2776,7 +2874,7 @@ async function openArcFile() {
       const file = await handle.getFile();
       const text = await file.text();
       const data = JSON.parse(text);
-      importArc(data);
+      importBracket(data);
     } catch (err) {
       if (err.name !== 'AbortError') showStatus(err.message || 'Could not open file.', 'error');
     }
@@ -2785,7 +2883,7 @@ async function openArcFile() {
   }
 }
 
-if (openFileBtn) openFileBtn.addEventListener('click', openArcFile);
+if (openFileBtn) openFileBtn.addEventListener('click', openBracketFile);
 
 if (importFileInput) {
   importFileInput.addEventListener('change', () => {
@@ -2795,7 +2893,7 @@ if (importFileInput) {
     reader.onload = () => {
       try {
         const data = JSON.parse(reader.result);
-        importArc(data);
+        importBracket(data);
       } catch {
         showStatus('Could not parse file.', 'error');
       }
@@ -2885,9 +2983,9 @@ if (textEditModeBtn) {
     if (textEditMode) {
       if (commentMode) commentModeBtn?.click();
       if (arrowMode) arrowModeBtn?.click();
-      arcCanvas?.classList.remove('connect-mode');
-      arcSelectStep = 0;
-      arcFrom = null;
+      bracketCanvas?.classList.remove('connect-mode');
+      bracketSelectStep = 0;
+      bracketFrom = null;
       if (typeof clearPropositionHighlights === 'function') clearPropositionHighlights();
       showStatus('Text Edit mode on. Brackets disabled; Enter adds linebreaks, Tab indents.', 'success');
     } else {
@@ -2904,9 +3002,9 @@ if (commentModeBtn) {
     if (commentMode) {
       if (textEditMode) textEditModeBtn?.click();
       if (arrowMode) arrowModeBtn?.click();
-      arcCanvas?.classList.remove('connect-mode');
-      arcSelectStep = 0;
-      arcFrom = null;
+      bracketCanvas?.classList.remove('connect-mode');
+      bracketSelectStep = 0;
+      bracketFrom = null;
       if (typeof clearPropositionHighlights === 'function') clearPropositionHighlights();
       showStatus(commentMode ? 'Comment mode on. Highlight text or click a bracket to add a comment.' : 'Comment mode off.', 'success');
     } else {
@@ -2973,7 +3071,7 @@ if (propositionsContainer) {
         showStatus('Arrow cancelled.', 'info');
         return;
       }
-      undoStack.push({ action: 'add arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), arcs: arcs.map(a => ({...a})), formatTags: formatTags.map(f => ({...f})), wordArrows: wordArrows.map(w => ({...w})) });
+      undoStack.push({ action: 'add arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map(a => ({...a})), formatTags: formatTags.map(f => ({...f})), wordArrows: wordArrows.map(w => ({...w})) });
       wordArrows.push({
         fromProp: pendingArrowStart.propIndex,
         fromStart: pendingArrowStart.start,
@@ -2984,7 +3082,7 @@ if (propositionsContainer) {
       });
       pendingArrowStart = null;
       renderPropositions();
-      renderArcs();
+      renderBrackets();
       showStatus('Arrow created.', 'success');
     }
   });
@@ -3033,9 +3131,9 @@ if (passageInput) passageInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') fetchPassage();
 });
 
-// Resize observer for arc redraw
+// Resize observer for bracket redraw
 if (propositionsContainer?.parentElement) {
-  const resizeObserver = new ResizeObserver(() => updateArcPositions());
+  const resizeObserver = new ResizeObserver(() => updateBracketPositions());
   resizeObserver.observe(propositionsContainer.parentElement);
 }
 
@@ -3046,7 +3144,7 @@ if (propEditor) propEditor.placeholder = 'Fetch or import a passage, then use Di
 // Sidebar Toggles
 const toggleLeftSidebarBtn = document.getElementById('toggleLeftSidebarBtn');
 const toggleRightSidebarBtn = document.getElementById('toggleRightSidebarBtn');
-const leftSidebar = document.querySelector('.arc-types');
+const leftSidebar = document.querySelector('.bracket-types');
 const rightSidebar = document.querySelector('.comments-preview');
 
 if (toggleLeftSidebarBtn && leftSidebar) {

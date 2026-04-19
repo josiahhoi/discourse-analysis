@@ -6,13 +6,13 @@
   --text-muted: #9a9691;
   --accent: #c9a86c;
   --accent-dim: #8b7349;
-  --arc-ground: #6b9b7a;
-  --arc-inference: #7b9ed4;
-  --arc-series: #b8a47a;
-  --arc-alternative: #c97b7b;
-  --arc-action: #9b7bc9;
-  --arc-comparison: #7bc9c9;
-  --arc-custom: #9a9a9a;
+  --bracket-ground: #6b9b7a;
+  --bracket-inference: #7b9ed4;
+  --bracket-series: #b8a47a;
+  --bracket-alternative: #c97b7b;
+  --bracket-action: #9b7bc9;
+  --bracket-comparison: #7bc9c9;
+  --bracket-custom: #9a9a9a;
   --border: #3a3a3e;
   --label-text: #fff;
   --comment-note: #e8c968;
@@ -36,13 +36,13 @@
   --text-muted: #5c5854;
   --accent: #8b7349;
   --accent-dim: #6b5a38;
-  --arc-ground: #4a7a56;
-  --arc-inference: #4a6ea8;
-  --arc-series: #8a784a;
-  --arc-alternative: #a85a5a;
-  --arc-action: #6a5a9a;
-  --arc-comparison: #4a9a9a;
-  --arc-custom: #6a6a6a;
+  --bracket-ground: #4a7a56;
+  --bracket-inference: #4a6ea8;
+  --bracket-series: #8a784a;
+  --bracket-alternative: #a85a5a;
+  --bracket-action: #6a5a9a;
+  --bracket-comparison: #4a9a9a;
+  --bracket-custom: #6a6a6a;
   --border: #c9c5be;
   --label-text: #1a1a1c;
   --comment-note: #e8d468;
@@ -57,13 +57,13 @@
 
 [data-theme="light"] .status.success {
   background: rgba(74, 122, 86, 0.15);
-  border-color: var(--arc-ground);
+  border-color: var(--bracket-ground);
   color: #1e4d2a;
 }
 
 [data-theme="light"] .status.error {
   background: rgba(168, 90, 90, 0.15);
-  border-color: var(--arc-alternative);
+  border-color: var(--bracket-alternative);
   color: #8b2e2e;
 }
 
@@ -160,7 +160,7 @@ body {
 }
 
 .api-key-row {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 0.5rem;
   width: 100%;
@@ -263,8 +263,8 @@ body {
   overflow: hidden;
 }
 
-/* Arc types sidebar */
-.arc-types {
+/* Bracket types sidebar */
+.bracket-types {
   flex-shrink: 0;
   width: 220px;
   max-height: 85vh;
@@ -276,7 +276,7 @@ body {
   border: 1px solid var(--border);
 }
 
-.arc-types .type-group {
+.bracket-types .type-group {
   display: block;
   font-size: 0.7rem;
   font-weight: 600;
@@ -288,25 +288,25 @@ body {
   border-top: 1px solid var(--border);
 }
 
-.arc-types .type-group:first-child {
+.bracket-types .type-group:first-child {
   margin-top: 0;
   padding-top: 0;
   border-top: none;
 }
 
-.arc-types .hint a {
+.bracket-types .hint a {
   color: var(--accent);
   font-size: 0.75rem;
 }
 
-.arc-types h3 {
+.bracket-types h3 {
   margin: 0 0 0.5rem;
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--text-muted);
 }
 
-.arc-types .hint {
+.bracket-types .hint {
   font-size: 0.8rem;
   color: var(--text-muted);
   margin-bottom: 0.75rem;
@@ -381,7 +381,7 @@ body {
 /* Label picker popover */
 .label-picker {
   position: absolute;
-  z-index: 100;
+  z-index: 1000;
   background: var(--surface-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -418,20 +418,20 @@ body {
 }
 
 /* Reuse bracket colors for picker buttons */
-.label-picker button.ground { border-color: var(--arc-ground); color: var(--arc-ground); }
-.label-picker button.inference { border-color: var(--arc-inference); color: var(--arc-inference); }
-.label-picker button.series { border-color: var(--arc-series); color: var(--arc-series); }
+.label-picker button.ground { border-color: var(--bracket-ground); color: var(--bracket-ground); }
+.label-picker button.inference { border-color: var(--bracket-inference); color: var(--bracket-inference); }
+.label-picker button.series { border-color: var(--bracket-series); color: var(--bracket-series); }
 .label-picker button.progression { border-color: #9bb87a; color: #9bb87a; }
-.label-picker button.alternative { border-color: var(--arc-alternative); color: var(--arc-alternative); }
+.label-picker button.alternative { border-color: var(--bracket-alternative); color: var(--bracket-alternative); }
 .label-picker button.bilateral { border-color: #7ba3d4; color: #7ba3d4; }
 .label-picker button.cause-effect,
-.label-picker button.action-result { border-color: var(--arc-action); color: var(--arc-action); }
+.label-picker button.action-result { border-color: var(--bracket-action); color: var(--bracket-action); }
 .label-picker button.action-purpose { border-color: #b87bc9; color: #b87bc9; }
 .label-picker button.conditional { border-color: #c97b9b; color: #c97b9b; }
 .label-picker button.temporal { border-color: #7bc99b; color: #7bc99b; }
 .label-picker button.locative { border-color: #7bc9b8; color: #7bc9b8; }
 .label-picker button.action-manner { border-color: #c9b87b; color: #c9b87b; }
-.label-picker button.comparison { border-color: var(--arc-comparison); color: var(--arc-comparison); }
+.label-picker button.comparison { border-color: var(--bracket-comparison); color: var(--bracket-comparison); }
 .label-picker button.negative-positive { border-color: #e8a060; color: #e8a060; }
 .label-picker button.idea-explanation { border-color: #60a0e8; color: #60a0e8; }
 .label-picker button.question-answer { border-color: #a060e8; color: #a060e8; }
@@ -441,31 +441,46 @@ body {
 .label-picker button.picker-delete-bracket {
   margin-top: 0.5rem;
   width: 100%;
-  border-color: var(--arc-alternative);
-  color: var(--arc-alternative);
+  border-color: var(--bracket-alternative);
+  color: var(--bracket-alternative);
 }
 
 .relationship-picker .picker-title {
   width: 100%;
-  margin: 0 0 0.5rem;
-  font-size: 0.8rem;
+  margin: 0 0 1rem;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5rem;
+  cursor: grab;
+  user-select: none;
 }
 
 /* Bracket click actions popover */
 .bracket-actions {
   position: absolute;
-  z-index: 100;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
   background: var(--surface-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 0.4rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 180px;
+  padding: 4px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.drag-handle {
+  height: 12px;
+  width: 100%;
+  background: var(--surface-elevated);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+  border-radius: var(--radius) var(--radius) 0 0;
+  cursor: grab;
+}
+
+.drag-handle:hover {
+  background: var(--accent-15);
 }
 
 .bracket-actions button {
@@ -486,34 +501,34 @@ body {
 
 .bracket-actions button[data-action="delete"]:hover {
   background: rgba(201, 123, 123, 0.2);
-  border-color: var(--arc-alternative);
+  border-color: var(--bracket-alternative);
 }
 
-/* New arc dialog */
-.new-arc-dialog {
+/* New bracket dialog */
+.new-bracket-dialog {
   min-width: 200px;
   max-width: 280px;
   flex-direction: column;
 }
 
-.new-arc-dialog .new-arc-buttons {
+.new-bracket-dialog .new-bracket-buttons {
   display: flex;
   gap: 0.5rem;
   margin-top: 0.5rem;
 }
 
-.new-arc-dialog .new-arc-buttons button {
+.new-bracket-dialog .new-bracket-buttons button {
   flex: 1;
 }
 
-.arc-type-list {
+.bracket-type-list {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
   margin-bottom: 1rem;
 }
 
-.arc-type-list button {
+.bracket-type-list button {
   padding: 0.45rem 0.75rem;
   font-size: 0.85rem;
   font-family: inherit;
@@ -526,11 +541,11 @@ body {
   transition: all 0.15s;
 }
 
-.arc-type-list button:hover {
+.bracket-type-list button:hover {
   background: var(--border);
 }
 
-.arc-type-list button.active {
+.bracket-type-list button.active {
   border-color: var(--accent);
   background: rgba(201, 168, 108, 0.15);
 }
@@ -547,7 +562,7 @@ body {
   margin-bottom: 0.75rem;
 }
 
-#clearArcs {
+#clearBrackets {
   width: 100%;
   padding: 0.5rem;
   font-size: 0.85rem;
@@ -560,7 +575,7 @@ body {
   transition: all 0.15s;
 }
 
-#clearArcs:hover {
+#clearBrackets:hover {
   color: var(--text);
   border-color: var(--text-muted);
 }
@@ -886,7 +901,7 @@ body {
   font-style: normal;
 }
 
-.arc-canvas-wrapper {
+.bracket-canvas-wrapper {
   position: relative;
   flex: 1;
   min-height: 400px;
@@ -896,7 +911,7 @@ body {
   overflow: hidden;
 }
 
-.arc-canvas {
+.bracket-canvas {
   position: absolute;
   top: 0;
   left: 0;
@@ -908,25 +923,25 @@ body {
 }
 
 /* In Connect-to mode, let clicks pass through to proposition blocks — but keep connection nodes (circles) clickable so "S node then verse 4 node" works */
-.arc-canvas.connect-mode,
-.arc-canvas.connect-mode * {
+.bracket-canvas.connect-mode,
+.bracket-canvas.connect-mode * {
   pointer-events: none !important;
 }
-.arc-canvas.connect-mode .connection-node {
+.bracket-canvas.connect-mode .connection-node {
   pointer-events: all !important;
 }
 
-.arc-canvas path {
+.bracket-canvas path {
   fill: none;
   stroke-width: 1;
 }
 
-.arc-canvas .bracket-group {
+.bracket-canvas .bracket-group {
   cursor: pointer;
 }
 
 /* Brackets with comments: yellow transparent highlight overlay on the line */
-.arc-canvas .bracket-group.has-comment .bracket-comment-highlight {
+.bracket-canvas .bracket-group.has-comment .bracket-comment-highlight {
   pointer-events: none;
   stroke: #e8c968;
   stroke-opacity: 0.55;
@@ -934,24 +949,24 @@ body {
 }
 
 /* Bracket with comment: slightly stronger highlight on hover */
-.arc-canvas .bracket-group.has-comment.bracket-hover .bracket-comment-highlight {
+.bracket-canvas .bracket-group.has-comment.bracket-hover .bracket-comment-highlight {
   stroke-opacity: 0.7;
 }
 
 /* Connection nodes: clickable dots for propositions and brackets */
-.arc-canvas .connection-node {
+.bracket-canvas .connection-node {
   fill: var(--accent-15);
   stroke: var(--surface-elevated-20);
   stroke-width: 2;
   transition: fill 0.15s, stroke 0.15s;
 }
 
-.arc-canvas .connection-node:hover {
+.bracket-canvas .connection-node:hover {
   fill: var(--accent-50);
   stroke: var(--surface-elevated-60);
 }
 
-.arc-canvas .bracket-label {
+.bracket-canvas .bracket-label {
   pointer-events: none;
   font-family: var(--font-sans);
   font-size: 12px;
@@ -961,28 +976,28 @@ body {
 }
 
 /* Bracket colors - 18 logical relationship types (paths only; labels use white text) */
-.arc-canvas path.ground { stroke: var(--arc-ground); }
-.arc-canvas path.inference { stroke: var(--arc-inference); }
-.arc-canvas path.series { stroke: var(--arc-series); }
-.arc-canvas path.progression { stroke: #9bb87a; }
-.arc-canvas path.alternative { stroke: var(--arc-alternative); }
-.arc-canvas path.bilateral { stroke: #7ba3d4; }
-.arc-canvas path.cause-effect,
-.arc-canvas path.action-result { stroke: var(--arc-action); }
-.arc-canvas path.action-purpose { stroke: #b87bc9; }
-.arc-canvas path.conditional { stroke: #c97b9b; }
-.arc-canvas path.temporal { stroke: #7bc99b; }
-.arc-canvas path.locative { stroke: #7bc9b8; }
-.arc-canvas path.action-manner { stroke: #c9b87b; }
-.arc-canvas path.comparison { stroke: var(--arc-comparison); }
-.arc-canvas path.negative-positive { stroke: #e8a060; }
-.arc-canvas path.idea-explanation { stroke: #60a0e8; }
-.arc-canvas path.question-answer { stroke: #a060e8; }
-.arc-canvas path.concessive { stroke: #e86080; }
-.arc-canvas path.situation-response { stroke: #e88060; }
-.arc-canvas path.unspecified { stroke: var(--arc-custom); }
+.bracket-canvas path.ground { stroke: var(--bracket-ground); }
+.bracket-canvas path.inference { stroke: var(--bracket-inference); }
+.bracket-canvas path.series { stroke: var(--bracket-series); }
+.bracket-canvas path.progression { stroke: #9bb87a; }
+.bracket-canvas path.alternative { stroke: var(--bracket-alternative); }
+.bracket-canvas path.bilateral { stroke: #7ba3d4; }
+.bracket-canvas path.cause-effect,
+.bracket-canvas path.action-result { stroke: var(--bracket-action); }
+.bracket-canvas path.action-purpose { stroke: #b87bc9; }
+.bracket-canvas path.conditional { stroke: #c97b9b; }
+.bracket-canvas path.temporal { stroke: #7bc99b; }
+.bracket-canvas path.locative { stroke: #7bc9b8; }
+.bracket-canvas path.action-manner { stroke: #c9b87b; }
+.bracket-canvas path.comparison { stroke: var(--bracket-comparison); }
+.bracket-canvas path.negative-positive { stroke: #e8a060; }
+.bracket-canvas path.idea-explanation { stroke: #60a0e8; }
+.bracket-canvas path.question-answer { stroke: #a060e8; }
+.bracket-canvas path.concessive { stroke: #e86080; }
+.bracket-canvas path.situation-response { stroke: #e88060; }
+.bracket-canvas path.unspecified { stroke: var(--bracket-custom); }
 
-.arc-canvas path.hover {
+.bracket-canvas path.hover {
   stroke-width: 12;
 }
 
@@ -1067,17 +1082,17 @@ body.text-edit-mode-active .verse-ref {
   box-shadow: 0 0 0 1px var(--accent);
 }
 
-.proposition-block.arc-selected {
+.proposition-block.bracket-selected {
   background: rgba(107, 155, 122, 0.2);
-  box-shadow: 0 0 0 2px var(--arc-ground);
+  box-shadow: 0 0 0 2px var(--bracket-ground);
 }
 
-.proposition-block.arc-hover {
+.proposition-block.bracket-hover {
   background: rgba(201, 168, 108, 0.15);
   box-shadow: 0 0 0 1px var(--accent);
 }
 
-.arc-canvas .bracket-group.bracket-hover path {
+.bracket-canvas .bracket-group.bracket-hover path {
   stroke-width: 4;
 }
 
@@ -1181,13 +1196,13 @@ body.text-edit-mode-active .verse-ref {
 
 .status.error {
   background: rgba(201, 123, 123, 0.2);
-  border: 1px solid var(--arc-alternative);
+  border: 1px solid var(--bracket-alternative);
   color: #e8a0a0;
 }
 
 .status.success {
   background: rgba(107, 155, 122, 0.2);
-  border: 1px solid var(--arc-ground);
+  border: 1px solid var(--bracket-ground);
   color: #a0e8b0;
 }
 

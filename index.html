@@ -26,7 +26,7 @@
           <input type="password" id="apiKey" placeholder="Your API key (stored in browser only)">
         </div>
         <details class="import-section">
-          <summary>Or paste text to arc</summary>
+          <summary>Or paste text to bracket or import</summary>
           <textarea id="pasteText" placeholder="Paste passage text here. Use [1], [2], [3:14] for verse breaks."></textarea>
           <div class="import-options">
             <label for="importPassageRef">Passage ref:</label>
@@ -40,33 +40,33 @@
     </header>
 
     <main class="main">
-      <aside class="arc-types">
+      <aside class="bracket-types">
         <h3>Logical Relationships</h3>
-        <p class="hint">Split: click in text to place the cursor, then press Enter. Single click to edit. Click nodes or verse refs to create brackets. Based on <a href="https://s3.amazonaws.com/cdn.gospelpaths.com/tenants/5/1738104708694-The18LogicalRelationshipsEngnewlogo.pdf" target="_blank" rel="noopener">BibleArc's 18 relationships</a>.</p>
+        <p class="hint">Split: click in text to place the cursor, then press Enter. Single click to edit. Click nodes or verse refs to create brackets. Based on <a href="https://s3.amazonaws.com/cdn.gospelpaths.com/tenants/5/1738104708694-The18LogicalRelationshipsEngnewlogo.pdf" target="_blank" rel="noopener">Bible Bracket's 18 relationships</a>.</p>
         <div class="save-load-row">
           <button id="themeToggle" type="button" title="Toggle light/dark mode">Light / Dark</button>
         </div>
         <p class="hint-small">Click bracket for Delete / Change label / Select to connect. Double-click bracket to change label.</p>
-        <button id="clearArcs" class="secondary">Clear All Brackets</button>
+        <button id="clearBrackets" class="secondary">Clear All Brackets</button>
         <div class="save-load-row save-as-author-row">
           <label for="pageAuthor">Author:</label>
-          <input type="text" id="pageAuthor" placeholder="Page author (saved with arc)" class="author-input">
+          <input type="text" id="pageAuthor" placeholder="Page author (saved with bracket)" class="author-input">
         </div>
         <div class="save-load-row save-filename-row">
           <label for="exportFilename">File name:</label>
           <input type="text" id="exportFilename" placeholder="Auto-generated filename..." class="filename-input">
         </div>
         <div class="save-load-row save-load-primary">
-          <button id="newArcBtn" type="button" class="secondary" title="Start a new arc (prompts to save current)">New</button>
+          <button id="newBracketBtn" type="button" class="secondary" title="Start a new bracket (prompts to save current)">New</button>
           <button id="openFileBtn" type="button" class="secondary" title="Open JSON file (enables Save to update it)">Open</button>
         </div>
         <div class="save-load-row">
           <button id="saveBtn" type="button" title="Save to current file (Ctrl+S). First time: choose location.">Save</button>
-          <button id="saveAsBtn" type="button" class="secondary" title="Save current arc as a new JSON file">Save As</button>
+          <button id="saveAsBtn" type="button" class="secondary" title="Save current bracket as a new JSON file">Save As</button>
         </div>
         <div class="save-load-row">
           <button id="copyForWordBtn" type="button" class="secondary" title="Copy diagram as image (Ctrl+V to paste)">Copy image</button>
-          <button id="copyDataBtn" type="button" class="secondary" title="Copy arc data as text to clipboard">Copy data</button>
+          <button id="copyDataBtn" type="button" class="secondary" title="Copy bracket data as text to clipboard">Copy data</button>
         </div>
         <input type="file" id="importFileInput" accept=".json,application/json" hidden>
         <details class="recent-section" id="recentSection">
@@ -102,8 +102,8 @@
             </button>
           </div>
         </div>
-        <div class="arc-canvas-wrapper">
-          <svg id="arcCanvas" class="arc-canvas" xmlns="http://www.w3.org/2000/svg">
+        <div class="bracket-canvas-wrapper">
+          <svg id="bracketCanvas" class="bracket-canvas" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
                 <path d="M0,0 L10,3.5 L0,7 Z" fill="currentColor" />
@@ -124,7 +124,7 @@
 
     <footer class="footer">
       <p>ESV via <a href="https://api.esv.org" target="_blank" rel="noopener">api.esv.org</a>. Greek: <a href="https://sblgnt.com" target="_blank" rel="noopener">SBLGNT</a> (CC-BY 4.0).</p>
-      <p class="footer-version">Version 2.2.1 · Made by Josiah Hoi, based on the method taught by Dr. Daniel M. Gurtner.</p>
+      <p class="footer-version">Version 2.3.0 · Made by Josiah Hoi and Bryce Bussert, based on the method taught by Dr. Daniel M. Gurtner.</p>
     </footer>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>

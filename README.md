@@ -1,15 +1,15 @@
-# Bible Arc
+# Bible Brackets
 
-A Bible study tool for diagramming the logical structure of Scripture using **bracketing** — splitting passages into propositions and drawing logic arcs between them. Similar to [BibleArc](https://biblearc.com).
+A Bible study tool for diagramming the logical structure of Scripture using **bracketing** — splitting passages into propositions and drawing logic brackets between them. Similar to [BibleArc](https://biblearc.com).
 
 ## Features
 
 - **ESV API integration** — Fetch passages directly from the ESV (English Standard Version) Bible
 - **SBL Greek NT** — Fetch Greek text from the SBLGNT (no API key required)
 - **Proposition splitting** — Automatic initial split by logical connectors (for, therefore, but, etc.); refine manually
-- **Logic brackets** — Draw visible brackets between propositions to show relationships (all 18 BibleArc logical relationship types)
+- **Logic brackets** — Draw visible brackets between propositions to show relationships (all 18 standard logical relationship types)
 - **Import text** — Paste your own passage and split by lines or `/` characters
-- **Export/Import** — Save your arc to a JSON file and load it later
+- **Export/Import** — Save your work to a JSON file and load it later
 
 ## Setup
 
@@ -29,7 +29,7 @@ A Bible study tool for diagramming the logical structure of Scripture using **br
 
 ### Draw logic brackets
 
-1. Select a relationship type from the sidebar (all 18 from [BibleArc's system](https://s3.amazonaws.com/cdn.gospelpaths.com/tenants/5/1738104708694-The18LogicalRelationshipsEngnewlogo.pdf))
+1. Select a relationship type from the sidebar
 2. Click the first proposition
 3. Click the second proposition
 4. A visible bracket is drawn, grouping the two propositions with a labeled relationship
@@ -44,12 +44,12 @@ A Bible study tool for diagramming the logical structure of Scripture using **br
 
 ### Import pasted text
 
-1. Expand **Or paste text to arc**
+1. Expand **Or paste text to bracket**
 2. Paste your passage
 3. Use newlines or ` / ` to separate propositions
 4. Click **Import & Split**
 
-## Logical relationships (BibleArc’s 18 types)
+## Logical relationships
 
 | Abbrev | Type | Category |
 |--------|------|----------|
@@ -66,17 +66,15 @@ A Bible study tool for diagramming the logical structure of Scripture using **br
 | L | Locative | Support by Distinct Statement |
 | Ac/Mn | Action-Manner | Support by Restatement |
 | Cf | Comparison | Support by Restatement |
-| ✓ | Negative-Positive | Support by Restatement |
+| -/+ | Negative-Positive | Support by Restatement |
 | Id/Exp | Idea-Explanation | Support by Restatement |
 | Q/A | Question-Answer | Support by Restatement |
 | Csv | Concessive | Support by Contrary |
 | Sit/R | Situation-Response | Support by Contrary |
 
-See the [full PDF](https://s3.amazonaws.com/cdn.gospelpaths.com/tenants/5/1738104708694-The18LogicalRelationshipsEngnewlogo.pdf) for definitions and examples.
-
 ## Tech
 
-Plain HTML, CSS, and JavaScript — no build step. Works offline for arc drawing; ESV API and SBLGNT fetch require network.
+Plain HTML, CSS, and JavaScript — no build step. Works offline for bracket drawing; ESV API and SBLGNT fetch require network.
 
 ## License
 
