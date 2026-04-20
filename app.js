@@ -58,6 +58,17 @@ let selectedArrowIdx = null; // { fromProp, fromStart, fromEnd, toProp, toStart,
 let pendingArrowStart = null; // { propIndex, start, end }
 let arrowHighlight = null; // DOM element for hovering word overlay
 
+function clearAllFormatting() {
+  brackets = [];
+  wordArrows = [];
+  comments = [];
+  formatTags = [];
+  undoStack = [];
+  selectedArrowIdx = null;
+  bracketSelectStep = 0;
+  bracketFrom = null;
+}
+
 // DOM
 const passageInput = document.getElementById('passageInput');
 const fetchBtn = document.getElementById('fetchBtn');
@@ -419,10 +430,10 @@ async function fetchPassage() {
     }
 
     if (passageHeader) passageHeader.textContent = passageRef;
-    undoStack = [];
+    clearAllFormatting();
     renderPropositions();
-    brackets = [];
     renderBrackets();
+    renderCommentPreviews();
   } catch (err) {
     showStatus(err.message || 'Failed to fetch passage', 'error');
   } finally {
@@ -653,7 +664,42 @@ function renderPropositions() {
       if (textEditMode) {
         if (e.key === 'Tab') {
           e.preventDefault();
-          document.execCommand('insertText', false, '\t');
+          if (e.shiftKey) {
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount) {
+              const range = sel.getRangeAt(0);
+              const textSpan = block.querySelector('.proposition-text') || block;
+              
+              // Get current absolute cursor offset
+              const preRange = document.createRange();
+              preRange.setStart(textSpan, 0);
+              preRange.setEnd(range.startContainer, range.startOffset);
+              const cursorOffset = preRange.toString().length;
+              
+              // Find the start of the current line
+              const fullText = textSpan.innerText || textSpan.textContent || '';
+              const before = fullText.slice(0, cursorOffset);
+              const lineStartIdx = before.lastIndexOf('\n') + 1;
+              const lineText = fullText.slice(lineStartIdx);
+              
+              let charsToRemove = 0;
+              if (lineText.startsWith('\t')) {
+                charsToRemove = 1;
+              } else if (lineText.startsWith('    ')) {
+                charsToRemove = 4;
+              } else if (lineText.startsWith(' ')) {
+                charsToRemove = 1;
+              }
+              
+              if (charsToRemove > 0) {
+                setSelectionByGlobalOffset(textSpan, lineStartIdx, lineStartIdx + charsToRemove);
+                document.execCommand('delete', false);
+                setSelectionByGlobalOffset(textSpan, Math.max(lineStartIdx, cursorOffset - charsToRemove));
+              }
+            }
+          } else {
+            document.execCommand('insertText', false, '\t');
+          }
         }
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -675,6 +721,31 @@ function renderPropositions() {
             }
           } else {
             document.execCommand('insertText', false, '\n');
+          }
+        }
+        if (e.key === 'Backspace') {
+          const sel = window.getSelection();
+          if (sel && sel.rangeCount) {
+            const range = sel.getRangeAt(0);
+            if (range.collapsed) {
+              const textSpan = block.querySelector('.proposition-text') || block;
+              const preRange = document.createRange();
+              try {
+                preRange.setStart(textSpan, 0);
+                preRange.setEnd(range.startContainer, range.startOffset);
+                const cursorOffset = preRange.toString().length;
+                const fullText = textSpan.innerText || textSpan.textContent || '';
+                const beforeCursor = fullText.slice(0, cursorOffset);
+                const lineStartIdx = beforeCursor.lastIndexOf('\n') + 1;
+                const currentLineBeforeCursor = beforeCursor.slice(lineStartIdx);
+                if (currentLineBeforeCursor.length > 0 && currentLineBeforeCursor.match(/^[ \t]+$/)) {
+                  e.preventDefault();
+                  setSelectionByGlobalOffset(textSpan, lineStartIdx, cursorOffset);
+                  document.execCommand('delete', false);
+                  return;
+                }
+              } catch (_) { }
+            }
           }
         }
         return; // Allow other keys to be natively edited
@@ -2623,10 +2694,11 @@ if (importBtn) importBtn.addEventListener('click', () => {
   const copyrightLabel = document.getElementById('copyrightLabel');
   if (copyrightLabel) copyrightLabel.textContent = '';
   if (propositionsContainer) propositionsContainer.classList.remove('greek-text');
-  undoStack = [];
+  
+  clearAllFormatting();
   renderPropositions();
-  brackets = [];
   renderBrackets();
+  renderCommentPreviews();
   showStatus('Imported. Double-click in text to split / single click to edit. Use nodes or verse refs for brackets.', 'success');
 });
 
@@ -3375,3 +3447,46 @@ function attachFilenameObservers() {
   updateFilenamePlaceholder();
 }
 attachFilenameObservers();
+// Helper to set cursor or selection by global string offset in a contenteditable
+function setSelectionByGlobalOffset(el, startOffset, endOffset = null) {
+  const sel = window.getSelection();
+  const range = document.createRange();
+  let current = 0;
+  let startNode = null, startIdx = 0;
+  let endNode = null, endIdx = 0;
+
+  function traverse(node) {
+    if (node.nodeType === 3) { // Text node
+      const len = node.textContent.length;
+      if (!startNode && current + len >= startOffset) {
+        startNode = node;
+        startIdx = startOffset - current;
+      }
+      if (endOffset != null && !endNode && current + len >= endOffset) {
+        endNode = node;
+        endIdx = endOffset - current;
+      }
+      current += len;
+    } else {
+      for (let i = 0; i < node.childNodes.length; i++) {
+        traverse(node.childNodes[i]);
+        if (endNode || (endOffset === null && startNode)) break;
+      }
+    }
+  }
+
+  traverse(el);
+
+  // Fallbacks
+  if (!startNode) { startNode = el; startIdx = el.childNodes.length; }
+  range.setStart(startNode, startIdx);
+  if (endOffset !== null) {
+    if (!endNode) { endNode = startNode; endIdx = startIdx; }
+    range.setEnd(endNode, endIdx);
+  } else {
+    range.collapse(true);
+  }
+
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
