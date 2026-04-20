@@ -53,7 +53,8 @@ let commentMode = false;
 let textEditMode = false;
 let formatTags = []; // { type: 'bold'|'underline', propIndex, start, end }
 let arrowMode = false;
-let wordArrows = []; // { fromProp, fromStart, fromEnd, toProp, toStart, toEnd }
+let wordArrows = [];
+let selectedArrowIdx = null; // { fromProp, fromStart, fromEnd, toProp, toStart, toEnd }
 let pendingArrowStart = null; // { propIndex, start, end }
 let arrowHighlight = null; // DOM element for hovering word overlay
 
@@ -81,6 +82,17 @@ const newBracketBtn = document.getElementById('newBracketBtn');
 const propositionEditor = document.getElementById('propositionEditor');
 const propositionsContainer = document.getElementById('propositions');
 const bracketCanvas = document.getElementById('bracketCanvas');
+if (bracketCanvas) {
+  bracketCanvas.addEventListener('click', (e) => {
+    if (e.target === bracketCanvas) {
+      if (selectedArrowIdx !== null) {
+        selectedArrowIdx = null;
+        renderPropositions();
+        renderBrackets();
+      }
+    }
+  });
+}
 const clearBracketsBtn = document.getElementById('clearBrackets');
 
 if (passageRefEl) {
@@ -234,6 +246,27 @@ document.addEventListener('keydown', (e) => {
     if (commentMode) {
       commentModeBtn?.click();
       return;
+    }
+
+    if (selectedArrowIdx !== null) {
+      selectedArrowIdx = null;
+      renderPropositions();
+      renderBrackets();
+      return;
+    }
+  }
+
+  if (e.key === 'Backspace' || e.key === 'Delete') {
+    // Only delete if we are not in an input field
+    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+    
+    if (selectedArrowIdx !== null && selectedArrowIdx < wordArrows.length) {
+      undoStack.push({ action: 'delete arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map(a => ({...a})), formatTags: formatTags.map(f => ({...f})), wordArrows: wordArrows.map(w => ({...w})) });
+      wordArrows.splice(selectedArrowIdx, 1);
+      selectedArrowIdx = null;
+      renderPropositions();
+      renderBrackets();
+      showStatus('Arrow removed.', 'success');
     }
   }
 }, true);
@@ -1014,6 +1047,7 @@ function undoLastAction() {
   brackets = prev.brackets;
   formatTags = prev.formatTags ? prev.formatTags.map(t => ({...t})) : [];
   wordArrows = prev.wordArrows ? prev.wordArrows.map(w => ({...w})) : [];
+  selectedArrowIdx = null;
   renderPropositions();
   showStatus(`Undid last ${prev.action}.`, 'success');
 }
@@ -1222,27 +1256,31 @@ function renderWordArrows(wrapper) {
     const fT = fromR.top - wrapperRect.top;
     const fB = fromR.bottom - wrapperRect.top;
 
+    const tBeg = tL + 5; // Beginning of word (first letter area)
+    const fBeg = fL + 5;
+
     let x1, y1, x2, y2, isLastHorizontal;
     
     if (tM < fM - 10) {
-      // UPWARDS: Horizontal then Vertical (Arrival at bottom center)
-      x1 = (tC < fL) ? fL : (tC > fR ? fR : fC);
+      // UPWARDS: Horizontal then Vertical (Arrival at bottom edge)
+      x1 = (tBeg < fL) ? fL : (tBeg > fR ? fR : fBeg);
       y1 = fM;
-      x2 = tC;
+      x2 = tBeg;
       y2 = tB + 2;
       isLastHorizontal = false;
     } else if (tM > fM + 10) {
-      // DOWNWARDS: Vertical then Horizontal (Arrival at left/right side)
-      x1 = fC;
+      // DOWNWARDS: Vertical then Horizontal (Arrival at side)
+      // If arriving at side, "beginning" is the left side anyway (tL)
+      x1 = fBeg;
       y1 = fB;
       y2 = tM;
-      x2 = (fC > tC) ? tR + 2 : tL - 2;
+      x2 = (fBeg > tC) ? tR + 2 : tL - 2;
       isLastHorizontal = true;
     } else {
       // SAME LINE: Horizontal only
-      x1 = (tC < fL) ? fL : fR;
+      x1 = (tBeg < fBeg) ? fL : fR;
       y1 = fM;
-      x2 = (tC < fL) ? tR + 2 : tL - 2;
+      x2 = (tBeg < fBeg) ? tR + 2 : tL - 2;
       y2 = fM;
       isLastHorizontal = true;
     }
@@ -1253,13 +1291,19 @@ function renderWordArrows(wrapper) {
 
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g.setAttribute('class', 'word-arrow-group');
-    g.style.color = 'var(--accent)';
+
+    const isSelected = selectedArrowIdx === idx;
+    if (isSelected) {
+      g.style.color = '#ff6b6b'; // Red highlight for selection
+    } else {
+      g.style.color = 'var(--accent)';
+    }
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', d);
     path.setAttribute('fill', 'none');
     path.setAttribute('stroke', 'currentColor');
-    path.setAttribute('stroke-width', '2');
+    path.setAttribute('stroke-width', isSelected ? '3' : '2');
     g.appendChild(path);
 
     // Manual Arrowhead (Polygon) - using polygon to avoid CSS 'path' specificity issue
@@ -1283,16 +1327,23 @@ function renderWordArrows(wrapper) {
     const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     hit.setAttribute('d', d);
     hit.setAttribute('fill', 'none');
-    hit.setAttribute('stroke', 'transparent');
+    hit.setAttribute('stroke', 'rgba(0,0,0,0.01)'); // Near-transparent but better for some browsers
     hit.setAttribute('stroke-width', '10');
+    hit.style.pointerEvents = 'all';
     hit.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();
       undoStack.push({ action: 'delete arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map(a => ({...a})), formatTags: formatTags.map(f => ({...f})), wordArrows: wordArrows.map(w => ({...w})) });
       wordArrows.splice(idx, 1);
-      renderPropositions();
       renderBrackets();
       showStatus('Arrow removed.', 'success');
+    });
+    hit.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      selectedArrowIdx = idx;
+      renderPropositions();
+      renderBrackets();
     });
     g.appendChild(hit);
 

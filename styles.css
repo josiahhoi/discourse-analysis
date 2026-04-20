@@ -941,6 +941,11 @@ body {
   cursor: pointer;
 }
 
+.word-arrow-group {
+  pointer-events: all;
+  cursor: pointer;
+}
+
 /* Brackets with comments: yellow transparent highlight overlay on the line */
 .bracket-canvas .bracket-group.has-comment .bracket-comment-highlight {
   pointer-events: none;
