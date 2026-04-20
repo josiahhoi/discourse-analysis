@@ -908,7 +908,7 @@ body {
   background: var(--surface);
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .bracket-canvas {
@@ -933,7 +933,6 @@ body {
 
 .bracket-canvas path {
   fill: none;
-  stroke-width: 1;
 }
 
 .bracket-canvas .bracket-group {
@@ -1092,7 +1091,7 @@ body.text-edit-mode-active .verse-ref {
   box-shadow: 0 0 0 1px var(--accent);
 }
 
-.bracket-canvas .bracket-group.bracket-hover path {
+.bracket-canvas .bracket-group.bracket-hover path:not(.bracket-hit) {
   stroke-width: 4;
 }
 

@@ -579,7 +579,12 @@ function renderPropositions() {
           e.preventDefault();
           document.execCommand('insertText', false, '\t');
         }
-        return; // Allow Enter and text to be natively edited, do not divide
+        return; // Allow other keys to be natively edited
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'u')) {
+        e.preventDefault();
+        document.execCommand(e.key === 'b' ? 'bold' : 'underline');
+        return;
       }
       if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
@@ -879,11 +884,28 @@ function splitPropositionAtOffset(index, offset) {
     }
   }
   brackets = brackets.map(({ from, to, type, labelsSwapped }) => ({
-    from: from >= index + 1 ? from + 1 : from,
-    to: to >= index ? to + 1 : to,
+    from: from > index ? from + 1 : from,
+    to: to > index ? to + 1 : to,
     type,
     labelsSwapped: labelsSwapped ?? false,
   }));
+
+  comments.forEach(c => {
+    if (c.type === 'text' && c.target) {
+      if (c.target.propIndex > index) {
+        c.target.propIndex += 1;
+      } else if (c.target.propIndex === index) {
+        if (c.target.start >= offset) {
+          c.target.propIndex += 1;
+          c.target.start -= offset;
+          c.target.end -= offset;
+        } else if (c.target.end > offset) {
+          c.target.end = offset;
+        }
+      }
+    }
+  });
+
   formatTags.forEach(f => {
     if (f.propIndex > index) f.propIndex += 1;
     else if (f.propIndex === index) {
@@ -959,8 +981,8 @@ const BRACKET_LABELS = {
   'action-result': 'C/E*', // legacy alias
   'action-purpose': 'Ac/Pur*',
   conditional: 'If/Th*',
-  temporal: 'T',
-  locative: 'L',
+  temporal: '*/T',
+  locative: '*/L',
   'action-manner': 'Ac*/Mn',
   comparison: '*/Cf',
   'negative-positive': '-/+*',
@@ -1254,6 +1276,7 @@ function renderBrackets() {
     hitPath.setAttribute('fill', 'none');
     hitPath.setAttribute('stroke', 'transparent');
     hitPath.setAttribute('stroke-width', 16);
+    hitPath.setAttribute('class', 'bracket-hit');
     hitPath.setAttribute('stroke-linecap', 'square');
     hitPath.setAttribute('stroke-linejoin', 'miter');
     hitPath.setAttribute('pointer-events', 'stroke');
@@ -2125,7 +2148,7 @@ function showBracketActions(bracketIdx, centerY, centerX) {
     <div class="drag-handle" title="Drag to move"></div>
     <button data-action="delete">Delete</button>
     <button data-action="label">Change label</button>
-    ${hasTwoLabels ? '<button data-action="swap">Swap labels</button>' : ''}
+    ${hasTwoLabels ? '<button data-action="swap">⇅ Swap labels</button>' : ''}
     <button data-action="select" title="Select bracket, then click a proposition to connect to (reparents) or another bracket to create bracket">Select to connect</button>
     <button data-action="comment" title="Add or view a comment on this bracket">${hasComment ? 'View comment' : 'Add comment'}</button>
   `;
