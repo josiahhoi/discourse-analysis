@@ -671,6 +671,7 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  overflow-x: auto;
 }
 
 /* Comments preview (right sidebar) */
@@ -904,6 +905,7 @@ body {
 .bracket-canvas-wrapper {
   position: relative;
   flex: 1;
+  min-width: 560px;
   min-height: 400px;
   background: var(--surface);
   border-radius: var(--radius);
@@ -1008,7 +1010,7 @@ body {
 }
 
 .propositions.bracket-gutter {
-  padding-left: 390px; /* Space for nested brackets with separation */
+  /* padding-left is set dynamically in JS based on actual bracket nesting depth */
 }
 
 #propositionEditor {

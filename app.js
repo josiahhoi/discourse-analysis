@@ -193,6 +193,49 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     saveBracket();
   }
+
+  if (e.key === 'Escape') {
+    // 1. Cancel in-progress bracket or arrow creation
+    if (bracketSelectStep === 1) {
+      bracketSelectStep = 0;
+      bracketFrom = null;
+      clearPropositionHighlights();
+      bracketCanvas?.classList.remove('connect-mode');
+      showStatus('Bracket selection cancelled.', 'info');
+      return;
+    }
+    if (arrowMode && (typeof pendingArrowStart !== 'undefined' && pendingArrowStart !== null)) {
+      pendingArrowStart = null;
+      showStatus('Arrow selection cancelled.', 'info');
+      return;
+    }
+
+    // 2. Dismiss any active popovers
+    const labelPicker = document.getElementById('labelPicker');
+    const bracketActions = document.getElementById('bracketActions');
+    if (labelPicker || bracketActions) {
+      if (labelPicker) labelPicker.remove();
+      if (bracketActions) {
+        bracketActions.remove();
+        clearPropositionHighlights();
+      }
+      return;
+    }
+
+    // 3. Exit active modes (Text Edit, Arrow, or Comment)
+    if (textEditMode) {
+      textEditModeBtn?.click();
+      return;
+    }
+    if (arrowMode) {
+      arrowModeBtn?.click();
+      return;
+    }
+    if (commentMode) {
+      commentModeBtn?.click();
+      return;
+    }
+  }
 }, true);
 
 function formatBracketType(type) {
@@ -806,9 +849,10 @@ function showRelationshipPicker(from, to) {
   // Add unlabelled bracket (dashed + ?); user clicks the bracket to choose relationship
   undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
   brackets = brackets.map(a => {
-    const overlaps = a.from <= to && a.to >= from;
+    // Only expand brackets that truly cross (not merely adjacent at a shared endpoint)
+    const trulyCrosses = a.from < to && a.to > from && a.to !== from && a.from !== to;
     const isEnclosingOrEnclosed = (a.from <= from && a.to >= to) || (from <= a.from && to >= a.to);
-    if (overlaps && !isEnclosingOrEnclosed) {
+    if (trulyCrosses && !isEnclosingOrEnclosed) {
       return { ...a, from: Math.min(a.from, from), to: Math.max(a.to, to) };
     }
     return a;
@@ -816,7 +860,19 @@ function showRelationshipPicker(from, to) {
 
   brackets.push({ from, to, type: 'unspecified', labelsSwapped: false });
   renderBrackets();
-  showStatus('Bracket added. Click the bracket to choose relationship.', 'success');
+
+  const bracketIdx = brackets.length - 1;
+  const blocks = propositionsContainer.querySelectorAll('.proposition-block');
+  const rFrom = blocks[from]?.getBoundingClientRect();
+  const rTo = blocks[to]?.getBoundingClientRect();
+  const wr = propositionsContainer.parentElement?.getBoundingClientRect();
+  // Position it below the bottom edge of the bracket range
+  const centerY = rTo && wr ? (rTo.bottom - wr.top + 130) : 130;
+  // Biased to the left to avoid covering the text area
+  const centerX = 220;
+
+  showLabelPicker(bracketIdx, centerY, centerX);
+  showStatus('Bracket added. Choose a relationship label.', 'success');
 }
 
 function highlightPropositionRange(from, to, on) {
@@ -995,10 +1051,12 @@ const BRACKET_LABELS = {
 
 // Bracket geometry constants (shared for getConnectionPoints and renderBrackets)
 const BRACKET_GEO = {
-  PADDING_LEFT: 390, // Space for nested brackets (2x previous)
+  PADDING_LEFT: 390, // Kept for getConnectionPoints; overridden dynamically in renderBrackets
   GAP: 4,
   BRACKET_WIDTH: 10,
   SLOT_WIDTH: 28, // Horizontal gap between slots so labels don't overlap
+  MIN_TEXT_WIDTH: 600, // Minimum width reserved for proposition text
+  BASE_PADDING: 48,  // Base left padding when no brackets are present
 };
 
 let _slotForIdx = {};
@@ -1040,8 +1098,12 @@ function computeSlotAssignments() {
 
 function getBracketX(bracketIdx) {
   const slot = _slotForIdx[bracketIdx] ?? 0;
-  // Slot 0 = rightmost (closer to text); higher slots = further left (outer brackets)
-  return BRACKET_GEO.PADDING_LEFT - BRACKET_GEO.GAP - BRACKET_GEO.BRACKET_WIDTH - slot * BRACKET_GEO.SLOT_WIDTH;
+  const { GAP, BRACKET_WIDTH, SLOT_WIDTH, BASE_PADDING } = BRACKET_GEO;
+  // Recompute dynamicPaddingLeft the same way renderBrackets does
+  const dynamicPaddingLeft = Math.max(200, brackets.length
+    ? BASE_PADDING + GAP + BRACKET_WIDTH + (_maxSlot + 1) * SLOT_WIDTH
+    : BASE_PADDING);
+  return dynamicPaddingLeft - GAP - BRACKET_WIDTH - slot * SLOT_WIDTH;
 }
 
 function getConnectionPoints(spanFrom, spanTo, positions, excludeBracketIdx = -1) {
@@ -1053,6 +1115,13 @@ function getConnectionPoints(spanFrom, spanTo, positions, excludeBracketIdx = -1
     .map((a, i) => ({ a, i }))
     .filter(({ a, i }) => i !== excludeBracketIdx && a.to === spanTo && a.from > spanFrom)
     .sort((x, y) => x.a.from - y.a.from)[0];
+  // Also look for an adjacent bracket starting exactly at spanTo (mirrors bracketContainsForSlot adjacentFrames)
+  const adjacentAtBottom = !innerAtBottom
+    ? brackets
+        .map((a, i) => ({ a, i }))
+        .filter(({ a, i }) => i !== excludeBracketIdx && a.from === spanTo && a.to > spanTo)
+        .sort((x, y) => x.a.to - y.a.to)[0]
+    : null;
 
   let topY, topLeft, bottomY, bottomLeft;
 
@@ -1084,6 +1153,21 @@ function getConnectionPoints(spanFrom, spanTo, positions, excludeBracketIdx = -1
       const starAtTop = (innerLabels.top || '').includes('*');
       bottomY = starAtTop ? innerPoints.topY : innerPoints.bottomY;
       bottomLeft = getBracketX(innerAtBottom.i);
+    }
+  } else if (adjacentAtBottom) {
+    // Adjacent bracket starts exactly at spanTo — connect arm to its X line
+    const a = adjacentAtBottom.a;
+    const innerPoints = getConnectionPoints(a.from, a.to, positions, adjacentAtBottom.i);
+    if (SINGLE_LABEL_TYPES.has(a.type)) {
+      // Single-label (Series, Alternative, etc.): connect to its center
+      bottomY = (innerPoints.topY + innerPoints.bottomY) / 2;
+      bottomLeft = getBracketX(adjacentAtBottom.i);
+    } else {
+      // Two-label: connect to whichever end has the *, same as nested bracket logic
+      const innerLabels = getBracketLabels(a.type, a.labelsSwapped ?? false);
+      const starAtTop = (innerLabels.top || '').includes('*');
+      bottomY = starAtTop ? innerPoints.topY : innerPoints.bottomY;
+      bottomLeft = getBracketX(adjacentAtBottom.i);
     }
   } else {
     bottomY = positions[spanTo].midY;
@@ -1228,6 +1312,31 @@ function renderBrackets() {
   bracketCanvas.innerHTML = '';
   // (defs and marker removed, now handled inline in renderWordArrows)
 
+
+  const BRACKET_STROKE = 1;
+  const { GAP, BRACKET_WIDTH, SLOT_WIDTH, MIN_TEXT_WIDTH, BASE_PADDING } = BRACKET_GEO;
+
+  computeSlotAssignments();
+  const slotForIdx = _slotForIdx;
+  const maxSlot = _maxSlot;
+
+  // Dynamically compute the left padding based on actual nesting depth (min 200px)
+  const dynamicPaddingLeft = Math.max(200, brackets.length
+    ? BASE_PADDING + GAP + BRACKET_WIDTH + (maxSlot + 1) * SLOT_WIDTH
+    : BASE_PADDING);
+  const PADDING_LEFT = dynamicPaddingLeft;
+
+  // Update the propositions gutter and wrapper min-width to match
+  if (propositionsContainer) {
+    propositionsContainer.classList.add('bracket-gutter');
+    propositionsContainer.style.paddingLeft = `${PADDING_LEFT}px`;
+  }
+  const canvasWrapper = propositionsContainer?.parentElement;
+  if (canvasWrapper) {
+    canvasWrapper.style.minWidth = `${PADDING_LEFT + MIN_TEXT_WIDTH}px`;
+  }
+
+  // Measure positions AFTER padding is applied to ensure sync
   const blocks = propositionsContainer.querySelectorAll('.proposition-block');
   const positions = Array.from(blocks).map((b) => {
     const r = b.getBoundingClientRect();
@@ -1240,13 +1349,6 @@ function renderBrackets() {
       midY: r.top - wrapperRect.top + r.height / 2,
     };
   });
-
-  const BRACKET_STROKE = 1;
-  const { PADDING_LEFT, GAP, BRACKET_WIDTH, SLOT_WIDTH } = BRACKET_GEO;
-
-  computeSlotAssignments();
-  const slotForIdx = _slotForIdx;
-  const maxSlot = _maxSlot;
 
   const labelsLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
   labelsLayer.setAttribute('class', 'bracket-labels-layer');
