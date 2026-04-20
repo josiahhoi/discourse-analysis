@@ -158,11 +158,11 @@ if (pageAuthorInput) {
   pageAuthorInput.value = localStorage.getItem(PAGE_AUTHOR_KEY) || '';
   syncPassageAuthorDisplay();
   pageAuthorInput.addEventListener('change', () => {
-    try { localStorage.setItem(PAGE_AUTHOR_KEY, pageAuthorInput.value.trim()); } catch (_) {}
+    try { localStorage.setItem(PAGE_AUTHOR_KEY, pageAuthorInput.value.trim()); } catch (_) { }
     syncPassageAuthorDisplay();
   });
   pageAuthorInput.addEventListener('blur', () => {
-    try { localStorage.setItem(PAGE_AUTHOR_KEY, pageAuthorInput.value.trim()); } catch (_) {}
+    try { localStorage.setItem(PAGE_AUTHOR_KEY, pageAuthorInput.value.trim()); } catch (_) { }
     syncPassageAuthorDisplay();
   });
 }
@@ -259,9 +259,9 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Backspace' || e.key === 'Delete') {
     // Only delete if we are not in an input field
     if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
-    
+
     if (selectedArrowIdx !== null && selectedArrowIdx < wordArrows.length) {
-      undoStack.push({ action: 'delete arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map(a => ({...a})), formatTags: formatTags.map(f => ({...f})), wordArrows: wordArrows.map(w => ({...w})) });
+      undoStack.push({ action: 'delete arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map(a => ({ ...a })), formatTags: formatTags.map(f => ({ ...f })), wordArrows: wordArrows.map(w => ({ ...w })) });
       wordArrows.splice(selectedArrowIdx, 1);
       selectedArrowIdx = null;
       renderPropositions();
@@ -643,7 +643,7 @@ function renderPropositions() {
       }
 
       if (textBeforeEdit !== null && currentText !== textBeforeEdit) {
-        undoStack.push({ action: 'text edit', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
+        undoStack.push({ action: 'text edit', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({ ...w })) });
       }
       propositions[i] = currentText;
       formatTags = formatTags.filter(f => f.propIndex !== i).concat(newFormatTags);
@@ -654,6 +654,28 @@ function renderPropositions() {
         if (e.key === 'Tab') {
           e.preventDefault();
           document.execCommand('insertText', false, '\t');
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const sel = window.getSelection();
+          if (sel && sel.rangeCount) {
+            const range = sel.getRangeAt(0);
+            const textSpan = block.querySelector('.proposition-text') || block;
+            const tempRange = range.cloneRange();
+            try {
+              tempRange.setStart(textSpan, 0);
+              const before = tempRange.toString();
+              const lines = before.split('\n');
+              const lastLine = lines[lines.length - 1];
+              const match = lastLine.match(/^([ \t]*)/);
+              const indent = match ? match[1] : '';
+              document.execCommand('insertText', false, '\n' + indent);
+            } catch (err) {
+              document.execCommand('insertText', false, '\n');
+            }
+          } else {
+            document.execCommand('insertText', false, '\n');
+          }
         }
         return; // Allow other keys to be natively edited
       }
@@ -677,7 +699,7 @@ function renderPropositions() {
               measureRange.setStart(textSpan, 0);
               measureRange.setEnd(r.startContainer, r.startOffset);
               offset = measureRange.toString().length;
-            } catch (_) {}
+            } catch (_) { }
           }
         }
         if (offset != null && offset > 0 && offset < currentText.length) {
@@ -761,7 +783,7 @@ function reparentBracketToProposition(bracketIdx, targetIndex) {
     return;
   }
 
-  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
+  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({ ...w })) });
 
   // Shrink any bracket that contains [from, to] (spans past at least one end) so it no longer contains it (cut at P).
   brackets.forEach((a, i) => {
@@ -880,7 +902,7 @@ function showRelationshipPicker(from, to) {
   bracketSelectStep = 0;
   bracketFrom = null;
   // Add unlabelled bracket (dashed + ?); user clicks the bracket to choose relationship
-  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
+  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({ ...w })) });
   brackets = brackets.map(a => {
     // Only expand brackets that truly cross (not merely adjacent at a shared endpoint)
     const trulyCrosses = a.from < to && a.to > from && a.to !== from && a.from !== to;
@@ -956,7 +978,7 @@ function splitPropositionAtOffset(index, offset) {
   const before = text.slice(0, offset).trim();
   const after = text.slice(offset).trim();
   if (!after) return;
-  undoStack.push({ action: 'divide', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
+  undoStack.push({ action: 'divide', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({ ...w })) });
   const baseRef = verseRefs[index] || String(index + 1);
   const firstRef = /[a-z]$/.test(baseRef) ? baseRef : baseRef + 'a';
   const secondRef = incrementVerseRef(firstRef);
@@ -1045,8 +1067,8 @@ function undoLastAction() {
   propositions = prev.propositions;
   verseRefs = prev.verseRefs ?? propositions.map((_, i) => String(i + 1));
   brackets = prev.brackets;
-  formatTags = prev.formatTags ? prev.formatTags.map(t => ({...t})) : [];
-  wordArrows = prev.wordArrows ? prev.wordArrows.map(w => ({...w})) : [];
+  formatTags = prev.formatTags ? prev.formatTags.map(t => ({ ...t })) : [];
+  wordArrows = prev.wordArrows ? prev.wordArrows.map(w => ({ ...w })) : [];
   selectedArrowIdx = null;
   renderPropositions();
   showStatus(`Undid last ${prev.action}.`, 'success');
@@ -1152,9 +1174,9 @@ function getConnectionPoints(spanFrom, spanTo, positions, excludeBracketIdx = -1
   // Also look for an adjacent bracket starting exactly at spanTo (mirrors bracketContainsForSlot adjacentFrames)
   const adjacentAtBottom = !innerAtBottom
     ? brackets
-        .map((a, i) => ({ a, i }))
-        .filter(({ a, i }) => i !== excludeBracketIdx && a.from === spanTo && a.to > spanTo)
-        .sort((x, y) => x.a.to - y.a.to)[0]
+      .map((a, i) => ({ a, i }))
+      .filter(({ a, i }) => i !== excludeBracketIdx && a.from === spanTo && a.to > spanTo)
+      .sort((x, y) => x.a.to - y.a.to)[0]
     : null;
 
   let topY, topLeft, bottomY, bottomLeft;
@@ -1260,7 +1282,7 @@ function renderWordArrows(wrapper) {
     const fBeg = fL + 5;
 
     let x1, y1, x2, y2, isLastHorizontal;
-    
+
     if (tM < fM - 10) {
       // UPWARDS: Horizontal then Vertical (Arrival at bottom edge)
       x1 = (tBeg < fL) ? fL : (tBeg > fR ? fR : fBeg);
@@ -1285,8 +1307,8 @@ function renderWordArrows(wrapper) {
       isLastHorizontal = true;
     }
 
-    const d = (isLastHorizontal && y1 !== y2) 
-      ? `M ${x1} ${y1} V ${y2} H ${x2}` 
+    const d = (isLastHorizontal && y1 !== y2)
+      ? `M ${x1} ${y1} V ${y2} H ${x2}`
       : `M ${x1} ${y1} H ${x2} V ${y2}`;
 
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -1311,11 +1333,11 @@ function renderWordArrows(wrapper) {
     const hL = 7; // head length
     const hW = 3.5;  // head half-width
     if (isLastHorizontal) {
-      if (x2 < x1) points = `${x2},${y2} ${x2+hL},${y2-hW} ${x2+hL},${y2+hW}`; // Left
-      else points = `${x2},${y2} ${x2-hL},${y2-hW} ${x2-hL},${y2+hW}`; // Right
+      if (x2 < x1) points = `${x2},${y2} ${x2 + hL},${y2 - hW} ${x2 + hL},${y2 + hW}`; // Left
+      else points = `${x2},${y2} ${x2 - hL},${y2 - hW} ${x2 - hL},${y2 + hW}`; // Right
     } else {
-      if (y2 < y1) points = `${x2},${y2} ${x2-hW},${y2+hL} ${x2+hW},${y2+hL}`; // Up
-      else points = `${x2},${y2} ${x2-hW},${y2-hL} ${x2+hW},${y2-hL}`; // Down
+      if (y2 < y1) points = `${x2},${y2} ${x2 - hW},${y2 + hL} ${x2 + hW},${y2 + hL}`; // Up
+      else points = `${x2},${y2} ${x2 - hW},${y2 - hL} ${x2 + hW},${y2 - hL}`; // Down
     }
     const head = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     head.setAttribute('points', points);
@@ -1333,7 +1355,7 @@ function renderWordArrows(wrapper) {
     hit.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      undoStack.push({ action: 'delete arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map(a => ({...a})), formatTags: formatTags.map(f => ({...f})), wordArrows: wordArrows.map(w => ({...w})) });
+      undoStack.push({ action: 'delete arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map(a => ({ ...a })), formatTags: formatTags.map(f => ({ ...f })), wordArrows: wordArrows.map(w => ({ ...w })) });
       wordArrows.splice(idx, 1);
       renderBrackets();
       showStatus('Arrow removed.', 'success');
@@ -1513,7 +1535,7 @@ function renderBrackets() {
       el.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
+        undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({ ...w })) });
         brackets.splice(idx, 1);
         renderBrackets();
         showStatus('Bracket removed.', 'success');
@@ -1759,14 +1781,14 @@ function makePopupDraggable(popover, handleSelector) {
       const dy = e2.clientY - startY;
       const rect = wrapper.getBoundingClientRect();
       const popRect = popover.getBoundingClientRect();
-      
+
       let left = startLeft + dx;
       let top = startTop + dy;
-      
+
       // Constraints
       left = Math.max(0, Math.min(left, rect.width - popRect.width));
       top = Math.max(0, Math.min(top, rect.height - popRect.height));
-      
+
       popover.style.left = left + 'px';
       popover.style.top = top + 'px';
     };
@@ -1787,7 +1809,7 @@ function makePopupDraggable(popover, handleSelector) {
 function makeCommentPopoverDraggableAndResizable(popover) {
   const wrapper = popover.parentElement;
   if (!wrapper) return;
-  
+
   makePopupDraggable(popover, '.comment-popover-title');
 
   const resizeHandle = document.createElement('div');
@@ -1943,7 +1965,7 @@ function showCommentPopoverForText(propIndex, start, end, existingCommentId = nu
         const replyText = (replyTa.value || '').trim();
         if (!replyText) return;
         const replyAuthor = (replyAuthorInput && replyAuthorInput.value || '').trim() || (localStorage.getItem(COMMENT_AUTHOR_KEY) || '');
-        if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) {}
+        if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) { }
         if (!existingComment.replies) existingComment.replies = [];
         existingComment.replies.push({
           id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
@@ -1957,105 +1979,105 @@ function showCommentPopoverForText(propIndex, start, end, existingCommentId = nu
       });
     }
   } else {
-  const ta = popover.querySelector('textarea');
-  const authorInput = popover.querySelector('#commentAuthorText');
-  ta.focus();
+    const ta = popover.querySelector('textarea');
+    const authorInput = popover.querySelector('#commentAuthorText');
+    ta.focus();
 
-  if (existingComment) {
-    const repliesList = popover.querySelector('.comment-replies-list');
-    const replyCountEl = popover.querySelector('.comment-replies-title');
-    const renderReplies = () => {
-      if (!repliesList) return;
-      repliesList.innerHTML = '';
-      const replies = existingComment.replies || [];
-      replyCountEl.textContent = `Replies (${replies.length})`;
-      replies.forEach((r) => {
-        const div = document.createElement('div');
-        div.className = 'comment-reply-item';
-        div.innerHTML = `<span class="comment-reply-meta">${escapeHtml(r.author || '')} · ${r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</span><p class="comment-reply-text">${escapeHtml(r.text || '')}</p>`;
-        repliesList.appendChild(div);
-      });
-    };
-    renderReplies();
-    const replyTa = popover.querySelector('.comment-reply-add textarea');
-    const replyAuthorInput = popover.querySelector('#replyAuthorText');
-    const addReplyBtn = popover.querySelector('[data-action="add-reply"]');
-    if (addReplyBtn && replyTa) {
-      addReplyBtn.addEventListener('click', () => {
-        const replyText = (replyTa.value || '').trim();
-        if (!replyText) return;
-        const replyAuthor = (replyAuthorInput && replyAuthorInput.value || '').trim() || (localStorage.getItem(COMMENT_AUTHOR_KEY) || '');
-        if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) {}
-        if (!existingComment.replies) existingComment.replies = [];
-        existingComment.replies.push({
-          id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
-          text: replyText,
-          author: replyAuthor || undefined,
-          createdAt: new Date().toISOString(),
-        });
-        replyTa.value = '';
-        renderReplies();
-        renderCommentPreviews();
-      });
-    }
-  }
-
-  popover.querySelector('[data-action="save"]').addEventListener('click', () => {
-    const text = (ta.value || '').trim();
-    const author = (authorInput && authorInput.value || '').trim();
-    if (author) try { localStorage.setItem(COMMENT_AUTHOR_KEY, author); } catch (_) {}
-    let savedCommentId = null;
     if (existingComment) {
-      existingComment.text = text;
-      existingComment.author = author || existingComment.author;
-      if (!text) comments = comments.filter((c) => c.id !== existingComment.id);
-      else {
-        savedCommentId = existingComment.id;
-        if (existingComment.target && existingComment.target.propIndex === propIndex) {
-          existingComment.target.start = start;
-          existingComment.target.end = end;
-        }
+      const repliesList = popover.querySelector('.comment-replies-list');
+      const replyCountEl = popover.querySelector('.comment-replies-title');
+      const renderReplies = () => {
+        if (!repliesList) return;
+        repliesList.innerHTML = '';
+        const replies = existingComment.replies || [];
+        replyCountEl.textContent = `Replies (${replies.length})`;
+        replies.forEach((r) => {
+          const div = document.createElement('div');
+          div.className = 'comment-reply-item';
+          div.innerHTML = `<span class="comment-reply-meta">${escapeHtml(r.author || '')} · ${r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</span><p class="comment-reply-text">${escapeHtml(r.text || '')}</p>`;
+          repliesList.appendChild(div);
+        });
+      };
+      renderReplies();
+      const replyTa = popover.querySelector('.comment-reply-add textarea');
+      const replyAuthorInput = popover.querySelector('#replyAuthorText');
+      const addReplyBtn = popover.querySelector('[data-action="add-reply"]');
+      if (addReplyBtn && replyTa) {
+        addReplyBtn.addEventListener('click', () => {
+          const replyText = (replyTa.value || '').trim();
+          if (!replyText) return;
+          const replyAuthor = (replyAuthorInput && replyAuthorInput.value || '').trim() || (localStorage.getItem(COMMENT_AUTHOR_KEY) || '');
+          if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) { }
+          if (!existingComment.replies) existingComment.replies = [];
+          existingComment.replies.push({
+            id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+            text: replyText,
+            author: replyAuthor || undefined,
+            createdAt: new Date().toISOString(),
+          });
+          replyTa.value = '';
+          renderReplies();
+          renderCommentPreviews();
+        });
       }
-    } else if (text) {
-      const newId = nextCommentId();
-      comments.push({
-        id: newId,
-        type: 'text',
-        target: { propIndex, start, end },
-        text,
-        author: author || undefined,
-        createdAt: new Date().toISOString(),
-        replies: [],
-      });
-      savedCommentId = newId;
     }
-    const lastWidth = popover.offsetWidth;
-    const lastHeight = popover.offsetHeight;
-    const lastLeft = popover.style.left;
-    const lastTop = popover.style.top;
-    popover.remove();
-    document.removeEventListener('click', dismiss);
-    renderPropositions();
-    renderCommentPreviews();
-    showStatus(existingComment ? (text ? 'Comment updated.' : 'Comment removed.') : 'Comment added.', 'success');
-    if (savedCommentId) showCommentPopoverForText(propIndex, start, end, savedCommentId, { viewMode: true, lastWidth, lastHeight, lastLeft, lastTop });
-  });
 
-  if (existingComment) {
-    popover.querySelector('[data-action="delete"]').addEventListener('click', () => {
-      comments = comments.filter((c) => c.id !== existingComment.id);
+    popover.querySelector('[data-action="save"]').addEventListener('click', () => {
+      const text = (ta.value || '').trim();
+      const author = (authorInput && authorInput.value || '').trim();
+      if (author) try { localStorage.setItem(COMMENT_AUTHOR_KEY, author); } catch (_) { }
+      let savedCommentId = null;
+      if (existingComment) {
+        existingComment.text = text;
+        existingComment.author = author || existingComment.author;
+        if (!text) comments = comments.filter((c) => c.id !== existingComment.id);
+        else {
+          savedCommentId = existingComment.id;
+          if (existingComment.target && existingComment.target.propIndex === propIndex) {
+            existingComment.target.start = start;
+            existingComment.target.end = end;
+          }
+        }
+      } else if (text) {
+        const newId = nextCommentId();
+        comments.push({
+          id: newId,
+          type: 'text',
+          target: { propIndex, start, end },
+          text,
+          author: author || undefined,
+          createdAt: new Date().toISOString(),
+          replies: [],
+        });
+        savedCommentId = newId;
+      }
+      const lastWidth = popover.offsetWidth;
+      const lastHeight = popover.offsetHeight;
+      const lastLeft = popover.style.left;
+      const lastTop = popover.style.top;
       popover.remove();
       document.removeEventListener('click', dismiss);
       renderPropositions();
       renderCommentPreviews();
-      showStatus('Comment removed.', 'success');
+      showStatus(existingComment ? (text ? 'Comment updated.' : 'Comment removed.') : 'Comment added.', 'success');
+      if (savedCommentId) showCommentPopoverForText(propIndex, start, end, savedCommentId, { viewMode: true, lastWidth, lastHeight, lastLeft, lastTop });
     });
-  }
 
-  popover.querySelector('[data-action="cancel"]').addEventListener('click', () => {
-    popover.remove();
-    document.removeEventListener('click', dismiss);
-  });
+    if (existingComment) {
+      popover.querySelector('[data-action="delete"]').addEventListener('click', () => {
+        comments = comments.filter((c) => c.id !== existingComment.id);
+        popover.remove();
+        document.removeEventListener('click', dismiss);
+        renderPropositions();
+        renderCommentPreviews();
+        showStatus('Comment removed.', 'success');
+      });
+    }
+
+    popover.querySelector('[data-action="cancel"]').addEventListener('click', () => {
+      popover.remove();
+      document.removeEventListener('click', dismiss);
+    });
   }
 
   const dismiss = (e) => {
@@ -2169,7 +2191,7 @@ function showCommentPopoverForBracket(bracketIdx, centerY, centerX, options = {}
         const replyText = (replyTa.value || '').trim();
         if (!replyText) return;
         const replyAuthor = (replyAuthorInput && replyAuthorInput.value || '').trim() || (localStorage.getItem(COMMENT_AUTHOR_KEY) || '');
-        if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) {}
+        if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) { }
         if (!existingComment.replies) existingComment.replies = [];
         existingComment.replies.push({
           id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
@@ -2183,98 +2205,98 @@ function showCommentPopoverForBracket(bracketIdx, centerY, centerX, options = {}
       });
     }
   } else {
-  const ta = popover.querySelector('textarea');
-  const authorInput = popover.querySelector('#commentAuthorBracket');
-  ta.focus();
+    const ta = popover.querySelector('textarea');
+    const authorInput = popover.querySelector('#commentAuthorBracket');
+    ta.focus();
 
-  if (existingComment) {
-    const repliesList = popover.querySelector('.comment-replies-list');
-    const replyCountEl = popover.querySelector('.comment-replies-title');
-    const renderReplies = () => {
-      if (!repliesList) return;
-      repliesList.innerHTML = '';
-      const replies = existingComment.replies || [];
-      replyCountEl.textContent = `Replies (${replies.length})`;
-      replies.forEach((r) => {
-        const div = document.createElement('div');
-        div.className = 'comment-reply-item';
-        div.innerHTML = `<span class="comment-reply-meta">${escapeHtml(r.author || '')} · ${r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</span><p class="comment-reply-text">${escapeHtml(r.text || '')}</p>`;
-        repliesList.appendChild(div);
-      });
-    };
-    renderReplies();
-    const replyTa = popover.querySelector('.comment-reply-add textarea');
-    const replyAuthorInput = popover.querySelector('#replyAuthorBracket');
-    const addReplyBtn = popover.querySelector('[data-action="add-reply"]');
-    if (addReplyBtn && replyTa) {
-      addReplyBtn.addEventListener('click', () => {
-        const replyText = (replyTa.value || '').trim();
-        if (!replyText) return;
-        const replyAuthor = (replyAuthorInput && replyAuthorInput.value || '').trim() || (localStorage.getItem(COMMENT_AUTHOR_KEY) || '');
-        if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) {}
-        if (!existingComment.replies) existingComment.replies = [];
-        existingComment.replies.push({
-          id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
-          text: replyText,
-          author: replyAuthor || undefined,
-          createdAt: new Date().toISOString(),
-        });
-        replyTa.value = '';
-        renderReplies();
-        renderCommentPreviews();
-      });
-    }
-  }
-
-  popover.querySelector('[data-action="save"]').addEventListener('click', () => {
-    const text = (ta.value || '').trim();
-    const author = (authorInput && authorInput.value || '').trim();
-    if (author) try { localStorage.setItem(COMMENT_AUTHOR_KEY, author); } catch (_) {}
-    let reopenViewMode = false;
     if (existingComment) {
-      existingComment.text = text;
-      existingComment.author = author || existingComment.author;
-      if (!text) comments = comments.filter((c) => c.id !== existingComment.id);
-      else reopenViewMode = true;
-    } else if (text) {
-      comments.push({
-        id: nextCommentId(),
-        type: 'bracket',
-        target: { bracketIdx },
-        text,
-        author: author || undefined,
-        createdAt: new Date().toISOString(),
-        replies: [],
-      });
-      reopenViewMode = true;
+      const repliesList = popover.querySelector('.comment-replies-list');
+      const replyCountEl = popover.querySelector('.comment-replies-title');
+      const renderReplies = () => {
+        if (!repliesList) return;
+        repliesList.innerHTML = '';
+        const replies = existingComment.replies || [];
+        replyCountEl.textContent = `Replies (${replies.length})`;
+        replies.forEach((r) => {
+          const div = document.createElement('div');
+          div.className = 'comment-reply-item';
+          div.innerHTML = `<span class="comment-reply-meta">${escapeHtml(r.author || '')} · ${r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</span><p class="comment-reply-text">${escapeHtml(r.text || '')}</p>`;
+          repliesList.appendChild(div);
+        });
+      };
+      renderReplies();
+      const replyTa = popover.querySelector('.comment-reply-add textarea');
+      const replyAuthorInput = popover.querySelector('#replyAuthorBracket');
+      const addReplyBtn = popover.querySelector('[data-action="add-reply"]');
+      if (addReplyBtn && replyTa) {
+        addReplyBtn.addEventListener('click', () => {
+          const replyText = (replyTa.value || '').trim();
+          if (!replyText) return;
+          const replyAuthor = (replyAuthorInput && replyAuthorInput.value || '').trim() || (localStorage.getItem(COMMENT_AUTHOR_KEY) || '');
+          if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) { }
+          if (!existingComment.replies) existingComment.replies = [];
+          existingComment.replies.push({
+            id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+            text: replyText,
+            author: replyAuthor || undefined,
+            createdAt: new Date().toISOString(),
+          });
+          replyTa.value = '';
+          renderReplies();
+          renderCommentPreviews();
+        });
+      }
     }
-    const lastWidth = popover.offsetWidth;
-    const lastHeight = popover.offsetHeight;
-    const lastLeft = popover.style.left;
-    const lastTop = popover.style.top;
-    popover.remove();
-    document.removeEventListener('click', dismiss);
-    renderCommentPreviews();
-    renderBrackets();
-    showStatus(existingComment ? (text ? 'Comment updated.' : 'Comment removed.') : 'Comment added.', 'success');
-    if (reopenViewMode) showCommentPopoverForBracket(bracketIdx, centerY, centerX, { viewMode: true, lastWidth, lastHeight, lastLeft, lastTop });
-  });
 
-  if (existingComment) {
-    popover.querySelector('[data-action="delete"]').addEventListener('click', () => {
-      comments = comments.filter((c) => c.id !== existingComment.id);
+    popover.querySelector('[data-action="save"]').addEventListener('click', () => {
+      const text = (ta.value || '').trim();
+      const author = (authorInput && authorInput.value || '').trim();
+      if (author) try { localStorage.setItem(COMMENT_AUTHOR_KEY, author); } catch (_) { }
+      let reopenViewMode = false;
+      if (existingComment) {
+        existingComment.text = text;
+        existingComment.author = author || existingComment.author;
+        if (!text) comments = comments.filter((c) => c.id !== existingComment.id);
+        else reopenViewMode = true;
+      } else if (text) {
+        comments.push({
+          id: nextCommentId(),
+          type: 'bracket',
+          target: { bracketIdx },
+          text,
+          author: author || undefined,
+          createdAt: new Date().toISOString(),
+          replies: [],
+        });
+        reopenViewMode = true;
+      }
+      const lastWidth = popover.offsetWidth;
+      const lastHeight = popover.offsetHeight;
+      const lastLeft = popover.style.left;
+      const lastTop = popover.style.top;
       popover.remove();
       document.removeEventListener('click', dismiss);
       renderCommentPreviews();
       renderBrackets();
-      showStatus('Comment removed.', 'success');
+      showStatus(existingComment ? (text ? 'Comment updated.' : 'Comment removed.') : 'Comment added.', 'success');
+      if (reopenViewMode) showCommentPopoverForBracket(bracketIdx, centerY, centerX, { viewMode: true, lastWidth, lastHeight, lastLeft, lastTop });
     });
-  }
 
-  popover.querySelector('[data-action="cancel"]').addEventListener('click', () => {
-    popover.remove();
-    document.removeEventListener('click', dismiss);
-  });
+    if (existingComment) {
+      popover.querySelector('[data-action="delete"]').addEventListener('click', () => {
+        comments = comments.filter((c) => c.id !== existingComment.id);
+        popover.remove();
+        document.removeEventListener('click', dismiss);
+        renderCommentPreviews();
+        renderBrackets();
+        showStatus('Comment removed.', 'success');
+      });
+    }
+
+    popover.querySelector('[data-action="cancel"]').addEventListener('click', () => {
+      popover.remove();
+      document.removeEventListener('click', dismiss);
+    });
   }
 
   const dismiss = (e) => {
@@ -2323,7 +2345,7 @@ function showBracketActions(bracketIdx, centerY, centerX) {
 
   popover.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
     e.stopPropagation();
-    undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
+    undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({ ...w })) });
     brackets.splice(bracketIdx, 1);
     comments = comments.filter((c) => c.type !== 'bracket' || c.target?.bracketIdx !== bracketIdx);
     comments.forEach((c) => { if (c.type === 'bracket' && c.target?.bracketIdx > bracketIdx) c.target.bracketIdx--; });
@@ -2343,7 +2365,7 @@ function showBracketActions(bracketIdx, centerY, centerX) {
   if (swapBtn) {
     swapBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
+      undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({ ...w })) });
       brackets[bracketIdx].labelsSwapped = !brackets[bracketIdx].labelsSwapped;
       renderBrackets();
       clearAndDismiss();
@@ -2532,7 +2554,7 @@ if (newBracketBtn) newBracketBtn.addEventListener('click', () => handleNewBracke
 // Clear brackets
 if (clearBracketsBtn) clearBracketsBtn.addEventListener('click', () => {
   if (brackets.length === 0) return;
-  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({...w})) });
+  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({ ...w })) });
   brackets = [];
   renderBrackets();
   bracketSelectStep = 0;
@@ -2696,13 +2718,13 @@ function getExportFilename(defaultOnly = false) {
   if (!defaultOnly && customInput && customInput.value.trim()) {
     return customInput.value.trim();
   }
-  
+
   const ref = passageRef || 'passage';
   // Normalize dashes (em-dash, en-dash) to regular hyphen for parsing
   const normalizedRef = ref.replace(/[\u2013\u2014]/g, '-');
   const match = normalizedRef.match(/^([\d\s]*[a-zA-Z][a-zA-Z\s.]*[a-zA-Z])\s+(\d+)(?::(\d+)(?:-(\d+))?)?/);
   let defaultPassagePrefix = ref.replace(/[\s:]+/g, '-');
-  
+
   if (match) {
     const book = getBookAbbreviation(match[1]);
     const chap = match[2];
@@ -2710,7 +2732,7 @@ function getExportFilename(defaultOnly = false) {
     const ev = match[4] || sv;
     defaultPassagePrefix = `${book}-${chap}-${sv}-${ev}`;
   }
-  
+
   let authorPart = 'unknown';
   const authorName = (document.getElementById('pageAuthor')?.value || '').trim();
   if (authorName) {
@@ -2888,7 +2910,7 @@ function importBracket(data) {
   const pageAuthorInputEl = document.getElementById('pageAuthor');
   if (pageAuthorInputEl && data.pageAuthor != null) {
     pageAuthorInputEl.value = data.pageAuthor;
-    try { localStorage.setItem(PAGE_AUTHOR_KEY, String(data.pageAuthor).trim()); } catch (_) {}
+    try { localStorage.setItem(PAGE_AUTHOR_KEY, String(data.pageAuthor).trim()); } catch (_) { }
   }
   if (typeof syncPassageAuthorDisplay === 'function') syncPassageAuthorDisplay();
   const copyrightLabel = document.getElementById('copyrightLabel');
@@ -2924,7 +2946,7 @@ async function copyDiagramForWord() {
   try {
     // Calculate bounding box of all content within the workspace to crop out empty space
     const workspaceRect = workspace.getBoundingClientRect();
-    
+
     // Elements that MUST be visible (propositions and brackets)
     const coreElements = [
       ...Array.from(workspace.querySelectorAll('.proposition-text')),
@@ -2987,7 +3009,7 @@ async function copyDiagramForWord() {
       const y = Math.max(0, minY - workspaceRect.top - padding);
       const width = Math.min(workspaceRect.width, (maxX - minX) + (padding * 2));
       const height = Math.min(workspaceRect.height, (maxY - minY) + (padding * 2));
-      
+
       options.x = x;
       options.y = y;
       options.width = width;
@@ -3132,14 +3154,14 @@ function getWordAtEvent(e) {
 
   const propIndex = parseInt(block.dataset.index);
   const textSpan = block.querySelector('.proposition-text');
-  
+
   // Calculate offset relative to entire text in proposition-text
   // We can use a range from start of textSpan to start of our node
   const preRange = document.createRange();
   preRange.setStartBefore(textSpan.firstChild);
   preRange.setEnd(node, start);
   const relativeStart = preRange.toString().length;
-  
+
   preRange.setEnd(node, end);
   const relativeEnd = preRange.toString().length;
 
@@ -3247,7 +3269,7 @@ if (propositionsContainer) {
         showStatus('Arrow cancelled.', 'info');
         return;
       }
-      undoStack.push({ action: 'add arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map(a => ({...a})), formatTags: formatTags.map(f => ({...f})), wordArrows: wordArrows.map(w => ({...w})) });
+      undoStack.push({ action: 'add arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map(a => ({ ...a })), formatTags: formatTags.map(f => ({ ...f })), wordArrows: wordArrows.map(w => ({ ...w })) });
       wordArrows.push({
         fromProp: pendingArrowStart.propIndex,
         fromStart: pendingArrowStart.start,
@@ -3341,7 +3363,7 @@ if (toggleRightSidebarBtn && rightSidebar) {
 function attachFilenameObservers() {
   const pRef = document.getElementById('passageRef');
   const pAuthor = document.getElementById('pageAuthor');
-  
+
   if (pRef) {
     const obs = new MutationObserver(updateFilenamePlaceholder);
     obs.observe(pRef, { childList: true, characterData: true, subtree: true });
