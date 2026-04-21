@@ -44,7 +44,8 @@
         <h3>Logical Relationships</h3>
         <p class="hint">Split: click in text to place the cursor, then press Enter. Single click to edit. Click nodes or verse refs to create brackets. Based on <a href="https://s3.amazonaws.com/cdn.gospelpaths.com/tenants/5/1738104708694-The18LogicalRelationshipsEngnewlogo.pdf" target="_blank" rel="noopener">Bible Bracket's 18 relationships</a>.</p>
         <div class="save-load-row">
-          <button id="themeToggle" type="button" title="Toggle light/dark mode">Light / Dark</button>
+          <button id="themeToggle" type="button" title="Toggle light/dark mode">Light Mode</button>
+          <button id="toggleCommentsBtn" type="button" title="Show/Hide comments and highlights">Show Comments</button>
         </div>
         <p class="hint-small">Click bracket for Delete / Change label / Select to connect. Double-click bracket to change label.</p>
         <button id="clearBrackets" class="secondary">Clear All Brackets</button>
@@ -95,11 +96,6 @@
           </div>
           <div class="passage-header-right">
             <span id="passageAuthor" class="passage-author" aria-label="Page author"></span>
-            <button id="toggleRightSidebarBtn" class="sidebar-toggle-btn" title="Toggle Comments">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="9 18 15 12 9 6"></polyline>
-              </svg>
-            </button>
           </div>
         </div>
         <div class="bracket-canvas-wrapper">
@@ -111,7 +107,7 @@
             </defs>
           </svg>
           <div class="propositions bracket-gutter" id="propositions">
-            <textarea id="propositionEditor" placeholder="Fetch or import a passage, then click in Divide mode to split the text where you want."></textarea>
+            <textarea id="propositionEditor" placeholder="Fetch or import a passage to start. Click in the text and press Enter to split it into a new line. Click the dots to create brackets and logical relationships."></textarea>
           </div>
         </div>
       </section>
@@ -124,7 +120,7 @@
 
     <footer class="footer">
       <p>ESV via <a href="https://api.esv.org" target="_blank" rel="noopener">api.esv.org</a>. Greek: <a href="https://sblgnt.com" target="_blank" rel="noopener">SBLGNT</a> (CC-BY 4.0).</p>
-      <p class="footer-version">Version 2.3.3 · Made by Josiah Hoi and Bryce Bussert, based on the method taught by Dr. Daniel M. Gurtner.</p>
+      <p class="footer-version">Version 2.3.4 · Made by Josiah Hoi and Bryce Bussert, based on the method taught by Dr. Daniel M. Gurtner.</p>
     </footer>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>

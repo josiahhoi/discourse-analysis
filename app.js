@@ -57,6 +57,7 @@ let wordArrows = [];
 let selectedArrowIdx = null; // { fromProp, fromStart, fromEnd, toProp, toStart, toEnd }
 let pendingArrowStart = null; // { propIndex, start, end }
 let arrowHighlight = null; // DOM element for hovering word overlay
+let showCommentsEnabled = false;
 
 function clearAllFormatting() {
   brackets = [];
@@ -142,16 +143,27 @@ if (versionSelect) {
 const THEME_KEY = 'biblebracket_theme';
 const COMMENT_AUTHOR_KEY = 'biblebracket_comment_author';
 const PAGE_AUTHOR_KEY = 'biblebracket_page_author';
+function updateThemeButtonText() {
+  const themeToggle = document.getElementById('themeToggle');
+  if (!themeToggle) return;
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  themeToggle.textContent = isLight ? 'Dark Mode' : 'Light Mode';
+}
+
 function initTheme() {
   const saved = localStorage.getItem(THEME_KEY);
   if (saved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  updateThemeButtonText();
 }
+
 function toggleTheme() {
   const html = document.documentElement;
   const isLight = html.getAttribute('data-theme') === 'light';
   html.setAttribute('data-theme', isLight ? '' : 'light');
   localStorage.setItem(THEME_KEY, isLight ? 'dark' : 'light');
+  updateThemeButtonText();
 }
+
 initTheme();
 const themeToggle = document.getElementById('themeToggle');
 if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
@@ -175,6 +187,25 @@ if (pageAuthorInput) {
   pageAuthorInput.addEventListener('blur', () => {
     try { localStorage.setItem(PAGE_AUTHOR_KEY, pageAuthorInput.value.trim()); } catch (_) { }
     syncPassageAuthorDisplay();
+  });
+}
+
+// Toggle comments visibility
+const toggleCommentsBtn = document.getElementById('toggleCommentsBtn');
+if (toggleCommentsBtn) {
+  const updateToggleUI = () => {
+    toggleCommentsBtn.classList.toggle('active', showCommentsEnabled);
+    toggleCommentsBtn.textContent = showCommentsEnabled ? 'Hide Comments' : 'Show Comments';
+  };
+  updateToggleUI();
+  
+  toggleCommentsBtn.addEventListener('click', () => {
+    showCommentsEnabled = !showCommentsEnabled;
+    updateToggleUI();
+    renderPropositions();
+    renderBrackets();
+    renderCommentPreviews();
+    showStatus(showCommentsEnabled ? 'Showing comments.' : 'Hiding comments.', 'success');
   });
 }
 
@@ -430,6 +461,7 @@ async function fetchPassage() {
     }
 
     if (passageHeader) passageHeader.textContent = passageRef;
+
     clearAllFormatting();
     renderPropositions();
     renderBrackets();
@@ -1764,6 +1796,10 @@ function getCommentById(id) {
 const COMMENT_PREVIEW_MAX = 120;
 
 function renderCommentPreviews() {
+  const container = document.getElementById('commentsPreview');
+  if (container) container.style.display = showCommentsEnabled ? 'flex' : 'none';
+  if (!showCommentsEnabled) return;
+
   const listEl = document.getElementById('commentsPreviewList');
   if (!listEl) return;
   listEl.innerHTML = '';
@@ -3409,7 +3445,7 @@ if (propositionsContainer?.parentElement) {
 
 // Initial placeholder (when no passage yet)
 const propEditor = document.getElementById('propositionEditor');
-if (propEditor) propEditor.placeholder = 'Fetch or import a passage, then use Divide mode to click and split the text.';
+if (propEditor) propEditor.placeholder = 'Fetch or import a passage to start. Click in the text and hit Enter to split it into a new line. Click the dots to create brackets and logical relationships.';
 
 // Sidebar Toggles
 const toggleLeftSidebarBtn = document.getElementById('toggleLeftSidebarBtn');
@@ -3424,12 +3460,7 @@ if (toggleLeftSidebarBtn && leftSidebar) {
   });
 }
 
-if (toggleRightSidebarBtn && rightSidebar) {
-  toggleRightSidebarBtn.addEventListener('click', () => {
-    rightSidebar.classList.toggle('sidebar-hidden');
-    toggleRightSidebarBtn.classList.toggle('flipped');
-  });
-}
+
 
 // Update filename placeholder logic
 function attachFilenameObservers() {

@@ -603,6 +603,12 @@ body {
   border-color: var(--text-muted);
 }
 
+.save-load-row button.active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
 #saveBtn {
   background: var(--accent);
   color: var(--bg);
