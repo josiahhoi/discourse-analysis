@@ -258,47 +258,23 @@ body {
 .main {
   flex: 1;
   display: flex;
-  gap: 1.5rem;
-  padding: 1.5rem 2rem;
   overflow: hidden;
+  /* Removed padding/gap here to let sidebar sit flush */
 }
 
-/* Bracket types sidebar */
-.bracket-types {
-  flex-shrink: 0;
-  width: 220px;
-  max-height: 85vh;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 1rem;
-  background: var(--surface);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-}
-
-.bracket-types .type-group {
-  display: block;
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--accent-dim);
-  margin: 0.75rem 0 0.35rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--border);
-}
-
+/* Sidebar */
 .sidebar {
   flex-shrink: 0;
-  width: 240px;
+  width: 250px;
   background: var(--surface);
   border-right: 1px solid var(--border);
-  padding: 1.25rem 1rem;
+  padding: 1.5rem 1.25rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
 }
+
 
 .sidebar::-webkit-scrollbar {
   width: 4px;
@@ -735,6 +711,7 @@ body {
   flex-direction: column;
   min-width: 0;
   overflow-x: auto;
+  padding: 1.5rem 2rem; /* Add consistent padding here */
 }
 
 /* Comments preview (right sidebar) */
