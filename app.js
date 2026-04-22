@@ -99,8 +99,9 @@ const saveAsBtn = document.getElementById('saveAsBtn');
 const openFileBtn = document.getElementById('openFileBtn');
 const importFileInput = document.getElementById('importFileInput');
 
-const copyForWordBtn = document.getElementById('copyForWordBtn');
-const copyDataBtn = document.getElementById('copyDataBtn');
+const exportMenuBtn = document.getElementById('exportMenuBtn');
+const copyDataBtn = null; // Replaced by menu
+const copyForWordBtn = null; // Replaced by menu
 
 const newBracketBtn = document.getElementById('newBracketBtn');
 const propositionEditor = document.getElementById('propositionEditor');
@@ -2981,8 +2982,6 @@ async function copyDiagramForWord() {
   }
 }
 
-if (copyForWordBtn) copyForWordBtn.addEventListener('click', copyDiagramForWord);
-
 // ── PNG metadata: embed bracket JSON into a tEXt chunk ──────────────────────
 
 /**
@@ -3181,8 +3180,9 @@ async function saveImageWithData() {
   }
 }
 
-const saveImageBtn = document.getElementById('saveImageBtn');
-if (saveImageBtn) saveImageBtn.addEventListener('click', saveImageWithData);
+    showStatus(err.message || 'Save failed.', 'error');
+  }
+}
 
 // ── Drag-and-drop import (JSON files and metadata-enriched PNGs) ─────────────
 
@@ -3240,21 +3240,59 @@ dropZone.addEventListener('drop', async (e) => {
 });
 
 
-if (copyDataBtn) {
-  copyDataBtn.addEventListener('click', async () => {
-    if (propositions.length === 0) {
-      showStatus('Nothing to copy. Fetch or import a passage first.', 'error');
-      return;
-    }
-    const data = buildBracketData();
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(data));
-      showStatus('Bracket data copied to clipboard. Paste into the "Paste passage text" box to import elsewhere.', 'success');
-    } catch (err) {
-      showStatus('Could not access clipboard. Please use Export instead.', 'error');
-    }
+// ── Consolidated Export Menu ───────────────────────────────────────────────
+
+function showExportMenu(e) {
+  const existing = document.getElementById('exportPicker');
+  if (existing) {
+    existing.remove();
+    return;
+  }
+
+  const picker = document.createElement('div');
+  picker.id = 'exportPicker';
+  picker.className = 'label-picker relationship-picker-fixed';
+  
+  const options = [
+    { label: '🖼️ Copy image (Word)', action: copyDiagramForWord },
+    { label: '💾 Save image (Local)', action: saveImageWithData },
+    { label: '📄 Export PDF (DNA)', action: exportPdf },
+    { label: '📋 Copy bracket data', action: async () => {
+        const data = buildBracketData();
+        await navigator.clipboard.writeText(JSON.stringify(data));
+        showStatus('Data copied to clipboard.', 'success');
+    }},
+  ];
+
+  options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = opt.label;
+    btn.style.width = '100%';
+    btn.style.textAlign = 'left';
+    btn.style.padding = '0.75rem 1rem';
+    btn.addEventListener('click', () => {
+      picker.remove();
+      opt.action();
+    });
+    picker.appendChild(btn);
   });
+
+  document.body.appendChild(picker);
+  const rect = exportMenuBtn.getBoundingClientRect();
+  picker.style.top = `${rect.top}px`;
+  picker.style.left = `${rect.right + 10}px`;
+
+  const closeHandler = (ev) => {
+    if (!picker.contains(ev.target) && ev.target !== exportMenuBtn) {
+      picker.remove();
+      document.removeEventListener('mousedown', closeHandler);
+    }
+  };
+  document.addEventListener('mousedown', closeHandler);
 }
+
+if (exportMenuBtn) exportMenuBtn.addEventListener('click', showExportMenu);
 
 if (saveBtn) saveBtn.addEventListener('click', () => saveBracket());
 if (saveAsBtn) saveAsBtn.addEventListener('click', () => saveBracketAs());
@@ -3840,8 +3878,7 @@ async function exportPdf() {
   }
 }
 
-const exportPdfBtn = document.getElementById('exportPdfBtn');
-if (exportPdfBtn) exportPdfBtn.addEventListener('click', exportPdf);
+// Export PDF function removed listener from here, handled by export menu.
 
 // ── Feature 4: Electron "Open With" support ──────────────────────────────────
 

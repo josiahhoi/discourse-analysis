@@ -40,38 +40,52 @@
     </header>
 
     <main class="main">
-      <aside class="bracket-types">
-        <h3>Logical Relationships</h3>
-        <p class="hint">Split: click in text to place the cursor, then press Enter. Single click to edit. Click nodes or verse refs to create brackets. Based on <a href="https://s3.amazonaws.com/cdn.gospelpaths.com/tenants/5/1738104708694-The18LogicalRelationshipsEngnewlogo.pdf" target="_blank" rel="noopener">Bible Bracket's 18 relationships</a>.</p>
-        <div class="save-load-row">
-          <button id="themeToggle" type="button" title="Toggle light/dark mode">Light Mode</button>
-          <button id="toggleCommentsBtn" type="button" title="Show/Hide comments and highlights">Show Comments</button>
+      <aside class="sidebar" id="sidebar">
+        <details class="sidebar-help">
+          <summary>Help & Tips</summary>
+          <div class="sidebar-help-content">
+            <p><strong>Split:</strong> click in text, then press Enter.</p>
+            <p><strong>Edit:</strong> Single click text.</p>
+            <p><strong>Brackets:</strong> Click nodes or verse refs to connect.</p>
+            <p><a href="https://s3.amazonaws.com/cdn.gospelpaths.com/tenants/5/1738104708694-The18LogicalRelationshipsEngnewlogo.pdf" target="_blank" rel="noopener">Bible Bracket's 18 relationships</a>.</p>
+            <p><strong>Select:</strong> Click a bracket to edit labels, connect, or delete.</p>
+          </div>
+        </details>
+
+        <div class="sidebar-group">
+          <label>View</label>
+          <div class="save-load-row">
+            <button id="themeToggle" type="button" class="secondary" title="Switch between Light and Dark mode">Light Mode</button>
+            <button id="toggleCommentsBtn" type="button" class="secondary" title="Show or hide comments on brackets">Show Comments</button>
+          </div>
         </div>
-        <p class="hint-small">Click bracket for Delete / Change label / Select to connect. Double-click bracket to change label.</p>
-        <button id="clearBrackets" class="secondary">Clear All Brackets</button>
-        <div class="save-load-row save-as-author-row">
-          <label for="pageAuthor">Author:</label>
-          <input type="text" id="pageAuthor" placeholder="Page author (saved with bracket)" class="author-input">
+
+        <div class="sidebar-group">
+          <label>Project</label>
+          <div class="save-load-row">
+            <button id="newBracketBtn" type="button" class="secondary" title="Start a new bracket">New</button>
+            <button id="openFileBtn" type="button" class="secondary" title="Open JSON file">Open</button>
+          </div>
+          <div class="save-load-row">
+            <button id="saveBtn" type="button" title="Save to current file (Ctrl+S)">Save</button>
+            <button id="saveAsBtn" type="button" class="secondary" title="Save current bracket as a new JSON file">Save As</button>
+          </div>
         </div>
-        <div class="save-load-row save-filename-row">
-          <label for="exportFilename">File name:</label>
-          <input type="text" id="exportFilename" placeholder="Auto-generated filename..." class="filename-input">
+
+        <div class="sidebar-group">
+          <label>Metadata</label>
+          <input type="text" id="pageAuthor" placeholder="Author name" title="Your name (saved with bracket)">
+          <input type="text" id="exportFilename" placeholder="Custom filename" title="Custom filename for exports">
         </div>
-        <div class="save-load-row save-load-primary">
-          <button id="newBracketBtn" type="button" class="secondary" title="Start a new bracket (prompts to save current)">New</button>
-          <button id="openFileBtn" type="button" class="secondary" title="Open JSON file (enables Save to update it)">Open</button>
+
+        <div class="sidebar-group export-group">
+          <button id="exportMenuBtn" type="button" class="primary-action" title="Export as image, PDF, or data">Export As...</button>
         </div>
-        <div class="save-load-row">
-          <button id="saveBtn" type="button" title="Save to current file (Ctrl+S). First time: choose location.">Save</button>
-          <button id="saveAsBtn" type="button" class="secondary" title="Save current bracket as a new JSON file">Save As</button>
-        </div>
-        <div class="save-load-row">
-          <button id="copyForWordBtn" type="button" class="secondary" title="Copy diagram as image (Ctrl+V to paste into Word)">Copy image</button>
-          <button id="saveImageBtn" type="button" class="secondary" title="Save diagram as PNG with bracket data embedded — drag it back in to restore">Save image</button>
-          <button id="copyDataBtn" type="button" class="secondary" title="Copy bracket data as text to clipboard">Copy data</button>
-          <button id="exportPdfBtn" type="button" class="secondary" title="Export as PDF with bracket data embedded">Export PDF</button>
-        </div>
+
+        <button id="clearBrackets" class="secondary danger-btn" type="button" title="Remove all brackets and formatting from the current page">Clear All Brackets</button>
+
         <input type="file" id="importFileInput" accept=".json,application/json" hidden>
+
         <details class="recent-section" id="recentSection">
           <summary>Recent</summary>
           <ul id="recentList" class="recent-list"></ul>
@@ -116,7 +130,7 @@
 
     <footer class="footer">
       <p>ESV via <a href="https://api.esv.org" target="_blank" rel="noopener">api.esv.org</a>. Greek: <a href="https://sblgnt.com" target="_blank" rel="noopener">SBLGNT</a> (CC-BY 4.0).</p>
-      <p class="footer-version">Version 2.4.0 · Made by Josiah Hoi and Bryce Bussert, based on the method taught by Dr. Daniel M. Gurtner.</p>
+      <p class="footer-version">Version 2.4.1 · Made by Josiah Hoi and Bryce Bussert, based on the method taught by Dr. Daniel M. Gurtner.</p>
     </footer>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
