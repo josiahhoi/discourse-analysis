@@ -1,6 +1,6 @@
 {
     "name": "discourse-analysis",
-    "version": "2.4.4",
+    "version": "2.4.5",
     "description": "Discourse Analysis — diagram the logical structure of Scripture",
     "main": "main.js",
     "scripts": {

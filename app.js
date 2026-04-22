@@ -3041,28 +3041,61 @@ async function copyDiagramForWord() {
     }
 
     const canvas = await html2canvas(workspace, options);
+    const dataUrl = canvas.toDataURL('image/png');
+    
+    // Prepare Compressed DNA for Alt-Text
+    const bracketData = buildBracketData();
+    const dnaString = JSON.stringify(bracketData);
+    const compressedDna = typeof LZString !== 'undefined' ? LZString.compressToEncodedURIComponent(dnaString) : dnaString;
+    
+    // Prepare HTML with metadata and the image (with DNA in Alt-Text)
+    const author = (document.getElementById('pageAuthor')?.value || '').trim();
+    const copyright = (document.getElementById('copyrightLabel')?.textContent || '').trim();
+    const reference = passageRef || 'Untitled';
+    
+    const htmlBlob = new Blob([`
+      <div style="font-family: sans-serif;">
+        <h2 style="margin: 0; color: #c9a86c;">${reference}</h2>
+        <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">
+          ${author ? 'Author: ' + author + ' | ' : ''}
+          ${copyright ? 'Version: ' + copyright : ''}
+        </p>
+        <img src="${dataUrl}" alt="DISCOURSE_DNA:${compressedDna}" style="max-width: 100%; height: auto;" />
+      </div>
+    `], { type: 'text/html' });
+
     canvas.toBlob(async (blob) => {
       if (!blob) {
         showStatus('Copy failed.', 'error');
         return;
       }
       try {
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        showStatus('Diagram copied. Paste into Word with Ctrl+V (or Cmd+V).', 'success');
+        const item = new ClipboardItem({ 
+          'image/png': blob,
+          'text/html': htmlBlob
+        });
+        await navigator.clipboard.write([item]);
+        showStatus('Diagram + DNA copied. Paste into Word.', 'success');
       } catch (err) {
+        console.error('Clipboard API failed, falling back to download:', err);
+        // Fallback: Download the file if clipboard is blocked
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = `${getExportFilename()}.png`;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        showStatus('Clipboard blocked. Image downloaded instead—insert into Word.', 'success');
+        showStatus('Clipboard blocked. Image downloaded instead—insert into Word manually.', 'success');
       }
     }, 'image/png');
   } catch (err) {
-    showStatus(err.message || 'Copy failed.', 'error');
+    console.error('Failed to capture diagram:', err);
+    showStatus('Failed to capture diagram.', 'error');
   }
 }
+
 
 // ── PNG metadata: embed bracket JSON into a tEXt chunk ──────────────────────
 
@@ -3358,8 +3391,25 @@ function showExportMenu(e) {
 
   document.body.appendChild(picker);
   const rect = exportMenuBtn.getBoundingClientRect();
-  picker.style.top = `${rect.top}px`;
-  picker.style.left = `${rect.right + 10}px`;
+  
+  // Smart positioning: try right of button, but keep inside window bounds
+  let top = rect.top;
+  let left = rect.right + 10;
+  
+  // If it would go off the bottom, shift it up
+  const pickerHeight = picker.offsetHeight;
+  if (top + pickerHeight > window.innerHeight) {
+    top = window.innerHeight - pickerHeight - 20;
+  }
+  
+  // If it would go off the right, move it to the left of the sidebar
+  const pickerWidth = picker.offsetWidth;
+  if (left + pickerWidth > window.innerWidth) {
+    left = rect.left - pickerWidth - 10;
+  }
+
+  picker.style.top = `${Math.max(10, top)}px`;
+  picker.style.left = `${Math.max(10, left)}px`;
 
   const closeHandler = (ev) => {
     if (!picker.contains(ev.target) && ev.target !== exportMenuBtn) {
@@ -3779,6 +3829,66 @@ window.addEventListener('beforeunload', saveDraft);
 let _lastClipboardCheck = 0;
 let _lastClipboardText = '';
 
+window.addEventListener('paste', async (e) => {
+  // 1. Try to get HTML content (standard way Word shares Alt-Text)
+  const html = e.clipboardData.getData('text/html');
+  if (html && html.includes('DISCOURSE_DNA:')) {
+    const match = html.match(/alt="DISCOURSE_DNA:([^"]+)"/);
+    if (match) {
+      const compressed = match[1];
+      try {
+        const json = LZString.decompressFromEncodedURIComponent(compressed);
+        const data = JSON.parse(json);
+        if (data && Array.isArray(data.propositions)) {
+          showMagicPasteBanner(data, '📋 Diagram detected in paste! ');
+          return;
+        }
+      } catch (err) { console.error('Failed to parse DNA from HTML paste', err); }
+    }
+  }
+
+  // 2. Fallback: If pasting plain text, the existing 'focus' listener will pick it up, 
+  // but we can also handle it immediately here for faster response.
+  const text = e.clipboardData.getData('text/plain');
+  if (text && text.startsWith('{') && text.includes('"propositions"')) {
+    try {
+      const data = JSON.parse(text);
+      if (data && Array.isArray(data.propositions)) {
+        showMagicPasteBanner(data, '📋 Bracket data detected! ');
+      }
+    } catch (_) {}
+  }
+});
+
+/**
+ * Shows the magic paste banner for imported data
+ */
+function showMagicPasteBanner(data, messagePrefix) {
+  if (passageRef && data.passageRef === passageRef) return;
+  document.querySelector('.magic-paste-banner')?.remove();
+
+  const wrapper = document.querySelector('.bracket-canvas-wrapper') || document.body;
+  const banner = document.createElement('div');
+  banner.className = 'magic-paste-banner';
+  const label = data.passageRef || 'bracket data';
+  banner.innerHTML = `
+    <span class="draft-recovery-text">${messagePrefix} <strong>${escapeHtml(label)}</strong></span>
+    <div class="draft-recovery-actions">
+      <button type="button" data-action="import">Import</button>
+      <button type="button" data-action="dismiss" class="secondary">Dismiss</button>
+    </div>
+  `;
+  wrapper.prepend(banner);
+
+  banner.querySelector('[data-action="import"]').addEventListener('click', () => {
+    banner.remove();
+    importBracket(data);
+  });
+  banner.querySelector('[data-action="dismiss"]').addEventListener('click', () => {
+    banner.remove();
+  });
+}
+
 window.addEventListener('focus', async () => {
   const now = Date.now();
   if (now - _lastClipboardCheck < 5000) return; // throttle: 5s
@@ -3797,36 +3907,12 @@ window.addEventListener('focus', async () => {
     try { data = JSON.parse(trimmed); } catch (_) { return; }
     if (!data || !Array.isArray(data.propositions)) return;
 
-    // Don't show if we already have the same passage loaded
-    if (passageRef && data.passageRef === passageRef) return;
-
-    // Remove any existing banner
-    document.querySelector('.magic-paste-banner')?.remove();
-
-    const wrapper = document.querySelector('.bracket-canvas-wrapper') || document.body;
-    const banner = document.createElement('div');
-    banner.className = 'magic-paste-banner';
-    const label = data.passageRef || 'bracket data';
-    banner.innerHTML = `
-      <span class="draft-recovery-text">📋 Bracket data detected on clipboard: <strong>${escapeHtml(label)}</strong></span>
-      <div class="draft-recovery-actions">
-        <button type="button" data-action="import">Import</button>
-        <button type="button" data-action="dismiss" class="secondary">Dismiss</button>
-      </div>
-    `;
-    wrapper.prepend(banner);
-
-    banner.querySelector('[data-action="import"]').addEventListener('click', () => {
-      banner.remove();
-      importBracket(data);
-    });
-    banner.querySelector('[data-action="dismiss"]').addEventListener('click', () => {
-      banner.remove();
-    });
+    showMagicPasteBanner(data, '📋 Bracket data detected on clipboard: ');
   } catch (_) {
     // Clipboard read failed (permission denied, etc.) — silently ignore
   }
 });
+
 
 // ── Feature 3: PDF Export ────────────────────────────────────────────────────
 
