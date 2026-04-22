@@ -183,7 +183,26 @@ function updateThemeButtonText() {
 
 function initTheme() {
   const saved = localStorage.getItem(THEME_KEY);
-  if (saved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  
+  if (saved) {
+    // 1. Priority: User explicitly saved a preference
+    if (saved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else document.documentElement.setAttribute('data-theme', ''); // dark
+  } else {
+    // 2. Secondary: Match System Theme
+    const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
+    if (systemDark.matches) {
+      document.documentElement.setAttribute('data-theme', ''); // dark
+    } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      // 3. Fallback: Time of day (7am - 7pm is light)
+      const hour = new Date().getHours();
+      const isDaytime = hour >= 7 && hour < 19;
+      if (isDaytime) document.documentElement.setAttribute('data-theme', 'light');
+      else document.documentElement.setAttribute('data-theme', ''); // dark
+    }
+  }
   updateThemeButtonText();
 }
 
