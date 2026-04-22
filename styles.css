@@ -20,6 +20,7 @@
   --radius: 8px;
   --font-serif: 'Cormorant Garamond', Georgia, serif;
   --font-sans: 'Source Sans 3', system-ui, sans-serif;
+  --font-mono: 'Roboto Mono', monospace;
   --accent-15: rgba(201, 168, 108, 0.15);
   --surface-elevated-20: rgba(46, 46, 50, 0.20);
   --accent-50: rgba(201, 168, 108, 0.50);
@@ -321,6 +322,32 @@ body {
   text-decoration: underline;
 }
 
+.shortcut-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  margin-bottom: 0.4rem;
+  color: var(--text-muted);
+}
+
+.shortcut-item kbd {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  font-family: inherit;
+  font-size: 0.7rem;
+  color: var(--text);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.2);
+}
+
+.sidebar-help-content hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 0.75rem 0;
+}
+
 /* Groups */
 .sidebar-group {
   display: flex;
@@ -335,6 +362,22 @@ body {
   letter-spacing: 0.05em;
   color: var(--text-muted);
   margin-bottom: 0.25rem;
+}
+
+.sidebar-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.field-label {
+  font-size: 0.7rem !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  color: var(--text-muted);
+  opacity: 0.8;
 }
 
 .sidebar-group input {
@@ -426,6 +469,7 @@ body {
   max-width: 420px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
+
 
 /* Relationship picker in body: fixed so it doesn't affect workspace layout (prevents scroll jump) */
 .relationship-picker-fixed {
@@ -1575,3 +1619,14 @@ body.text-edit-mode-active .verse-ref {
 .word-arrow-group:hover path {
   stroke-width: 3;
 }
+
+.sans-serif-mode .proposition-text,
+.sans-serif-mode .proposition-editor,
+.sans-serif-mode .passage-header,
+.sans-serif-mode .import-section textarea,
+.sans-serif-mode .bracket-label {
+  font-family: var(--font-mono) !important;
+  font-size: 0.92em; /* Mono looks a bit big, so we scale it down slightly */
+}
+
+

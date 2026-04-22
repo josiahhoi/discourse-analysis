@@ -37,6 +37,24 @@ const SBLGNT_BOOKS = {
   rev: 'Rev.txt', revelation: 'Rev.txt', re: 'Rev.txt',
 };
 
+// Bolls.life Book IDs (1-66)
+const BOLLS_BOOKS = {
+  gen: 1, genesis: 1, exod: 2, exodus: 2, lev: 3, leviticus: 3, num: 4, numbers: 4, deut: 5, deuteronomy: 5,
+  josh: 6, joshua: 6, judg: 7, judges: 7, ruth: 8, '1sam': 9, '1 samuel': 9, '2sam': 10, '2 samuel': 10,
+  '1kings': 11, '1 kings': 11, '2kings': 12, '2 kings': 12, '1chron': 13, '1 chronicles': 13, '2chron': 14, '2 chronicles': 14,
+  ezra: 15, neh: 16, nehemiah: 16, est: 17, esther: 17, job: 18, ps: 19, psalms: 19, prov: 20, proverbs: 20,
+  eccl: 21, ecclesiastes: 21, song: 22, isa: 23, isaiah: 23, jer: 24, jeremiah: 24, lam: 25, lamentations: 25,
+  ezek: 26, ezekiel: 26, dan: 27, daniel: 27, hos: 28, hosea: 28, joel: 29, amos: 30, obad: 31, obadiah: 31,
+  jonah: 32, mic: 33, micah: 33, nah: 34, nahum: 34, hab: 35, habakkuk: 35, zeph: 36, zephaniah: 36, hag: 37, haggai: 37,
+  zech: 38, zechariah: 38, mal: 39, malachi: 39,
+  matt: 40, matthew: 40, mark: 41, luke: 42, john: 43, acts: 44, rom: 45, romans: 45,
+  '1cor': 46, '1 cor': 46, '2cor': 47, '2 cor': 47, gal: 48, galatians: 48, eph: 49, ephesians: 49,
+  phil: 50, philippians: 50, col: 51, colossians: 51, '1thess': 52, '1 thess': 52, '2thess': 53, '2 thess': 53,
+  '1tim': 54, '1 tim': 54, '2tim': 55, '2 tim': 55, titus: 56, phlm: 57, philemon: 57, heb: 58, hebrews: 58,
+  jas: 59, james: 59, '1pet': 60, '1 peter': 60, '2pet': 61, '2 peter': 61, '1jn': 62, '1 john': 62,
+  '2jn': 63, '2 john': 63, '3jn': 64, '3 john': 64, jude: 65, rev: 66, revelation: 66
+};
+
 // State
 let passageRef = '';
 let propositions = [];
@@ -177,9 +195,16 @@ function toggleTheme() {
   updateThemeButtonText();
 }
 
-initTheme();
-const themeToggle = document.getElementById('themeToggle');
 if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
+
+function updateFontByAuthor() {
+  const name = (pageAuthorInput?.value || '').trim().toLowerCase();
+  if (name === 'brian kim') {
+    document.body.classList.add('sans-serif-mode');
+  } else {
+    document.body.classList.remove('sans-serif-mode');
+  }
+}
 
 // Page/bracket author (persisted in localStorage, included in saved/exported bracket, shown top-right in workspace for export/copy)
 const pageAuthorInput = document.getElementById('pageAuthor');
@@ -196,11 +221,14 @@ if (pageAuthorInput) {
   pageAuthorInput.addEventListener('change', () => {
     try { localStorage.setItem(PAGE_AUTHOR_KEY, pageAuthorInput.value.trim()); } catch (_) { }
     syncPassageAuthorDisplay();
+    updateFontByAuthor();
   });
   pageAuthorInput.addEventListener('blur', () => {
     try { localStorage.setItem(PAGE_AUTHOR_KEY, pageAuthorInput.value.trim()); } catch (_) { }
     syncPassageAuthorDisplay();
+    updateFontByAuthor();
   });
+  updateFontByAuthor(); // Run once on init
 }
 
 // Toggle comments visibility
@@ -231,7 +259,7 @@ const RELATIONSHIP_TYPES = {
   inference: 'Inference (I)',
   bilateral: 'Bilateral (BL)',
   'cause-effect': 'Cause-Effect (C/E)',
-  'action-result': 'Cause-Effect (C/E)', // legacy alias
+  'action-result': 'Cause-Effect (C/E)', 
   'action-purpose': 'Action-Purpose (Ac/Pur)',
   conditional: 'Conditional (If/Th)',
   temporal: 'Temporal (T)',
@@ -394,21 +422,12 @@ async function fetchSBLGNTPassage(query) {
 async function fetchPassage() {
   const versionSelect = document.getElementById('versionSelect');
   const copyrightLabel = document.getElementById('copyrightLabel');
-  const apiKeyRow = document.getElementById('apiKeyRow');
   const version = versionSelect?.value || 'esv';
   const query = passageInput?.value?.trim() || '';
 
   if (!query) {
     showStatus('Enter a passage reference (e.g. John 1:1-5)', 'error');
     return;
-  }
-
-  if (version === 'esv') {
-    const key = apiKeyInput?.value?.trim() || '';
-    if (!key) {
-      showStatus('Enter your ESV API key. Get one free at api.esv.org', 'error');
-      return;
-    }
   }
 
   fetchBtn.disabled = true;
@@ -423,31 +442,53 @@ async function fetchPassage() {
       if (copyrightLabel) copyrightLabel.textContent = '(SBLGNT)';
       if (propositionsContainer) propositionsContainer.classList.add('greek-text');
     } else {
-      const key = apiKeyInput.value.trim();
-      const url = new URL(ESV_API);
-      url.searchParams.set('q', query);
-      url.searchParams.set('include-passage-references', 'false');
-      url.searchParams.set('include-verse-numbers', 'true');
-      url.searchParams.set('include-footnotes', 'false');
-      url.searchParams.set('include-headings', 'false');
+      let data = null;
+      let error = null;
+      const key = apiKeyInput?.value?.trim() || '';
 
-      const res = await fetch(url.toString(), {
-        headers: { Authorization: `Token ${key}` },
-      });
+      // 1. Try Official ESV API if key exists and version is ESV
+      if (version === 'esv' && key) {
+        try {
+          const url = new URL(ESV_API);
+          url.searchParams.set('q', query);
+          url.searchParams.set('include-passage-references', 'false');
+          url.searchParams.set('include-verse-numbers', 'true');
+          url.searchParams.set('include-footnotes', 'false');
+          url.searchParams.set('include-headings', 'false');
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `API error: ${res.status}`);
+          const res = await fetch(url.toString(), {
+            headers: { Authorization: `Token ${key}` },
+          });
+          if (res.ok) {
+            const raw = await res.json();
+            data = {
+              text: (raw.passages?.[0] || '').replace(/\s*\(ESV\)\s*$/i, '').trim(),
+              passageRef: raw.canonical || query,
+              copyright: '(ESV)'
+            };
+          } else {
+            error = `ESV API Error: ${res.status}`;
+          }
+        } catch (err) {
+          error = err.message;
+        }
       }
 
-      const data = await res.json();
-      const text = (data.passages?.[0] || '')
-        .replace(/\s*\(ESV\)\s*$/i, '')
-        .trim();
+      // 2. Fallback to Bolls.life for NASB or if ESV Key missing/failed
+      if (!data) {
+        try {
+          const bollsTranslation = version === 'nasb' ? 'NASB' : 'ESV';
+          data = await fetchFromBolls(bollsTranslation, query);
+        } catch (err) {
+          throw new Error(error ? `${error} -> Fallback failed: ${err.message}` : err.message);
+        }
+      }
 
-      passageRef = data.canonical || query;
+      passageRef = data.passageRef;
+      if (copyrightLabel) copyrightLabel.textContent = data.copyright;
+      if (propositionsContainer) propositionsContainer.classList.remove('greek-text');
 
-      const verseParts = text.split(/(?=\[\d+\])/);
+      const verseParts = data.text.split(/(?=\[\d+\])/);
       propositions = [];
       verseRefs = [];
       for (const part of verseParts) {
@@ -465,12 +506,9 @@ async function fetchPassage() {
         }
       }
       if (propositions.length === 0) {
-        propositions = [text.replace(/\[\d+\]\s*/g, '').trim()];
+        propositions = [data.text.replace(/\[\d+\]\s*/g, '').trim()];
         verseRefs = ['1'];
       }
-
-      if (copyrightLabel) copyrightLabel.textContent = '(ESV)';
-      if (propositionsContainer) propositionsContainer.classList.remove('greek-text');
     }
 
     if (passageHeader) passageHeader.textContent = passageRef;
@@ -479,12 +517,55 @@ async function fetchPassage() {
     renderPropositions();
     renderBrackets();
     renderCommentPreviews();
+    showStatus('Passage loaded.', 'success');
   } catch (err) {
     showStatus(err.message || 'Failed to fetch passage', 'error');
   } finally {
     fetchBtn.disabled = false;
     fetchBtn.textContent = 'Fetch Passage';
   }
+}
+
+/**
+ * Fetches passage text from Bolls.life API.
+ * Returns { text: "[1] Verse... [2] Verse...", passageRef, copyright }
+ */
+async function fetchFromBolls(translation, query) {
+  // Simple parser: Book Name (word) + Chapter (digit) + optional Verses (:1-5)
+  const regex = /^(\d?\s*[a-zA-Z\s]+?)\s*(\d+)(?::(\d+)(?:-(\d+))?)?$/;
+  const match = query.match(regex);
+  if (!match) throw new Error('Could not parse reference. Use format like "John 1:1-5"');
+
+  const bookName = match[1].trim().toLowerCase().replace(/\s+/g, '');
+  const chapter = match[2];
+  const startVerse = match[3] ? parseInt(match[3]) : null;
+  const endVerse = match[4] ? parseInt(match[4]) : startVerse;
+
+  const bollsId = BOLLS_BOOKS[bookName];
+  if (!bollsId) throw new Error(`Book "${match[1]}" not recognized.`);
+
+  const url = `https://bolls.life/get-text/${translation}/${bollsId}/${chapter}/`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Bolls API error: ${res.status}`);
+
+  const verses = await res.json();
+  if (!Array.isArray(verses) || verses.length === 0) throw new Error('No verses found.');
+
+  // Filter verses if range provided
+  const filtered = (startVerse !== null)
+    ? verses.filter(v => v.verse >= startVerse && v.verse <= endVerse)
+    : verses;
+
+  if (filtered.length === 0) throw new Error('Verse range not found.');
+
+  const text = filtered.map(v => `[${v.verse}] ${v.text}`).join(' ');
+  const ref = `${match[1].trim()} ${chapter}${startVerse ? ':' + startVerse + (endVerse !== startVerse ? '-' + endVerse : '') : ''}`;
+
+  return {
+    text: text,
+    passageRef: ref,
+    copyright: `(${translation})`
+  };
 }
 
 function showStatus(message, type) {
@@ -2866,6 +2947,7 @@ function importBracket(data) {
   renderPropositions();
   renderBrackets();
   renderCommentPreviews();
+  if (typeof updateFontByAuthor === 'function') updateFontByAuthor();
   addToRecent(data);
   if (typeof clearDraft === 'function') clearDraft();
   showStatus('Bracket loaded.', 'success');
@@ -3559,7 +3641,7 @@ if (propEditor) propEditor.placeholder = 'Fetch or import a passage to start. Cl
 
 // Sidebar Toggles
 const toggleLeftSidebarBtn = document.getElementById('toggleLeftSidebarBtn');
-const leftSidebar = document.querySelector('.bracket-types');
+const leftSidebar = document.querySelector('.sidebar');
 
 if (toggleLeftSidebarBtn && leftSidebar) {
   toggleLeftSidebarBtn.addEventListener('click', () => {
