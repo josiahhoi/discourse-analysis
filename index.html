@@ -66,8 +66,10 @@
           <button id="saveAsBtn" type="button" class="secondary" title="Save current bracket as a new JSON file">Save As</button>
         </div>
         <div class="save-load-row">
-          <button id="copyForWordBtn" type="button" class="secondary" title="Copy diagram as image (Ctrl+V to paste)">Copy image</button>
+          <button id="copyForWordBtn" type="button" class="secondary" title="Copy diagram as image (Ctrl+V to paste into Word)">Copy image</button>
+          <button id="saveImageBtn" type="button" class="secondary" title="Save diagram as PNG with bracket data embedded — drag it back in to restore">Save image</button>
           <button id="copyDataBtn" type="button" class="secondary" title="Copy bracket data as text to clipboard">Copy data</button>
+          <button id="exportPdfBtn" type="button" class="secondary" title="Export as PDF with bracket data embedded">Export PDF</button>
         </div>
         <input type="file" id="importFileInput" accept=".json,application/json" hidden>
         <details class="recent-section" id="recentSection">
@@ -99,13 +101,7 @@
           </div>
         </div>
         <div class="bracket-canvas-wrapper">
-          <svg id="bracketCanvas" class="bracket-canvas" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                <path d="M0,0 L10,3.5 L0,7 Z" fill="currentColor" />
-              </marker>
-            </defs>
-          </svg>
+          <svg id="bracketCanvas" class="bracket-canvas" xmlns="http://www.w3.org/2000/svg"></svg>
           <div class="propositions bracket-gutter" id="propositions">
             <textarea id="propositionEditor" placeholder="Fetch or import a passage to start. Click in the text and press Enter to split it into a new line. Click the dots to create brackets and logical relationships."></textarea>
           </div>
@@ -120,10 +116,11 @@
 
     <footer class="footer">
       <p>ESV via <a href="https://api.esv.org" target="_blank" rel="noopener">api.esv.org</a>. Greek: <a href="https://sblgnt.com" target="_blank" rel="noopener">SBLGNT</a> (CC-BY 4.0).</p>
-      <p class="footer-version">Version 2.3.4 · Made by Josiah Hoi and Bryce Bussert, based on the method taught by Dr. Daniel M. Gurtner.</p>
+      <p class="footer-version">Version 2.4.0 · Made by Josiah Hoi and Bryce Bussert, based on the method taught by Dr. Daniel M. Gurtner.</p>
     </footer>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

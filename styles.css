@@ -917,6 +917,29 @@ body {
   border-radius: var(--radius);
   border: 1px solid var(--border);
   overflow: visible;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.bracket-canvas-wrapper.drag-over {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-15), inset 0 0 0 2px var(--accent);
+}
+
+.bracket-canvas-wrapper.drag-over::after {
+  content: 'Drop to import';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sans);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-15);
+  border-radius: var(--radius);
+  pointer-events: none;
+  z-index: 100;
 }
 
 .bracket-canvas {
@@ -928,6 +951,65 @@ body {
   pointer-events: none;
   z-index: 2;
   overflow: visible;
+}
+
+/* Draft recovery and magic paste banners */
+.draft-recovery-banner,
+.magic-paste-banner {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  z-index: 200;
+  font-size: 0.85rem;
+  color: var(--text);
+  animation: bannerSlideIn 0.25s ease-out;
+}
+
+@keyframes bannerSlideIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.draft-recovery-text {
+  flex: 1;
+}
+
+.draft-recovery-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.draft-recovery-actions button {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  background: var(--surface);
+  color: var(--text);
+  transition: all 0.15s;
+}
+
+.draft-recovery-actions button:first-child {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.draft-recovery-actions button:hover {
+  opacity: 0.85;
 }
 
 /* In Connect-to mode, let clicks pass through to proposition blocks — but keep connection nodes (circles) clickable so "S node then verse 4 node" works */
@@ -1253,16 +1335,24 @@ body.text-edit-mode-active .verse-ref {
   max-height: 200px;
   overflow-y: auto;
   padding: 0.35rem 0;
-  border-bottom: 1px solid var(--border);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
+.comment-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5rem;
+}
+
 .comment-popover-title {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
+  margin: 0;
+  font-size: 1.1rem;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--accent);
   user-select: none;
 }
 
@@ -1309,10 +1399,12 @@ body.text-edit-mode-active .verse-ref {
 }
 
 .comment-replies-title {
-  margin: 0 0 0.35rem;
-  font-size: 0.8rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.25rem;
 }
 
 .comment-replies-list {
@@ -1369,15 +1461,34 @@ body.text-edit-mode-active .verse-ref {
   gap: 0.35rem;
 }
 
-.comment-popover-actions button {
-  padding: 0.4rem 0.75rem;
+.comment-popover-actions button,
+.comment-reply-add button {
+  padding: 0.5rem 1rem;
   font-size: 0.85rem;
   font-family: inherit;
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
+  transition: all 0.15s;
+}
+
+.comment-popover-actions.header-actions button,
+.comment-reply-add button {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.comment-popover-actions:not(.header-actions) button {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+}
+
+.comment-popover-actions button:hover,
+.comment-reply-add button:hover {
+  background: var(--border);
+  color: var(--text);
 }
 
 .comment-popover-actions button[data-action="save"] {

@@ -1,8 +1,12 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
+
+let mainWindow = null;
+let pendingFilePath = null; // file path received before window was ready
 
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 800,
@@ -10,15 +14,52 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
     title: 'Discourse Analysis',
   });
 
-  win.loadFile(path.join(__dirname, 'index.html'));
+  mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
-  win.on('closed', () => {
+  mainWindow.webContents.on('did-finish-load', () => {
+    // Send any file that was passed via command line or double-click
+    if (pendingFilePath) {
+      sendFileToRenderer(pendingFilePath);
+      pendingFilePath = null;
+    }
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
     app.quit();
   });
+}
+
+function sendFileToRenderer(filePath) {
+  if (!mainWindow || !filePath) return;
+  try {
+    if (!filePath.endsWith('.json')) return;
+    const content = fs.readFileSync(filePath, 'utf-8');
+    mainWindow.webContents.send('open-file', content);
+  } catch (err) {
+    console.error('Could not read file:', err);
+  }
+}
+
+// macOS: file opened via double-click or "Open With" while app is running
+app.on('open-file', (event, filePath) => {
+  event.preventDefault();
+  if (mainWindow && mainWindow.webContents) {
+    sendFileToRenderer(filePath);
+  } else {
+    pendingFilePath = filePath;
+  }
+});
+
+// Windows/Linux: file path passed as command-line argument
+const fileArg = process.argv.find((arg) => arg.endsWith('.json') && !arg.startsWith('-'));
+if (fileArg) {
+  pendingFilePath = path.resolve(fileArg);
 }
 
 app.whenReady().then(createWindow);

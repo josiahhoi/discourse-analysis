@@ -1,6 +1,6 @@
 {
     "name": "discourse-analysis",
-    "version": "2.3.4",
+    "version": "2.4.0",
     "description": "Discourse Analysis — diagram the logical structure of Scripture",
     "main": "main.js",
     "scripts": {
@@ -23,7 +23,8 @@
         "index.html",
         "styles.css",
         "app.js",
-        "main.js"
+        "main.js",
+        "preload.js"
       ],
       "directories": {
         "output": "dist"
@@ -33,13 +34,23 @@
         "target": [
           "zip"
         ],
-        "icon": "build/icon.png"
+        "icon": "build/icon.png",
+        "fileAssociations": [{
+          "ext": "json",
+          "name": "Discourse Analysis Bracket",
+          "role": "Editor"
+        }]
       },
       "win": {
         "target": [
           "portable"
         ],
-        "icon": "build/icon.png"
+        "icon": "build/icon.png",
+        "fileAssociations": [{
+          "ext": "json",
+          "name": "Discourse Analysis Bracket",
+          "role": "Editor"
+        }]
       },
       "portable": {
         "artifactName": "${productName} ${version} ${arch} Portable.${ext}"

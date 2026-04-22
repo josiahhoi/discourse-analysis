@@ -70,6 +70,18 @@ function clearAllFormatting() {
   bracketFrom = null;
 }
 
+function pushUndo(action) {
+  undoStack.push({
+    action,
+    propositions: propositions.slice(),
+    verseRefs: verseRefs.slice(),
+    brackets: brackets.map(a => ({ ...a })),
+    formatTags: formatTags.map(t => ({ ...t })),
+    wordArrows: wordArrows.map(w => ({ ...w })),
+    comments: comments.map(c => ({ ...c, target: c.target ? { ...c.target } : c.target, replies: (c.replies || []).map(r => ({ ...r })) })),
+  });
+}
+
 // DOM
 const passageInput = document.getElementById('passageInput');
 const fetchBtn = document.getElementById('fetchBtn');
@@ -303,7 +315,7 @@ document.addEventListener('keydown', (e) => {
     if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
 
     if (selectedArrowIdx !== null && selectedArrowIdx < wordArrows.length) {
-      undoStack.push({ action: 'delete arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map(a => ({ ...a })), formatTags: formatTags.map(f => ({ ...f })), wordArrows: wordArrows.map(w => ({ ...w })) });
+      pushUndo('delete arrow');
       wordArrows.splice(selectedArrowIdx, 1);
       selectedArrowIdx = null;
       renderPropositions();
@@ -513,7 +525,7 @@ function renderPropositions() {
     propositionsContainer.innerHTML = '';
     const ta = document.createElement('textarea');
     ta.id = 'propositionEditor';
-    ta.placeholder = 'Fetch or import a passage, then use Divide mode to click and split the text.';
+    ta.placeholder = 'Fetch or import a passage to start. Click in the text and press Enter to split it into a new line. Click the dots to create brackets and logical relationships.';
     ta.className = 'proposition-editor';
     propositionsContainer.appendChild(ta);
     bracketCanvas.innerHTML = '';
@@ -540,7 +552,9 @@ function renderPropositions() {
     textSpan.className = 'proposition-text';
     textSpan.contentEditable = 'true';
     textSpan.spellcheck = false;
-    const textComments = comments.filter((c) => c.type === 'text' && c.target && c.target.propIndex === i);
+    const textComments = showCommentsEnabled 
+      ? comments.filter((c) => c.type === 'text' && c.target && c.target.propIndex === i)
+      : [];
     const textFormats = formatTags.filter((f) => f.propIndex === i);
     const textArrows = [];
     wordArrows.forEach((wa, idx) => {
@@ -686,7 +700,7 @@ function renderPropositions() {
       }
 
       if (textBeforeEdit !== null && currentText !== textBeforeEdit) {
-        undoStack.push({ action: 'text edit', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({ ...w })) });
+        pushUndo('text edit');
       }
       propositions[i] = currentText;
       formatTags = formatTags.filter(f => f.propIndex !== i).concat(newFormatTags);
@@ -886,7 +900,7 @@ function reparentBracketToProposition(bracketIdx, targetIndex) {
     return;
   }
 
-  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({ ...w })) });
+  pushUndo('bracket');
 
   // Shrink any bracket that contains [from, to] (spans past at least one end) so it no longer contains it (cut at P).
   brackets.forEach((a, i) => {
@@ -1005,7 +1019,7 @@ function showRelationshipPicker(from, to) {
   bracketSelectStep = 0;
   bracketFrom = null;
   // Add unlabelled bracket (dashed + ?); user clicks the bracket to choose relationship
-  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({ ...w })) });
+  pushUndo('bracket');
   brackets = brackets.map(a => {
     // Only expand brackets that truly cross (not merely adjacent at a shared endpoint)
     const trulyCrosses = a.from < to && a.to > from && a.to !== from && a.from !== to;
@@ -1081,7 +1095,7 @@ function splitPropositionAtOffset(index, offset) {
   const before = text.slice(0, offset).trim();
   const after = text.slice(offset).trim();
   if (!after) return;
-  undoStack.push({ action: 'divide', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({ ...w })) });
+  pushUndo('divide');
   const baseRef = verseRefs[index] || String(index + 1);
   const firstRef = /[a-z]$/.test(baseRef) ? baseRef : baseRef + 'a';
   const secondRef = incrementVerseRef(firstRef);
@@ -1171,6 +1185,7 @@ function undoLastAction() {
   verseRefs = prev.verseRefs ?? propositions.map((_, i) => String(i + 1));
   brackets = prev.brackets;
   formatTags = prev.formatTags ? prev.formatTags.map(t => ({ ...t })) : [];
+  if (prev.comments) comments = prev.comments.map(c => ({ ...c, target: c.target ? { ...c.target } : c.target, replies: (c.replies || []).map(r => ({ ...r })) }));
   wordArrows = prev.wordArrows ? prev.wordArrows.map(w => ({ ...w })) : [];
   selectedArrowIdx = null;
   renderPropositions();
@@ -1444,8 +1459,8 @@ function renderWordArrows(wrapper) {
     }
     const head = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     head.setAttribute('points', points);
-    head.setAttribute('fill', 'var(--accent)');
-    head.style.fill = 'var(--accent)';
+    head.setAttribute('fill', isSelected ? '#ff6b6b' : 'var(--accent)');
+    head.style.fill = isSelected ? '#ff6b6b' : 'var(--accent)';
     g.appendChild(head);
 
     // Hit area
@@ -1458,7 +1473,7 @@ function renderWordArrows(wrapper) {
     hit.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      undoStack.push({ action: 'delete arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map(a => ({ ...a })), formatTags: formatTags.map(f => ({ ...f })), wordArrows: wordArrows.map(w => ({ ...w })) });
+      pushUndo('delete arrow');
       wordArrows.splice(idx, 1);
       renderBrackets();
       showStatus('Arrow removed.', 'success');
@@ -1568,7 +1583,7 @@ function renderBrackets() {
     path.setAttribute('stroke-linejoin', 'miter');
     if (type === 'unspecified') path.setAttribute('stroke-dasharray', '6,4');
     g.appendChild(path);
-    if (hasComment) {
+    if (hasComment && showCommentsEnabled) {
       const highlightPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       highlightPath.setAttribute('d', d);
       highlightPath.setAttribute('class', 'bracket-comment-highlight');
@@ -1638,7 +1653,7 @@ function renderBrackets() {
       el.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({ ...w })) });
+        pushUndo('bracket');
         brackets.splice(idx, 1);
         renderBrackets();
         showStatus('Bracket removed.', 'success');
@@ -1952,11 +1967,53 @@ function makeCommentPopoverDraggableAndResizable(popover) {
   });
 }
 
-function showCommentPopoverForText(propIndex, start, end, existingCommentId = null, options = {}) {
+function setupReplies(popover, existingComment, idSuffix) {
+  const repliesList = popover.querySelector('.comment-replies-list');
+  const replyCountEl = popover.querySelector('.comment-replies-title');
+  if (!repliesList || !replyCountEl) return;
+
+  const renderReplies = () => {
+    repliesList.innerHTML = '';
+    const replies = existingComment.replies || [];
+    replyCountEl.textContent = `Replies (${replies.length})`;
+    replies.forEach((r) => {
+      const div = document.createElement('div');
+      div.className = 'comment-reply-item';
+      div.innerHTML = `<span class="comment-reply-meta">${escapeHtml(r.author || '')} · ${r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</span><p class="comment-reply-text">${escapeHtml(r.text || '')}</p>`;
+      repliesList.appendChild(div);
+    });
+  };
+  renderReplies();
+
+  const replyTa = popover.querySelector('.comment-reply-add textarea');
+  const replyAuthorInput = popover.querySelector(`#replyAuthor${idSuffix}`);
+  const addReplyBtn = popover.querySelector('[data-action="add-reply"]');
+  if (addReplyBtn && replyTa) {
+    addReplyBtn.addEventListener('click', () => {
+      const replyText = (replyTa.value || '').trim();
+      if (!replyText) return;
+      const replyAuthor = (replyAuthorInput && replyAuthorInput.value || '').trim() || (localStorage.getItem(COMMENT_AUTHOR_KEY) || '');
+      if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) { }
+      if (!existingComment.replies) existingComment.replies = [];
+      existingComment.replies.push({
+        id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+        text: replyText,
+        author: replyAuthor || undefined,
+        createdAt: new Date().toISOString(),
+      });
+      replyTa.value = '';
+      renderReplies();
+      renderCommentPreviews();
+    });
+  }
+}
+
+// Unified comment popover for both text and bracket comments
+function showCommentPopover(config) {
   const existing = document.getElementById('commentPopover');
   if (existing) existing.remove();
 
-  const existingComment = existingCommentId ? getCommentById(existingCommentId) : null;
+  const { type, existingComment, titleLabel, idSuffix, onReopen, onSave, onDelete, positionPopover, options = {} } = config;
   const viewMode = options.viewMode === true || (!!existingComment && options.viewMode !== false);
   const commentAuthor = (existingComment && existingComment.author) || localStorage.getItem(COMMENT_AUTHOR_KEY) || '';
 
@@ -1964,62 +2021,44 @@ function showCommentPopoverForText(propIndex, start, end, existingCommentId = nu
   popover.id = 'commentPopover';
   popover.className = 'comment-popover';
 
+  const repliesHtml = (comment) => `<div class="comment-replies-section"><p class="comment-replies-title">Replies (${(comment.replies || []).length})</p><div class="comment-replies-list" data-comment-id="${comment.id}"></div><div class="comment-reply-add"><div class="comment-reply-author-row"><label for="replyAuthor${idSuffix}">Author:</label><input type="text" id="replyAuthor${idSuffix}" class="author-input" placeholder="Your name" value="${escapeHtml(localStorage.getItem(COMMENT_AUTHOR_KEY) || '')}"></div><textarea rows="2" placeholder="Add a reply…"></textarea><button type="button" data-action="add-reply" class="secondary">Reply</button></div></div>`;
+
   if (viewMode) {
     const metaStr = `${escapeHtml((existingComment.author || '').trim() || '')} · ${existingComment.createdAt ? new Date(existingComment.createdAt).toLocaleString() : ''}`;
     popover.innerHTML = `
-      <p class="comment-popover-title">Comment on text</p>
+      <div class="comment-header-row">
+        <p class="comment-popover-title">Comment on ${titleLabel}</p>
+        <div class="comment-popover-actions header-actions">
+          <button type="button" data-action="edit" title="Edit this comment">Edit</button>
+          <button type="button" data-action="delete" class="secondary" title="Permanently remove">Remove</button>
+          <button type="button" data-action="cancel" class="secondary" title="Close window">Close</button>
+        </div>
+      </div>
       <div class="comment-body-view">
         <span class="comment-reply-meta">${metaStr}</span>
         <div class="comment-body-view-text">${escapeHtml(existingComment.text || '')}</div>
       </div>
-      <div class="comment-popover-actions">
-        <button type="button" data-action="edit">Edit</button>
-        <button type="button" data-action="delete" class="secondary">Remove comment</button>
-        <button type="button" data-action="cancel" class="secondary">Cancel</button>
-      </div>
-      <div class="comment-replies-section"><p class="comment-replies-title">Replies (${(existingComment.replies || []).length})</p><div class="comment-replies-list" data-comment-id="${existingComment.id}"></div><div class="comment-reply-add"><div class="comment-reply-author-row"><label for="replyAuthorText">Author:</label><input type="text" id="replyAuthorText" class="author-input" placeholder="Your name" value="${escapeHtml(localStorage.getItem(COMMENT_AUTHOR_KEY) || '')}"></div><textarea rows="2" placeholder="Add a reply…"></textarea><button type="button" data-action="add-reply" class="secondary">Reply</button></div></div>
+      ${repliesHtml(existingComment)}
     `;
   } else {
     popover.innerHTML = `
-      <p class="comment-popover-title">${existingComment ? 'View / Edit comment on text' : 'Add comment to highlighted text'}</p>
+      <p class="comment-popover-title">${existingComment ? `View / Edit comment${type === 'text' ? ' on text' : ''}` : `Add comment to ${type === 'text' ? 'highlighted text' : 'bracket'}`}</p>
       <div class="comment-popover-author-row">
-        <label for="commentAuthorText">Author:</label>
-        <input type="text" id="commentAuthorText" class="author-input" placeholder="Your name" value="${escapeHtml(commentAuthor)}">
+        <label for="commentAuthor${idSuffix}">Author:</label>
+        <input type="text" id="commentAuthor${idSuffix}" class="author-input" placeholder="Your name" value="${escapeHtml(commentAuthor)}">
       </div>
-      <textarea rows="3" placeholder="Your note…">${existingComment ? escapeHtml(existingComment.text || '') : ''}</textarea>
+      <textarea rows="3" placeholder="Your note${type === 'bracket' ? ' on this bracket' : ''}…">${existingComment ? escapeHtml(existingComment.text || '') : ''}</textarea>
       <div class="comment-popover-actions">
         <button type="button" data-action="save">${existingComment ? 'Update' : 'Save'}</button>
         ${existingComment ? '<button type="button" data-action="delete" class="secondary">Remove comment</button>' : ''}
         <button type="button" data-action="cancel" class="secondary">Cancel</button>
       </div>
-      ${existingComment ? `<div class="comment-replies-section"><p class="comment-replies-title">Replies (${(existingComment.replies || []).length})</p><div class="comment-replies-list" data-comment-id="${existingComment.id}"></div><div class="comment-reply-add"><div class="comment-reply-author-row"><label for="replyAuthorText">Author:</label><input type="text" id="replyAuthorText" class="author-input" placeholder="Your name" value="${escapeHtml(localStorage.getItem(COMMENT_AUTHOR_KEY) || '')}"></div><textarea rows="2" placeholder="Add a reply…"></textarea><button type="button" data-action="add-reply" class="secondary">Reply</button></div></div>` : ''}
+      ${existingComment ? repliesHtml(existingComment) : ''}
     `;
   }
 
   const wrapper = bracketCanvas?.parentElement || document.body;
-  const wrapperRect = wrapper.getBoundingClientRect();
-  let anchorRect = options.anchorRect || null;
-  if (!anchorRect && existingCommentId && propositionsContainer) {
-    const mark = propositionsContainer.querySelector(`.comment-highlight[data-comment-id="${existingCommentId}"]`);
-    if (mark) anchorRect = mark.getBoundingClientRect();
-  }
-  if (anchorRect) {
-    const gap = 8;
-    const leftOffset = 120;
-    let left = anchorRect.left - wrapperRect.left - leftOffset;
-    let top = anchorRect.bottom - wrapperRect.top + gap;
-    const popoverW = options.lastWidth != null ? options.lastWidth : 640;
-    const popoverH = options.lastHeight != null ? options.lastHeight : 420;
-    left = Math.max(8, Math.min(left, wrapperRect.width - popoverW));
-    top = Math.max(8, Math.min(top, wrapperRect.height - Math.min(popoverH, wrapperRect.height)));
-    popover.style.left = left + 'px';
-    popover.style.top = top + 'px';
-  } else {
-    const rect = wrapperRect;
-    const leftOffset = 120;
-    popover.style.left = `${Math.max(8, rect.width / 2 - 140 - leftOffset)}px`;
-    popover.style.top = `${Math.max(8, rect.height / 2 - 80)}px`;
-  }
+  positionPopover(popover, wrapper);
   wrapper.appendChild(popover);
   if (options.lastWidth != null) popover.style.width = options.lastWidth + 'px';
   if (options.lastHeight != null) popover.style.height = options.lastHeight + 'px';
@@ -2027,112 +2066,106 @@ function showCommentPopoverForText(propIndex, start, end, existingCommentId = nu
   if (options.lastTop != null) popover.style.top = options.lastTop;
   makeCommentPopoverDraggableAndResizable(popover);
 
+  const getPopoverState = () => ({
+    lastWidth: popover.offsetWidth,
+    lastHeight: popover.offsetHeight,
+    lastLeft: popover.style.left,
+    lastTop: popover.style.top,
+  });
+
+  const closePopover = () => {
+    popover.remove();
+    document.removeEventListener('click', dismiss);
+  };
+
   if (viewMode) {
     popover.querySelector('[data-action="edit"]').addEventListener('click', () => {
-      const lastWidth = popover.offsetWidth;
-      const lastHeight = popover.offsetHeight;
-      const lastLeft = popover.style.left;
-      const lastTop = popover.style.top;
-      popover.remove();
-      document.removeEventListener('click', dismiss);
-      showCommentPopoverForText(propIndex, start, end, existingComment.id, { viewMode: false, lastWidth, lastHeight, lastLeft, lastTop });
+      const state = getPopoverState();
+      closePopover();
+      onReopen({ viewMode: false, ...state });
     });
     popover.querySelector('[data-action="delete"]').addEventListener('click', () => {
       comments = comments.filter((c) => c.id !== existingComment.id);
-      popover.remove();
-      document.removeEventListener('click', dismiss);
-      renderPropositions();
-      renderCommentPreviews();
+      closePopover();
+      onDelete();
       showStatus('Comment removed.', 'success');
     });
-    popover.querySelector('[data-action="cancel"]').addEventListener('click', () => {
-      popover.remove();
-      document.removeEventListener('click', dismiss);
-    });
-    const repliesList = popover.querySelector('.comment-replies-list');
-    const replyCountEl = popover.querySelector('.comment-replies-title');
-    const renderReplies = () => {
-      if (!repliesList) return;
-      repliesList.innerHTML = '';
-      const replies = existingComment.replies || [];
-      replyCountEl.textContent = `Replies (${replies.length})`;
-      replies.forEach((r) => {
-        const div = document.createElement('div');
-        div.className = 'comment-reply-item';
-        div.innerHTML = `<span class="comment-reply-meta">${escapeHtml(r.author || '')} · ${r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</span><p class="comment-reply-text">${escapeHtml(r.text || '')}</p>`;
-        repliesList.appendChild(div);
-      });
-    };
-    renderReplies();
-    const replyTa = popover.querySelector('.comment-reply-add textarea');
-    const replyAuthorInput = popover.querySelector('#replyAuthorText');
-    const addReplyBtn = popover.querySelector('[data-action="add-reply"]');
-    if (addReplyBtn && replyTa) {
-      addReplyBtn.addEventListener('click', () => {
-        const replyText = (replyTa.value || '').trim();
-        if (!replyText) return;
-        const replyAuthor = (replyAuthorInput && replyAuthorInput.value || '').trim() || (localStorage.getItem(COMMENT_AUTHOR_KEY) || '');
-        if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) { }
-        if (!existingComment.replies) existingComment.replies = [];
-        existingComment.replies.push({
-          id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
-          text: replyText,
-          author: replyAuthor || undefined,
-          createdAt: new Date().toISOString(),
-        });
-        replyTa.value = '';
-        renderReplies();
-        renderCommentPreviews();
-      });
-    }
+    popover.querySelector('[data-action="cancel"]').addEventListener('click', closePopover);
+    setupReplies(popover, existingComment, idSuffix);
   } else {
     const ta = popover.querySelector('textarea');
-    const authorInput = popover.querySelector('#commentAuthorText');
+    const authorInput = popover.querySelector(`#commentAuthor${idSuffix}`);
     ta.focus();
 
-    if (existingComment) {
-      const repliesList = popover.querySelector('.comment-replies-list');
-      const replyCountEl = popover.querySelector('.comment-replies-title');
-      const renderReplies = () => {
-        if (!repliesList) return;
-        repliesList.innerHTML = '';
-        const replies = existingComment.replies || [];
-        replyCountEl.textContent = `Replies (${replies.length})`;
-        replies.forEach((r) => {
-          const div = document.createElement('div');
-          div.className = 'comment-reply-item';
-          div.innerHTML = `<span class="comment-reply-meta">${escapeHtml(r.author || '')} · ${r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</span><p class="comment-reply-text">${escapeHtml(r.text || '')}</p>`;
-          repliesList.appendChild(div);
-        });
-      };
-      renderReplies();
-      const replyTa = popover.querySelector('.comment-reply-add textarea');
-      const replyAuthorInput = popover.querySelector('#replyAuthorText');
-      const addReplyBtn = popover.querySelector('[data-action="add-reply"]');
-      if (addReplyBtn && replyTa) {
-        addReplyBtn.addEventListener('click', () => {
-          const replyText = (replyTa.value || '').trim();
-          if (!replyText) return;
-          const replyAuthor = (replyAuthorInput && replyAuthorInput.value || '').trim() || (localStorage.getItem(COMMENT_AUTHOR_KEY) || '');
-          if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) { }
-          if (!existingComment.replies) existingComment.replies = [];
-          existingComment.replies.push({
-            id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
-            text: replyText,
-            author: replyAuthor || undefined,
-            createdAt: new Date().toISOString(),
-          });
-          replyTa.value = '';
-          renderReplies();
-          renderCommentPreviews();
-        });
-      }
-    }
+    if (existingComment) setupReplies(popover, existingComment, idSuffix);
 
     popover.querySelector('[data-action="save"]').addEventListener('click', () => {
       const text = (ta.value || '').trim();
       const author = (authorInput && authorInput.value || '').trim();
       if (author) try { localStorage.setItem(COMMENT_AUTHOR_KEY, author); } catch (_) { }
+      const state = getPopoverState();
+      closePopover();
+      const savedCommentId = onSave(text, author, state);
+      showStatus(existingComment ? (text ? 'Comment updated.' : 'Comment removed.') : 'Comment added.', 'success');
+      if (savedCommentId) onReopen({ viewMode: true, ...state });
+    });
+
+    if (existingComment) {
+      popover.querySelector('[data-action="delete"]').addEventListener('click', () => {
+        comments = comments.filter((c) => c.id !== existingComment.id);
+        closePopover();
+        onDelete();
+        showStatus('Comment removed.', 'success');
+      });
+    }
+
+    popover.querySelector('[data-action="cancel"]').addEventListener('click', closePopover);
+  }
+
+  const dismiss = (e) => {
+    if (popover._dragJustEnded) return;
+    if (popover.parentNode && popover.contains(e.target)) return;
+    popover.remove();
+    document.removeEventListener('click', dismiss);
+  };
+  setTimeout(() => document.addEventListener('click', dismiss), 0);
+}
+
+function showCommentPopoverForText(propIndex, start, end, existingCommentId = null, options = {}) {
+  const existingComment = existingCommentId ? getCommentById(existingCommentId) : null;
+
+  showCommentPopover({
+    type: 'text',
+    existingComment,
+    titleLabel: 'text',
+    idSuffix: 'Text',
+    options,
+    onReopen: (newOpts) => showCommentPopoverForText(propIndex, start, end, existingComment?.id || existingCommentId, newOpts),
+    positionPopover: (popover, wrapper) => {
+      const wrapperRect = wrapper.getBoundingClientRect();
+      let anchorRect = options.anchorRect || null;
+      if (!anchorRect && existingCommentId && propositionsContainer) {
+        const mark = propositionsContainer.querySelector(`.comment-highlight[data-comment-id="${existingCommentId}"]`);
+        if (mark) anchorRect = mark.getBoundingClientRect();
+      }
+      if (anchorRect) {
+        const gap = 8;
+        const leftOffset = 120;
+        let left = anchorRect.left - wrapperRect.left - leftOffset;
+        let top = anchorRect.bottom - wrapperRect.top + gap;
+        const popoverW = options.lastWidth != null ? options.lastWidth : 640;
+        const popoverH = options.lastHeight != null ? options.lastHeight : 420;
+        left = Math.max(8, Math.min(left, wrapperRect.width - popoverW));
+        top = Math.max(8, Math.min(top, wrapperRect.height - Math.min(popoverH, wrapperRect.height)));
+        popover.style.left = left + 'px';
+        popover.style.top = top + 'px';
+      } else {
+        const leftOffset = 120;
+        popover.style.left = `${Math.max(8, wrapperRect.width / 2 - 140 - leftOffset)}px`;
+        popover.style.top = `${Math.max(8, wrapperRect.height / 2 - 80)}px`;
+      }
+    },
+    onSave: (text, author) => {
       let savedCommentId = null;
       if (existingComment) {
         existingComment.text = text;
@@ -2158,216 +2191,46 @@ function showCommentPopoverForText(propIndex, start, end, existingCommentId = nu
         });
         savedCommentId = newId;
       }
-      const lastWidth = popover.offsetWidth;
-      const lastHeight = popover.offsetHeight;
-      const lastLeft = popover.style.left;
-      const lastTop = popover.style.top;
-      popover.remove();
-      document.removeEventListener('click', dismiss);
       renderPropositions();
       renderCommentPreviews();
-      showStatus(existingComment ? (text ? 'Comment updated.' : 'Comment removed.') : 'Comment added.', 'success');
-      if (savedCommentId) showCommentPopoverForText(propIndex, start, end, savedCommentId, { viewMode: true, lastWidth, lastHeight, lastLeft, lastTop });
-    });
-
-    if (existingComment) {
-      popover.querySelector('[data-action="delete"]').addEventListener('click', () => {
-        comments = comments.filter((c) => c.id !== existingComment.id);
-        popover.remove();
-        document.removeEventListener('click', dismiss);
-        renderPropositions();
-        renderCommentPreviews();
-        showStatus('Comment removed.', 'success');
-      });
-    }
-
-    popover.querySelector('[data-action="cancel"]').addEventListener('click', () => {
-      popover.remove();
-      document.removeEventListener('click', dismiss);
-    });
-  }
-
-  const dismiss = (e) => {
-    if (popover._dragJustEnded) return;
-    if (popover.parentNode && popover.contains(e.target)) return;
-    popover.remove();
-    document.removeEventListener('click', dismiss);
-  };
-  setTimeout(() => document.addEventListener('click', dismiss), 0);
+      return savedCommentId;
+    },
+    onDelete: () => {
+      renderPropositions();
+      renderCommentPreviews();
+    },
+  });
 }
 
 function showCommentPopoverForBracket(bracketIdx, centerY, centerX, options = {}) {
-  const existing = document.getElementById('commentPopover');
-  if (existing) existing.remove();
-
   const existingComment = getCommentForBracket(bracketIdx);
-  const viewMode = options.viewMode === true || (!!existingComment && options.viewMode !== false);
-  const commentAuthor = (existingComment && existingComment.author) || localStorage.getItem(COMMENT_AUTHOR_KEY) || '';
 
-  const popover = document.createElement('div');
-  popover.id = 'commentPopover';
-  popover.className = 'comment-popover';
-
-  if (viewMode) {
-    const metaStr = `${escapeHtml((existingComment.author || '').trim() || '')} · ${existingComment.createdAt ? new Date(existingComment.createdAt).toLocaleString() : ''}`;
-    popover.innerHTML = `
-      <p class="comment-popover-title">Comment on bracket</p>
-      <div class="comment-body-view">
-        <span class="comment-reply-meta">${metaStr}</span>
-        <div class="comment-body-view-text">${escapeHtml(existingComment.text || '')}</div>
-      </div>
-      <div class="comment-popover-actions">
-        <button type="button" data-action="edit">Edit</button>
-        <button type="button" data-action="delete" class="secondary">Remove comment</button>
-        <button type="button" data-action="cancel" class="secondary">Cancel</button>
-      </div>
-      <div class="comment-replies-section"><p class="comment-replies-title">Replies (${(existingComment.replies || []).length})</p><div class="comment-replies-list" data-comment-id="${existingComment.id}"></div><div class="comment-reply-add"><div class="comment-reply-author-row"><label for="replyAuthorBracket">Author:</label><input type="text" id="replyAuthorBracket" class="author-input" placeholder="Your name" value="${escapeHtml(localStorage.getItem(COMMENT_AUTHOR_KEY) || '')}"></div><textarea rows="2" placeholder="Add a reply…"></textarea><button type="button" data-action="add-reply" class="secondary">Reply</button></div></div>
-    `;
-  } else {
-    popover.innerHTML = `
-      <p class="comment-popover-title">${existingComment ? 'View / Edit comment' : 'Add comment to bracket'}</p>
-      <div class="comment-popover-author-row">
-        <label for="commentAuthorBracket">Author:</label>
-        <input type="text" id="commentAuthorBracket" class="author-input" placeholder="Your name" value="${escapeHtml(commentAuthor)}">
-      </div>
-      <textarea rows="3" placeholder="Your note on this bracket…">${escapeHtml(existingComment?.text || '')}</textarea>
-      <div class="comment-popover-actions">
-        <button type="button" data-action="save">${existingComment ? 'Update' : 'Save'}</button>
-        ${existingComment ? '<button type="button" data-action="delete" class="secondary">Remove comment</button>' : ''}
-        <button type="button" data-action="cancel" class="secondary">Cancel</button>
-      </div>
-      ${existingComment ? `<div class="comment-replies-section"><p class="comment-replies-title">Replies (${(existingComment.replies || []).length})</p><div class="comment-replies-list" data-comment-id="${existingComment.id}"></div><div class="comment-reply-add"><div class="comment-reply-author-row"><label for="replyAuthorBracket">Author:</label><input type="text" id="replyAuthorBracket" class="author-input" placeholder="Your name" value="${escapeHtml(localStorage.getItem(COMMENT_AUTHOR_KEY) || '')}"></div><textarea rows="2" placeholder="Add a reply…"></textarea><button type="button" data-action="add-reply" class="secondary">Reply</button></div></div>` : ''}
-    `;
-  }
-
-  const wrapper = bracketCanvas?.parentElement || document.body;
-  const defaultW = 640;
-  const leftOffset = 120;
-  const leftBelow = Math.max(8, centerX - Math.floor(defaultW / 2) - leftOffset);
-  const topBelow = centerY + 20;
-  popover.style.left = `${Math.max(8, Math.min(leftBelow, wrapper.offsetWidth - defaultW))}px`;
-  popover.style.top = `${Math.max(8, topBelow)}px`;
-  wrapper.appendChild(popover);
-  if (options.lastWidth != null) popover.style.width = options.lastWidth + 'px';
-  if (options.lastHeight != null) popover.style.height = options.lastHeight + 'px';
-  if (options.lastLeft != null) popover.style.left = options.lastLeft;
-  if (options.lastTop != null) popover.style.top = options.lastTop;
-  makeCommentPopoverDraggableAndResizable(popover);
-
-  if (viewMode) {
-    popover.querySelector('[data-action="edit"]').addEventListener('click', () => {
-      const lastWidth = popover.offsetWidth;
-      const lastHeight = popover.offsetHeight;
-      const lastLeft = popover.style.left;
-      const lastTop = popover.style.top;
-      popover.remove();
-      document.removeEventListener('click', dismiss);
-      showCommentPopoverForBracket(bracketIdx, centerY, centerX, { viewMode: false, lastWidth, lastHeight, lastLeft, lastTop });
-    });
-    popover.querySelector('[data-action="delete"]').addEventListener('click', () => {
-      comments = comments.filter((c) => c.id !== existingComment.id);
-      popover.remove();
-      document.removeEventListener('click', dismiss);
-      renderCommentPreviews();
-      showStatus('Comment removed.', 'success');
-    });
-    popover.querySelector('[data-action="cancel"]').addEventListener('click', () => {
-      popover.remove();
-      document.removeEventListener('click', dismiss);
-    });
-    const repliesList = popover.querySelector('.comment-replies-list');
-    const replyCountEl = popover.querySelector('.comment-replies-title');
-    const renderReplies = () => {
-      if (!repliesList) return;
-      repliesList.innerHTML = '';
-      const replies = existingComment.replies || [];
-      replyCountEl.textContent = `Replies (${replies.length})`;
-      replies.forEach((r) => {
-        const div = document.createElement('div');
-        div.className = 'comment-reply-item';
-        div.innerHTML = `<span class="comment-reply-meta">${escapeHtml(r.author || '')} · ${r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</span><p class="comment-reply-text">${escapeHtml(r.text || '')}</p>`;
-        repliesList.appendChild(div);
-      });
-    };
-    renderReplies();
-    const replyTa = popover.querySelector('.comment-reply-add textarea');
-    const replyAuthorInput = popover.querySelector('#replyAuthorBracket');
-    const addReplyBtn = popover.querySelector('[data-action="add-reply"]');
-    if (addReplyBtn && replyTa) {
-      addReplyBtn.addEventListener('click', () => {
-        const replyText = (replyTa.value || '').trim();
-        if (!replyText) return;
-        const replyAuthor = (replyAuthorInput && replyAuthorInput.value || '').trim() || (localStorage.getItem(COMMENT_AUTHOR_KEY) || '');
-        if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) { }
-        if (!existingComment.replies) existingComment.replies = [];
-        existingComment.replies.push({
-          id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
-          text: replyText,
-          author: replyAuthor || undefined,
-          createdAt: new Date().toISOString(),
-        });
-        replyTa.value = '';
-        renderReplies();
-        renderCommentPreviews();
-      });
-    }
-  } else {
-    const ta = popover.querySelector('textarea');
-    const authorInput = popover.querySelector('#commentAuthorBracket');
-    ta.focus();
-
-    if (existingComment) {
-      const repliesList = popover.querySelector('.comment-replies-list');
-      const replyCountEl = popover.querySelector('.comment-replies-title');
-      const renderReplies = () => {
-        if (!repliesList) return;
-        repliesList.innerHTML = '';
-        const replies = existingComment.replies || [];
-        replyCountEl.textContent = `Replies (${replies.length})`;
-        replies.forEach((r) => {
-          const div = document.createElement('div');
-          div.className = 'comment-reply-item';
-          div.innerHTML = `<span class="comment-reply-meta">${escapeHtml(r.author || '')} · ${r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</span><p class="comment-reply-text">${escapeHtml(r.text || '')}</p>`;
-          repliesList.appendChild(div);
-        });
-      };
-      renderReplies();
-      const replyTa = popover.querySelector('.comment-reply-add textarea');
-      const replyAuthorInput = popover.querySelector('#replyAuthorBracket');
-      const addReplyBtn = popover.querySelector('[data-action="add-reply"]');
-      if (addReplyBtn && replyTa) {
-        addReplyBtn.addEventListener('click', () => {
-          const replyText = (replyTa.value || '').trim();
-          if (!replyText) return;
-          const replyAuthor = (replyAuthorInput && replyAuthorInput.value || '').trim() || (localStorage.getItem(COMMENT_AUTHOR_KEY) || '');
-          if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) { }
-          if (!existingComment.replies) existingComment.replies = [];
-          existingComment.replies.push({
-            id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
-            text: replyText,
-            author: replyAuthor || undefined,
-            createdAt: new Date().toISOString(),
-          });
-          replyTa.value = '';
-          renderReplies();
-          renderCommentPreviews();
-        });
-      }
-    }
-
-    popover.querySelector('[data-action="save"]').addEventListener('click', () => {
-      const text = (ta.value || '').trim();
-      const author = (authorInput && authorInput.value || '').trim();
-      if (author) try { localStorage.setItem(COMMENT_AUTHOR_KEY, author); } catch (_) { }
-      let reopenViewMode = false;
+  showCommentPopover({
+    type: 'bracket',
+    existingComment,
+    titleLabel: 'bracket',
+    idSuffix: 'Bracket',
+    options,
+    onReopen: (newOpts) => showCommentPopoverForBracket(bracketIdx, centerY, centerX, newOpts),
+    positionPopover: (popover, wrapper) => {
+      const defaultW = 640;
+      const leftOffset = 120;
+      const leftBelow = Math.max(8, centerX - Math.floor(defaultW / 2) - leftOffset);
+      const topBelow = centerY + 20;
+      popover.style.left = `${Math.max(8, Math.min(leftBelow, wrapper.offsetWidth - defaultW))}px`;
+      popover.style.top = `${Math.max(8, topBelow)}px`;
+    },
+    onSave: (text, author) => {
+      let savedCommentId = null;
       if (existingComment) {
         existingComment.text = text;
         existingComment.author = author || existingComment.author;
         if (!text) comments = comments.filter((c) => c.id !== existingComment.id);
-        else reopenViewMode = true;
+        else savedCommentId = existingComment.id;
       } else if (text) {
+        const newId = nextCommentId();
         comments.push({
-          id: nextCommentId(),
+          id: newId,
           type: 'bracket',
           target: { bracketIdx },
           text,
@@ -2375,45 +2238,19 @@ function showCommentPopoverForBracket(bracketIdx, centerY, centerX, options = {}
           createdAt: new Date().toISOString(),
           replies: [],
         });
-        reopenViewMode = true;
+        savedCommentId = newId;
       }
-      const lastWidth = popover.offsetWidth;
-      const lastHeight = popover.offsetHeight;
-      const lastLeft = popover.style.left;
-      const lastTop = popover.style.top;
-      popover.remove();
-      document.removeEventListener('click', dismiss);
       renderCommentPreviews();
       renderBrackets();
-      showStatus(existingComment ? (text ? 'Comment updated.' : 'Comment removed.') : 'Comment added.', 'success');
-      if (reopenViewMode) showCommentPopoverForBracket(bracketIdx, centerY, centerX, { viewMode: true, lastWidth, lastHeight, lastLeft, lastTop });
-    });
-
-    if (existingComment) {
-      popover.querySelector('[data-action="delete"]').addEventListener('click', () => {
-        comments = comments.filter((c) => c.id !== existingComment.id);
-        popover.remove();
-        document.removeEventListener('click', dismiss);
-        renderCommentPreviews();
-        renderBrackets();
-        showStatus('Comment removed.', 'success');
-      });
-    }
-
-    popover.querySelector('[data-action="cancel"]').addEventListener('click', () => {
-      popover.remove();
-      document.removeEventListener('click', dismiss);
-    });
-  }
-
-  const dismiss = (e) => {
-    if (popover._dragJustEnded) return;
-    if (popover.parentNode && popover.contains(e.target)) return;
-    popover.remove();
-    document.removeEventListener('click', dismiss);
-  };
-  setTimeout(() => document.addEventListener('click', dismiss), 0);
+      return savedCommentId;
+    },
+    onDelete: () => {
+      renderCommentPreviews();
+      renderBrackets();
+    },
+  });
 }
+
 
 function showBracketActions(bracketIdx, centerY, centerX) {
   connectBracketToBracketIdx = null;
@@ -2452,7 +2289,7 @@ function showBracketActions(bracketIdx, centerY, centerX) {
 
   popover.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
     e.stopPropagation();
-    undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({ ...w })) });
+    pushUndo('bracket');
     brackets.splice(bracketIdx, 1);
     comments = comments.filter((c) => c.type !== 'bracket' || c.target?.bracketIdx !== bracketIdx);
     comments.forEach((c) => { if (c.type === 'bracket' && c.target?.bracketIdx > bracketIdx) c.target.bracketIdx--; });
@@ -2472,7 +2309,7 @@ function showBracketActions(bracketIdx, centerY, centerX) {
   if (swapBtn) {
     swapBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({ ...w })) });
+      pushUndo('bracket');
       brackets[bracketIdx].labelsSwapped = !brackets[bracketIdx].labelsSwapped;
       renderBrackets();
       clearAndDismiss();
@@ -2573,13 +2410,7 @@ function startNewBracket() {
   passageRef = '—';
   propositions = [];
   verseRefs = [];
-  brackets = [];
-  formatTags = [];
-  wordArrows = [];
-  undoStack = [];
-  comments = [];
-  bracketSelectStep = 0;
-  bracketFrom = null;
+  clearAllFormatting();
   connectBracketToBracketIdx = null;
   clearPropositionHighlights();
   if (passageHeader) passageHeader.textContent = passageRef;
@@ -2592,6 +2423,7 @@ function startNewBracket() {
   document.getElementById('labelPicker')?.remove();
   document.getElementById('commentPopover')?.remove();
   renderCommentPreviews();
+  if (typeof clearDraft === 'function') clearDraft();
   showStatus('New bracket started. Fetch or import a passage to begin.', 'success');
 }
 
@@ -2661,7 +2493,7 @@ if (newBracketBtn) newBracketBtn.addEventListener('click', () => handleNewBracke
 // Clear brackets
 if (clearBracketsBtn) clearBracketsBtn.addEventListener('click', () => {
   if (brackets.length === 0) return;
-  undoStack.push({ action: 'bracket', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map((a) => ({ ...a })), formatTags: formatTags.map((t) => ({ ...t })), wordArrows: wordArrows.map(w => ({ ...w })) });
+  pushUndo('bracket');
   brackets = [];
   renderBrackets();
   bracketSelectStep = 0;
@@ -3034,6 +2866,7 @@ function importBracket(data) {
   renderBrackets();
   renderCommentPreviews();
   addToRecent(data);
+  if (typeof clearDraft === 'function') clearDraft();
   showStatus('Bracket loaded.', 'success');
 }
 
@@ -3150,6 +2983,263 @@ async function copyDiagramForWord() {
 
 if (copyForWordBtn) copyForWordBtn.addEventListener('click', copyDiagramForWord);
 
+// ── PNG metadata: embed bracket JSON into a tEXt chunk ──────────────────────
+
+/**
+ * Injects a PNG tEXt chunk carrying the bracket JSON into a PNG blob.
+ * The chunk is placed right after the IHDR chunk (~byte 33).
+ * Returns a new Blob with the metadata embedded.
+ */
+async function injectPngMetadata(blob, jsonString) {
+  const buf = await blob.arrayBuffer();
+  const src = new Uint8Array(buf);
+
+  // Build tEXt chunk: keyword NUL text (all Latin-1)
+  const keyword = 'BibleBracket';
+  // Encode JSON as UTF-8 then percent-encode so it's safe ASCII
+  const safeJson = encodeURIComponent(jsonString);
+  const chunkData = new Uint8Array(keyword.length + 1 + safeJson.length);
+  for (let i = 0; i < keyword.length; i++) chunkData[i] = keyword.charCodeAt(i);
+  chunkData[keyword.length] = 0; // NUL separator
+  for (let i = 0; i < safeJson.length; i++) chunkData[keyword.length + 1 + i] = safeJson.charCodeAt(i);
+
+  // CRC-32 of chunk type + data
+  const type = [116, 69, 88, 116]; // 'tEXt'
+  const crcInput = new Uint8Array(4 + chunkData.length);
+  crcInput.set(type, 0);
+  crcInput.set(chunkData, 4);
+  const crc = crc32(crcInput);
+
+  // Assemble: 4-byte length, 4-byte type, data, 4-byte CRC
+  const chunk = new Uint8Array(12 + chunkData.length);
+  const dv = new DataView(chunk.buffer);
+  dv.setUint32(0, chunkData.length);
+  chunk.set(type, 4);
+  chunk.set(chunkData, 8);
+  dv.setUint32(8 + chunkData.length, crc);
+
+  // Insert after IHDR (signature=8 bytes + IHDR chunk = 8+4+4+13+4 = 33 bytes)
+  const insertAt = 33;
+  const out = new Uint8Array(src.length + chunk.length);
+  out.set(src.subarray(0, insertAt), 0);
+  out.set(chunk, insertAt);
+  out.set(src.subarray(insertAt), insertAt + chunk.length);
+
+  return new Blob([out], { type: 'image/png' });
+}
+
+/** Pure-JS CRC-32. */
+function crc32(data) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < data.length; i++) {
+    crc ^= data[i];
+    for (let j = 0; j < 8; j++) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0);
+    }
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+/**
+ * Reads a PNG file and extracts bracket JSON from a BibleBracket tEXt chunk.
+ * Returns parsed object or null if not found.
+ */
+async function extractPngMetadata(file) {
+  try {
+    const buf = await file.arrayBuffer();
+    const data = new Uint8Array(buf);
+    const dv = new DataView(buf);
+    let offset = 8; // skip PNG signature
+    while (offset < data.length - 12) {
+      const length = dv.getUint32(offset);
+      const type = String.fromCharCode(data[offset+4], data[offset+5], data[offset+6], data[offset+7]);
+      if (type === 'tEXt') {
+        const chunkData = data.subarray(offset + 8, offset + 8 + length);
+        // Find NUL separator
+        let sep = chunkData.indexOf(0);
+        if (sep === -1) { offset += 12 + length; continue; }
+        const key = String.fromCharCode(...chunkData.subarray(0, sep));
+        if (key === 'BibleBracket') {
+          const val = String.fromCharCode(...chunkData.subarray(sep + 1));
+          return JSON.parse(decodeURIComponent(val));
+        }
+      }
+      if (type === 'IEND') break;
+      offset += 12 + length;
+    }
+  } catch (_) {}
+  return null;
+}
+
+/**
+ * Reads a PDF file and extracts bracket JSON from the Keywords metadata field.
+ * Looks for 'BibleBracket:' prefix followed by percent-encoded JSON.
+ * Returns parsed object or null if not found.
+ */
+async function extractPdfMetadata(file) {
+  try {
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    const text = new TextDecoder('latin1').decode(bytes);
+    
+    // Strategy 1: Check hidden 'DNA' text layer (for merged files)
+    const dnaMarker = 'BibleBracketDNA:';
+    let dnaIdx = text.indexOf(dnaMarker);
+    if (dnaIdx !== -1) {
+      const start = dnaIdx + dnaMarker.length;
+      let end = text.indexOf(')', start);
+      if (end === -1) end = text.indexOf('>', start); // could be in hex format <...>
+      if (end !== -1) {
+        return JSON.parse(decodeURIComponent(text.substring(start, end)));
+      }
+    }
+
+    // Strategy 2: Check Keywords metadata (for original files)
+    const marker = 'BibleBracket:';
+    const idx = text.indexOf(marker);
+    if (idx === -1) return null;
+    const start = idx + marker.length;
+    let end = start;
+    let parenDepth = 0;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '(') parenDepth++;
+      else if (ch === ')') {
+        if (parenDepth === 0) { end = i; break; }
+        parenDepth--;
+      }
+    }
+    if (end <= start) return null;
+    const encoded = text.substring(start, end);
+    return JSON.parse(decodeURIComponent(encoded));
+  } catch (_) {}
+  return null;
+}
+
+/** Download a PNG with bracket JSON baked into its metadata. */
+async function saveImageWithData() {
+  const workspace = document.querySelector('.workspace');
+  if (!workspace || propositions.length === 0) {
+    showStatus('Nothing to save. Fetch or import a passage first.', 'error');
+    return;
+  }
+  if (typeof html2canvas !== 'function') {
+    showStatus('Save failed: html2canvas not loaded.', 'error');
+    return;
+  }
+  try {
+    const workspaceRect = workspace.getBoundingClientRect();
+    const coreElements = [
+      ...Array.from(workspace.querySelectorAll('.proposition-text')),
+      ...Array.from(workspace.querySelectorAll('#bracketCanvas path, #bracketCanvas circle, #bracketCanvas text'))
+    ];
+    const infoElements = [
+      workspace.querySelector('#passageRef'),
+      workspace.querySelector('#copyrightLabel')
+    ];
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, found = false;
+    coreElements.forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        minX = Math.min(minX, r.left); minY = Math.min(minY, r.top);
+        maxX = Math.max(maxX, r.right); maxY = Math.max(maxY, r.bottom);
+        found = true;
+      }
+    });
+    infoElements.forEach((el) => {
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        minX = Math.min(minX, r.left); minY = Math.min(minY, r.top);
+        if (found && r.right < maxX + 500) maxX = Math.max(maxX, r.right);
+        else if (!found) maxX = Math.max(maxX, r.right);
+        maxY = Math.max(maxY, r.bottom); found = true;
+      }
+    });
+    const padding = 16;
+    const opts = { useCORS: true, scale: 2, backgroundColor: null, logging: false };
+    if (found) {
+      opts.x = Math.max(0, minX - workspaceRect.left - padding);
+      opts.y = Math.max(0, minY - workspaceRect.top - padding);
+      opts.width = Math.min(workspaceRect.width, (maxX - minX) + padding * 2);
+      opts.height = Math.min(workspaceRect.height, (maxY - minY) + padding * 2);
+    }
+    const canvas = await html2canvas(workspace, opts);
+    canvas.toBlob(async (blob) => {
+      if (!blob) { showStatus('Save failed.', 'error'); return; }
+      const enriched = await injectPngMetadata(blob, JSON.stringify(buildBracketData()));
+      const url = URL.createObjectURL(enriched);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${getExportFilename()}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showStatus('Image saved with bracket data embedded. Drag it back in to restore.', 'success');
+    }, 'image/png');
+  } catch (err) {
+    showStatus(err.message || 'Save failed.', 'error');
+  }
+}
+
+const saveImageBtn = document.getElementById('saveImageBtn');
+if (saveImageBtn) saveImageBtn.addEventListener('click', saveImageWithData);
+
+// ── Drag-and-drop import (JSON files and metadata-enriched PNGs) ─────────────
+
+const dropZone = document.querySelector('.bracket-canvas-wrapper') || document.body;
+
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+  dropZone.classList.add('drag-over');
+});
+
+dropZone.addEventListener('dragleave', (e) => {
+  if (!dropZone.contains(e.relatedTarget)) {
+    dropZone.classList.remove('drag-over');
+  }
+});
+
+dropZone.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files?.[0];
+  if (!file) return;
+
+  if (file.type === 'application/json' || file.name.endsWith('.json')) {
+    try {
+      const text = await file.text();
+      importBracket(JSON.parse(text));
+    } catch (_) {
+      showStatus('Could not read JSON file.', 'error');
+    }
+    return;
+  }
+
+  if (file.type === 'image/png' || file.name.endsWith('.png')) {
+    const data = await extractPngMetadata(file);
+    if (data && Array.isArray(data.propositions)) {
+      importBracket(data);
+    } else {
+      showStatus('This PNG has no embedded bracket data. Use a PNG exported by this app.', 'error');
+    }
+    return;
+  }
+
+  if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+    const data = await extractPdfMetadata(file);
+    if (data && Array.isArray(data.propositions)) {
+      importBracket(data);
+    } else {
+      showStatus('This PDF has no embedded bracket data. Use a PDF exported by this app.', 'error');
+    }
+    return;
+  }
+
+  showStatus('Drop a .json, .png, or .pdf file exported by this app.', 'error');
+});
+
+
 if (copyDataBtn) {
   copyDataBtn.addEventListener('click', async () => {
     if (propositions.length === 0) {
@@ -3212,21 +3302,7 @@ if (importFileInput) {
 renderRecentList();
 renderCommentPreviews();
 
-// Update filename placeholder logic
-if (passageHeader) {
-  const obs = new MutationObserver(updateFilenamePlaceholder);
-  obs.observe(passageHeader, { childList: true, characterData: true, subtree: true });
-}
-const pageAuthorInputForFilename = document.getElementById('pageAuthor');
-if (pageAuthorInputForFilename) {
-  pageAuthorInputForFilename.addEventListener('input', updateFilenamePlaceholder);
-}
-const versionSelectForFilename = document.getElementById('versionSelect');
-if (versionSelectForFilename) {
-  versionSelectForFilename.addEventListener('change', updateFilenamePlaceholder);
-}
-// Init placeholder
-updateFilenamePlaceholder();
+// Filename placeholder observers are set up in attachFilenameObservers() below
 
 // Comment and Text Edit mode toggles
 const textEditModeBtn = document.getElementById('textEditModeBtn');
@@ -3377,7 +3453,7 @@ if (propositionsContainer) {
         showStatus('Arrow cancelled.', 'info');
         return;
       }
-      undoStack.push({ action: 'add arrow', propositions: propositions.slice(), verseRefs: verseRefs.slice(), brackets: brackets.map(a => ({ ...a })), formatTags: formatTags.map(f => ({ ...f })), wordArrows: wordArrows.map(w => ({ ...w })) });
+      pushUndo('add arrow');
       wordArrows.push({
         fromProp: pendingArrowStart.propIndex,
         fromStart: pendingArrowStart.start,
@@ -3445,13 +3521,11 @@ if (propositionsContainer?.parentElement) {
 
 // Initial placeholder (when no passage yet)
 const propEditor = document.getElementById('propositionEditor');
-if (propEditor) propEditor.placeholder = 'Fetch or import a passage to start. Click in the text and hit Enter to split it into a new line. Click the dots to create brackets and logical relationships.';
+if (propEditor) propEditor.placeholder = 'Fetch or import a passage to start. Click in the text and press Enter to split it into a new line. Click the dots to create brackets and logical relationships.';
 
 // Sidebar Toggles
 const toggleLeftSidebarBtn = document.getElementById('toggleLeftSidebarBtn');
-const toggleRightSidebarBtn = document.getElementById('toggleRightSidebarBtn');
 const leftSidebar = document.querySelector('.bracket-types');
-const rightSidebar = document.querySelector('.comments-preview');
 
 if (toggleLeftSidebarBtn && leftSidebar) {
   toggleLeftSidebarBtn.addEventListener('click', () => {
@@ -3520,4 +3594,267 @@ function setSelectionByGlobalOffset(el, startOffset, endOffset = null) {
 
   sel.removeAllRanges();
   sel.addRange(range);
+}
+
+// ── Feature 2: Continuous Draft Auto-Save ────────────────────────────────────
+
+const DRAFT_KEY = 'biblebracket_draft';
+
+function saveDraft() {
+  try {
+    if (propositions.length > 0 && propositions.some((p) => p && p.trim() && p !== '(empty)')) {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(buildBracketData()));
+    }
+  } catch (_) {}
+}
+
+function clearDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
+}
+
+function getDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Auto-save every 30 seconds
+setInterval(saveDraft, 30000);
+
+// Save on page close
+window.addEventListener('beforeunload', saveDraft);
+
+// On startup: check for unsaved draft
+(function checkDraftRecovery() {
+  const draft = getDraft();
+  if (!draft || !Array.isArray(draft.propositions) || draft.propositions.length === 0) return;
+  // Only show recovery if workspace is currently empty
+  if (propositions.length > 0 && propositions.some((p) => p && p.trim() && p !== '(empty)')) return;
+
+  const wrapper = document.querySelector('.bracket-canvas-wrapper') || document.body;
+  const banner = document.createElement('div');
+  banner.className = 'draft-recovery-banner';
+  const label = draft.passageRef || 'an unnamed passage';
+  banner.innerHTML = `
+    <span class="draft-recovery-text">📝 Unsaved work on <strong>${escapeHtml(label)}</strong> was found. Restore it?</span>
+    <div class="draft-recovery-actions">
+      <button type="button" data-action="restore">Restore</button>
+      <button type="button" data-action="dismiss" class="secondary">Dismiss</button>
+    </div>
+  `;
+  wrapper.prepend(banner);
+
+  banner.querySelector('[data-action="restore"]').addEventListener('click', () => {
+    banner.remove();
+    importBracket(draft);
+    showStatus('Draft restored.', 'success');
+  });
+  banner.querySelector('[data-action="dismiss"]').addEventListener('click', () => {
+    banner.remove();
+    clearDraft();
+  });
+})();
+
+// ── Feature 1: Magic Paste (Clipboard Auto-Detect) ──────────────────────────
+
+let _lastClipboardCheck = 0;
+let _lastClipboardText = '';
+
+window.addEventListener('focus', async () => {
+  const now = Date.now();
+  if (now - _lastClipboardCheck < 5000) return; // throttle: 5s
+  _lastClipboardCheck = now;
+
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!text || text === _lastClipboardText) return;
+    _lastClipboardText = text;
+
+    // Quick sniff: does it look like bracket JSON?
+    const trimmed = text.trim();
+    if (!trimmed.startsWith('{') || !trimmed.includes('"propositions"')) return;
+
+    let data;
+    try { data = JSON.parse(trimmed); } catch (_) { return; }
+    if (!data || !Array.isArray(data.propositions)) return;
+
+    // Don't show if we already have the same passage loaded
+    if (passageRef && data.passageRef === passageRef) return;
+
+    // Remove any existing banner
+    document.querySelector('.magic-paste-banner')?.remove();
+
+    const wrapper = document.querySelector('.bracket-canvas-wrapper') || document.body;
+    const banner = document.createElement('div');
+    banner.className = 'magic-paste-banner';
+    const label = data.passageRef || 'bracket data';
+    banner.innerHTML = `
+      <span class="draft-recovery-text">📋 Bracket data detected on clipboard: <strong>${escapeHtml(label)}</strong></span>
+      <div class="draft-recovery-actions">
+        <button type="button" data-action="import">Import</button>
+        <button type="button" data-action="dismiss" class="secondary">Dismiss</button>
+      </div>
+    `;
+    wrapper.prepend(banner);
+
+    banner.querySelector('[data-action="import"]').addEventListener('click', () => {
+      banner.remove();
+      importBracket(data);
+    });
+    banner.querySelector('[data-action="dismiss"]').addEventListener('click', () => {
+      banner.remove();
+    });
+  } catch (_) {
+    // Clipboard read failed (permission denied, etc.) — silently ignore
+  }
+});
+
+// ── Feature 3: PDF Export ────────────────────────────────────────────────────
+
+async function exportPdf() {
+  const workspace = document.querySelector('.workspace');
+  if (!workspace || propositions.length === 0) {
+    showStatus('Nothing to export. Fetch or import a passage first.', 'error');
+    return;
+  }
+  if (typeof html2canvas !== 'function') {
+    showStatus('Export failed: html2canvas not loaded.', 'error');
+    return;
+  }
+  if (typeof window.jspdf === 'undefined') {
+    showStatus('Export failed: jsPDF not loaded.', 'error');
+    return;
+  }
+
+  try {
+    showStatus('Generating PDF…', 'success');
+
+    const workspaceRect = workspace.getBoundingClientRect();
+    const coreElements = [
+      ...Array.from(workspace.querySelectorAll('.proposition-text')),
+      ...Array.from(workspace.querySelectorAll('#bracketCanvas path, #bracketCanvas circle, #bracketCanvas text'))
+    ];
+    const infoElements = [
+      workspace.querySelector('#passageRef'),
+      workspace.querySelector('#copyrightLabel')
+    ];
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, found = false;
+    coreElements.forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        minX = Math.min(minX, r.left); minY = Math.min(minY, r.top);
+        maxX = Math.max(maxX, r.right); maxY = Math.max(maxY, r.bottom);
+        found = true;
+      }
+    });
+    infoElements.forEach((el) => {
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        minX = Math.min(minX, r.left); minY = Math.min(minY, r.top);
+        if (found && r.right < maxX + 500) maxX = Math.max(maxX, r.right);
+        else if (!found) maxX = Math.max(maxX, r.right);
+        maxY = Math.max(maxY, r.bottom); found = true;
+      }
+    });
+
+    const padding = 16;
+    const opts = { useCORS: true, scale: 2, backgroundColor: '#ffffff', logging: false };
+    if (found) {
+      opts.x = Math.max(0, minX - workspaceRect.left - padding);
+      opts.y = Math.max(0, minY - workspaceRect.top - padding);
+      opts.width = Math.min(workspaceRect.width, (maxX - minX) + padding * 2);
+      opts.height = Math.min(workspaceRect.height, (maxY - minY) + padding * 2);
+    }
+
+    const canvas = await html2canvas(workspace, opts);
+    const imgData = canvas.toDataURL('image/png');
+    const imgW = canvas.width;
+    const imgH = canvas.height;
+
+    // Create PDF in landscape, A4
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: imgW > imgH ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 10;
+    const headerH = 12;
+    const footerH = 8;
+    const usableW = pageW - margin * 2;
+    const usableH = pageH - margin * 2 - headerH - footerH;
+
+    // Header
+    pdf.setFontSize(14);
+    pdf.setFont(undefined, 'bold');
+    pdf.text(passageRef || 'Discourse Analysis', margin, margin + 8);
+
+    const authorName = (document.getElementById('pageAuthor')?.value || '').trim();
+    if (authorName) {
+      pdf.setFontSize(9);
+      pdf.setFont(undefined, 'normal');
+      pdf.text(authorName, pageW - margin, margin + 8, { align: 'right' });
+    }
+
+    // Image: scale to fit usable area
+    const scale = Math.min(usableW / (imgW / 2), usableH / (imgH / 2));
+    const drawW = (imgW / 2) * scale;
+    const drawH = (imgH / 2) * scale;
+    const imgX = margin + (usableW - drawW) / 2;
+    const imgY = margin + headerH;
+
+    pdf.addImage(imgData, 'PNG', imgX, imgY, drawW, drawH);
+
+    // Footer
+    const d = new Date();
+    const dateStr = d.toLocaleDateString();
+    pdf.setFontSize(7);
+    pdf.setTextColor(140);
+    pdf.text(`Exported ${dateStr} — Discourse Analysis`, margin, pageH - margin);
+    pdf.text('josiahhoi.github.io/discourse-analysis', pageW - margin, pageH - margin, { align: 'right' });
+
+    // ── Hidden DNA Layer ───────────────────────────────────────────────────
+    // This microsopic, white text survives merges that strip metadata.
+    const bracketJson = JSON.stringify(buildBracketData());
+    const signature = 'BibleBracketDNA:' + encodeURIComponent(bracketJson);
+    pdf.setFontSize(0.1);
+    pdf.setTextColor(255, 255, 255); // White on white
+    pdf.text(signature, margin, pageH - 2); 
+
+    // Still keep the standard metadata for clean imports from original files
+    pdf.setProperties({
+      title: passageRef || 'Discourse Analysis',
+      author: authorName || '',
+      subject: 'Discourse Analysis Bracket Export',
+      keywords: 'BibleBracket:' + encodeURIComponent(bracketJson),
+      creator: 'Discourse Analysis App',
+    });
+
+    pdf.save(`${getExportFilename()}.pdf`);
+    showStatus('PDF exported with bracket data embedded.', 'success');
+  } catch (err) {
+    showStatus(err.message || 'PDF export failed.', 'error');
+  }
+}
+
+const exportPdfBtn = document.getElementById('exportPdfBtn');
+if (exportPdfBtn) exportPdfBtn.addEventListener('click', exportPdf);
+
+// ── Feature 4: Electron "Open With" support ──────────────────────────────────
+
+if (window.electronAPI && typeof window.electronAPI.onOpenFile === 'function') {
+  window.electronAPI.onOpenFile(async (filePath) => {
+    try {
+      // In Electron with preload, the file content is sent directly
+      const data = JSON.parse(filePath);
+      if (data && Array.isArray(data.propositions)) {
+        importBracket(data);
+      }
+    } catch (_) {
+      showStatus('Could not open file.', 'error');
+    }
+  });
 }
