@@ -3040,61 +3040,85 @@ async function copyDiagramForWord() {
       options.height = height;
     }
 
-    const canvas = await html2canvas(workspace, options);
-    const dataUrl = canvas.toDataURL('image/png');
-    
-    // Prepare Compressed DNA for Alt-Text
-    const bracketData = buildBracketData();
-    const dnaString = JSON.stringify(bracketData);
-    const compressedDna = typeof LZString !== 'undefined' ? LZString.compressToEncodedURIComponent(dnaString) : dnaString;
-    
-    // Prepare HTML with metadata and the image (with DNA in Alt-Text)
-    const author = (document.getElementById('pageAuthor')?.value || '').trim();
-    const copyright = (document.getElementById('copyrightLabel')?.textContent || '').trim();
-    const reference = passageRef || 'Untitled';
-    
-    const htmlBlob = new Blob([`
-      <div style="font-family: sans-serif;">
-        <h2 style="margin: 0; color: #c9a86c;">${reference}</h2>
-        <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">
-          ${author ? 'Author: ' + author + ' | ' : ''}
-          ${copyright ? 'Version: ' + copyright : ''}
-        </p>
-        <img src="${dataUrl}" alt="DISCOURSE_DNA:${compressedDna}" style="max-width: 100%; height: auto;" />
-      </div>
-    `], { type: 'text/html' });
+    // OPTIMIZATION: Start the clipboard write IMMEDIATELY to satisfy the browser's "User Gesture" requirement.
+    // We pass a Promise that will resolve once the drawing is actually finished.
+    try {
+      const canCopyHtml = typeof ClipboardItem !== 'undefined' && ClipboardItem.supports?.('text/html');
 
-    canvas.toBlob(async (blob) => {
-      if (!blob) {
-        showStatus('Copy failed.', 'error');
-        return;
-      }
-      try {
-        const item = new ClipboardItem({ 
-          'image/png': blob,
-          'text/html': htmlBlob
-        });
-        await navigator.clipboard.write([item]);
-        showStatus('Diagram + DNA copied. Paste into Word.', 'success');
-      } catch (err) {
-        console.error('Clipboard API failed, falling back to download:', err);
-        // Fallback: Download the file if clipboard is blocked
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${getExportFilename()}.png`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        showStatus('Clipboard blocked. Image downloaded instead—insert into Word manually.', 'success');
-      }
-    }, 'image/png');
+      const imagePromise = new Promise(async (resolve, reject) => {
+        try {
+          const canvas = await html2canvas(workspace, options);
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error('Canvas toBlob failed'));
+          }, 'image/png');
+        } catch (err) { reject(err); }
+      });
+
+      const htmlPromise = new Promise(async (resolve) => {
+        const bracketData = buildBracketData();
+        const dnaString = JSON.stringify(bracketData);
+        const compressedDna = typeof LZString !== 'undefined' ? LZString.compressToEncodedURIComponent(dnaString) : dnaString;
+        const author = (document.getElementById('pageAuthor')?.value || '').trim();
+        const copyright = (document.getElementById('copyrightLabel')?.textContent || '').trim();
+        const reference = passageRef || 'Untitled';
+
+        const html = `
+          <div style="font-family: sans-serif;">
+            <h2 style="margin: 0; color: #c9a86c;">${reference}</h2>
+            <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">
+              ${author ? 'Author: ' + author + ' | ' : ''}
+              ${copyright ? 'Version: ' + copyright : ''}
+            </p>
+            <img src="${canvas.toDataURL('image/png')}" alt="DISCOURSE_DNA:${compressedDna}" style="max-width: 100%; height: auto;" />
+          </div>
+        `;
+        resolve(new Blob([html], { type: 'text/html' }));
+      });
+
+      const clipboardItem = new ClipboardItem({
+        'image/png': imagePromise,
+        'text/html': htmlPromise
+      });
+
+      await navigator.clipboard.write([clipboardItem]);
+      showStatus('Diagram + DNA copied. Paste into Word.', 'success');
+      
+    } catch (err) {
+      console.error('Fast Clipboard failed, trying fallback...', err);
+      // Fallback: If the promise-based approach fails (e.g. older browser), try the standard way or download
+      await performStandardCopyOrDownload(workspace, options);
+    }
   } catch (err) {
     console.error('Failed to capture diagram:', err);
     showStatus('Failed to capture diagram.', 'error');
   }
 }
+
+/**
+ * Standard copy/download fallback for older browsers or blocked contexts
+ */
+async function performStandardCopyOrDownload(workspace, options) {
+  try {
+    const canvas = await html2canvas(workspace, options);
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${getExportFilename()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showStatus('Clipboard blocked. Image downloaded instead—insert into Word manually.', 'success');
+    }, 'image/png');
+  } catch (e) {
+    showStatus('Failed to generate fallback download.', 'error');
+  }
+}
+
 
 
 // ── PNG metadata: embed bracket JSON into a tEXt chunk ──────────────────────
