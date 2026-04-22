@@ -3180,10 +3180,6 @@ async function saveImageWithData() {
   }
 }
 
-    showStatus(err.message || 'Save failed.', 'error');
-  }
-}
-
 // ── Drag-and-drop import (JSON files and metadata-enriched PNGs) ─────────────
 
 const dropZone = document.querySelector('.bracket-canvas-wrapper') || document.body;
