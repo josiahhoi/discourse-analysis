@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
+  <script>
+    const dna = "N4IgbgpgTgzglgewHYgFwEYA0IAOBDGGPAcwgCUIAzNEAURwAsJ48kYACdVAZkGQCAFhDYcUBDgTwALojZoA2iABCAG2YwIAE3YAjCO0lN2AcQRbWWgGJ4D0dgkp2ArlHYAZBFC0ApZo44BhBig4GElMdgB3BgR2BgIdVUJNdj92OCR2QODQyLgDdghIKABPdhgcOGDJRzxlBLV04jSMm1iIPEgkZVKcZTwAY2ZsbEKIDPjDfuj1FI502LgAWx0qDz1WygRHJA1rGTsHVoiPZQ1wg2tIvRhox1OV2IRu9nMEvEWIRI5dTag9BiWADp2ABJDLKBCQEAAXWwRXUFEoMHkIG4QhAglhIG0UAGAGsIJJkag5FjfotrAAVEjE0nYY6eACCUFEEVpWP6CEWHyQRPkHLExWCxAYklceF0yhoAApaABlABqAEp0fhSIzHAYPDQvBI4HgGOwABIIODoiAAD3EUEkmkZkhoACYAAyOgBsAFpnfwPY7HZSXah+NwgwAOQHOgDs-AAWiAAL5AA";
+    try {
+      const decompressed = LZString.decompressFromEncodedURIComponent(dna);
+      document.body.innerHTML = "Result: " + (decompressed ? "SUCCESS" : "FAILURE") + "<br>Content: " + decompressed;
+    } catch (e) {
+      document.body.innerHTML = "Error: " + e.message;
+    }
+  </script>
+</body>
+</html>

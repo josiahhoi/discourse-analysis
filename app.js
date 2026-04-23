@@ -137,6 +137,8 @@ if (bracketCanvas) {
   });
 }
 const clearBracketsBtn = document.getElementById('clearBrackets');
+const themeToggle = document.getElementById('themeToggle');
+const toggleCommentsBtn = document.getElementById('toggleCommentsBtn');
 
 if (passageRefEl) {
   const syncPassageRef = () => {
@@ -250,8 +252,10 @@ if (pageAuthorInput) {
   updateFontByAuthor(); // Run once on init
 }
 
+// Initialize theme on load
+initTheme();
+
 // Toggle comments visibility
-const toggleCommentsBtn = document.getElementById('toggleCommentsBtn');
 if (toggleCommentsBtn) {
   const updateToggleUI = () => {
     toggleCommentsBtn.classList.toggle('active', showCommentsEnabled);
@@ -2987,6 +2991,18 @@ async function copyDiagramForWord() {
     return;
   }
   try {
+    // Force a consistent "clean" state for export (comments OFF) to ensure bounds are calculated correctly
+    // This hides the sidebar, letting the workspace expand to its full natural width before we measure it.
+    const prevShowComments = showCommentsEnabled;
+    if (showCommentsEnabled) {
+      showCommentsEnabled = false;
+      renderPropositions();
+      renderBrackets();
+      renderCommentPreviews();
+      // Wait for browser to reflow after hiding sidebar
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    }
+
     // Calculate bounding box of all content within the workspace to crop out empty space
     const workspaceRect = workspace.getBoundingClientRect();
 
@@ -2999,41 +3015,43 @@ async function copyDiagramForWord() {
     // Elements that are NICE to have (header info) but shouldn't stretch the width excessively
     const infoElements = [
       workspace.querySelector('#passageRef'),
-      workspace.querySelector('#copyrightLabel')
+      workspace.querySelector('#copyrightLabel'),
+      workspace.querySelector('#passageAuthor')
     ];
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     let found = false;
 
+    const scrollX = workspace.scrollLeft;
+    const scrollY = workspace.scrollTop;
+
     // First pass: Essential content
     coreElements.forEach((el) => {
       const r = el.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) {
-        minX = Math.min(minX, r.left);
-        minY = Math.min(minY, r.top);
-        maxX = Math.max(maxX, r.right);
-        maxY = Math.max(maxY, r.bottom);
+        minX = Math.min(minX, r.left + scrollX);
+        minY = Math.min(minY, r.top + scrollY);
+        maxX = Math.max(maxX, r.right + scrollX);
+        maxY = Math.max(maxY, r.bottom + scrollY);
         found = true;
       }
     });
 
-    // Second pass: Info elements (allow them to expand vertically, but be cautious with width)
+    // Second pass: Info elements
     infoElements.forEach((el) => {
       if (!el) return;
       const r = el.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) {
-        minX = Math.min(minX, r.left);
-        minY = Math.min(minY, r.top);
-        // We only let info elements expand the MaxX if they aren't far to the right
-        // compared to our core content (to avoid catching far-right names)
+        minX = Math.min(minX, r.left + scrollX);
+        minY = Math.min(minY, r.top + scrollY);
         if (found) {
-          if (r.right < maxX + 500) {
-            maxX = Math.max(maxX, r.right);
+          if (r.right + scrollX < maxX + 500) {
+            maxX = Math.max(maxX, r.right + scrollX);
           }
         } else {
-          maxX = Math.max(maxX, r.right);
+          maxX = Math.max(maxX, r.right + scrollX);
         }
-        maxY = Math.max(maxY, r.bottom);
+        maxY = Math.max(maxY, r.bottom + scrollY);
         found = true;
       }
     });
@@ -3047,57 +3065,71 @@ async function copyDiagramForWord() {
     };
 
     if (found) {
-      // Convert to relative coordinates within workspace
-      const x = Math.max(0, minX - workspaceRect.left - padding);
-      const y = Math.max(0, minY - workspaceRect.top - padding);
-      const width = Math.min(workspaceRect.width, (maxX - minX) + (padding * 2));
-      const height = Math.min(workspaceRect.height, (maxY - minY) + (padding * 2));
+      // Calculate coordinates relative to the workspace content
+      // (minX/minY are already content-relative because we added scrollX/scrollY)
+      const x = Math.max(0, minX - (workspaceRect.left + scrollX) - padding);
+      const y = Math.max(0, minY - (workspaceRect.top + scrollY) - padding);
+      const width = (maxX - minX) + (padding * 2);
+      const height = (maxY - minY) + (padding * 2);
 
       options.x = x;
       options.y = y;
       options.width = width;
       options.height = height;
+      
+      // CRITICAL: Force html2canvas to use a virtual window large enough for the content
+      options.windowWidth = workspace.scrollWidth + 100;
+      options.windowHeight = workspace.scrollHeight + 100;
+      options.scrollX = 0;
+      options.scrollY = 0;
+      
+      options.onclone = applyExportCloneStyles;
     }
 
-    // OPTIMIZATION: Start the clipboard write IMMEDIATELY to satisfy the browser's "User Gesture" requirement.
-    // We pass a Promise that will resolve once the drawing is actually finished.
     try {
-      const canCopyHtml = typeof ClipboardItem !== 'undefined' && ClipboardItem.supports?.('text/html');
-
-      const imagePromise = new Promise(async (resolve, reject) => {
-        try {
-          const canvas = await html2canvas(workspace, options);
-          canvas.toBlob((blob) => {
-            if (blob) resolve(blob);
-            else reject(new Error('Canvas toBlob failed'));
-          }, 'image/png');
-        } catch (err) { reject(err); }
+      const canvasPromise = html2canvas(workspace, options);
+      
+      // Restore state after capture starts (onclone happens on a copy, so we can restore early)
+      canvasPromise.then(() => {
+        if (prevShowComments !== showCommentsEnabled) {
+          showCommentsEnabled = prevShowComments;
+          renderPropositions();
+          renderBrackets();
+          renderCommentPreviews();
+        }
       });
 
-      const htmlPromise = new Promise(async (resolve) => {
-        const bracketData = buildBracketData();
-        const dnaString = JSON.stringify(bracketData);
-        const compressedDna = typeof LZString !== 'undefined' ? LZString.compressToEncodedURIComponent(dnaString) : dnaString;
-        const author = (document.getElementById('pageAuthor')?.value || '').trim();
-        const copyright = (document.getElementById('copyrightLabel')?.textContent || '').trim();
-        const reference = passageRef || 'Untitled';
-
-        const html = `
-          <div style="font-family: sans-serif;">
-            <h2 style="margin: 0; color: #c9a86c;">${reference}</h2>
-            <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">
-              ${author ? 'Author: ' + author + ' | ' : ''}
-              ${copyright ? 'Version: ' + copyright : ''}
-            </p>
-            <img src="${canvas.toDataURL('image/png')}" alt="DISCOURSE_DNA:${compressedDna}" style="max-width: 100%; height: auto;" />
-          </div>
-        `;
-        resolve(new Blob([html], { type: 'text/html' }));
-      });
+      const canvas = await canvasPromise;
 
       const clipboardItem = new ClipboardItem({
-        'image/png': imagePromise,
-        'text/html': htmlPromise
+        'image/png': canvasPromise.then(canvas => new Promise((resolve, reject) => {
+          canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Canvas toBlob failed')), 'image/png');
+        })),
+        'text/html': (async () => {
+          const canvas = await canvasPromise;
+          const dataUrl = canvas.toDataURL('image/png');
+          const bracketData = buildBracketData();
+          const dnaString = JSON.stringify(bracketData);
+          const compressedDna = typeof LZString !== 'undefined' ? LZString.compressToEncodedURIComponent(dnaString) : dnaString;
+          const author = (document.getElementById('pageAuthor')?.value || '').trim();
+          const copyright = (document.getElementById('copyrightLabel')?.textContent || '').trim();
+          const reference = passageRef || 'Untitled';
+
+          const html = `
+            <div style="font-family: sans-serif;">
+              <h2 style="margin: 0; color: #c9a86c;">${reference}</h2>
+              <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">
+                ${author ? 'Author: ' + author + ' | ' : ''}
+                ${copyright ? 'Version: ' + copyright : ''}
+              </p>
+              <img src="${dataUrl}" alt="DISCOURSE_DNA:${compressedDna}" style="max-width: 100%; height: auto;" />
+              <div style="font-size: 1px; color: transparent; line-height: 0; opacity: 0; height: 0; overflow: hidden;" aria-hidden="true">
+                DISCOURSE_DNA:${compressedDna}
+              </div>
+            </div>
+          `;
+          return new Blob([html], { type: 'text/html' });
+        })()
       });
 
       await navigator.clipboard.write([clipboardItem]);
@@ -3233,42 +3265,104 @@ async function extractPngMetadata(file) {
  * Looks for 'BibleBracket:' prefix followed by percent-encoded JSON.
  * Returns parsed object or null if not found.
  */
+/**
+ * Shared onclone handler for all html2canvas exports.
+ * - Forces a clean white background on every element.
+ * - Hides UI chrome (toolbar, sidebar toggle).
+ * - Hides comments, comment icons, and format highlights.
+ */
+function applyExportCloneStyles(clonedDoc) {
+  // Force whole-page white
+  clonedDoc.documentElement.style.background = '#ffffff';
+  clonedDoc.body.style.background = '#ffffff';
+
+  const ws = clonedDoc.querySelector('.workspace');
+  if (ws) {
+    ws.style.background = '#ffffff';
+    ws.style.backgroundColor = '#ffffff';
+  }
+
+  // Force each proposition block to white so they don't look two-toned
+  clonedDoc.querySelectorAll('.proposition-block').forEach(el => {
+    el.style.background = '#ffffff';
+    el.style.backgroundColor = '#ffffff';
+    el.style.border = '1px solid #d0cec9';
+  });
+
+  // Force propositions container to white and remove outer borders
+  clonedDoc.querySelectorAll('.propositions, .bracket-canvas-wrapper').forEach(el => {
+    el.style.background = '#ffffff';
+    el.style.backgroundColor = '#ffffff';
+    el.style.border = 'none';
+  });
+
+  // Hide UI chrome
+  const toolbar = clonedDoc.getElementById('workspaceToolbar');
+  const sidebarBtn = clonedDoc.getElementById('toggleLeftSidebarBtn');
+  if (toolbar) toolbar.style.visibility = 'hidden';
+  if (sidebarBtn) sidebarBtn.style.visibility = 'hidden';
+
+  // Hide comments and highlights
+  clonedDoc.querySelectorAll(
+    '.comment-icon, .comment-popover, .comments-preview, ' +
+    '.comment-highlight, .bracket-comment-highlight, ' +
+    '.format-tag-highlight, .word-highlight-overlay'
+  ).forEach(el => { el.style.display = 'none'; });
+}
+
 async function extractPdfMetadata(file) {
   try {
     const buf = await file.arrayBuffer();
     const bytes = new Uint8Array(buf);
     const text = new TextDecoder('latin1').decode(bytes);
-    
-    // Strategy 1: Check hidden 'DNA' text layer (for merged files)
+
     const dnaMarker = 'BibleBracketDNA:';
-    let dnaIdx = text.indexOf(dnaMarker);
-    if (dnaIdx !== -1) {
-      const start = dnaIdx + dnaMarker.length;
-      let end = text.indexOf(')', start);
-      if (end === -1) end = text.indexOf('>', start); // could be in hex format <...>
-      if (end !== -1) {
-        return JSON.parse(decodeURIComponent(text.substring(start, end)));
-      }
+    const endMarker = '|||END';
+
+    // Search everywhere in the binary for the DNA marker+end-marker pair
+    let searchFrom = 0;
+    while (true) {
+      const startIdx = text.indexOf(dnaMarker, searchFrom);
+      if (startIdx === -1) break;
+      const payloadStart = startIdx + dnaMarker.length;
+      const endIdx = text.indexOf(endMarker, payloadStart);
+      if (endIdx === -1) { searchFrom = payloadStart; continue; }
+
+      const payload = text.substring(payloadStart, endIdx);
+      if (!payload) { searchFrom = endIdx + endMarker.length; continue; }
+
+      try {
+        // Try LZString decompression first
+        if (typeof LZString !== 'undefined') {
+          const json = LZString.decompressFromEncodedURIComponent(payload);
+          if (json) {
+            const data = JSON.parse(json);
+            if (data && Array.isArray(data.propositions)) return data;
+          }
+        }
+        // Fallback: plain URI-encoded JSON
+        const data = JSON.parse(decodeURIComponent(payload));
+        if (data && Array.isArray(data.propositions)) return data;
+      } catch (_) {}
+
+      searchFrom = endIdx + endMarker.length;
     }
 
-    // Strategy 2: Check Keywords metadata (for original files)
-    const marker = 'BibleBracket:';
-    const idx = text.indexOf(marker);
-    if (idx === -1) return null;
-    const start = idx + marker.length;
-    let end = start;
-    let parenDepth = 0;
-    for (let i = start; i < text.length; i++) {
-      const ch = text[i];
-      if (ch === '(') parenDepth++;
-      else if (ch === ')') {
-        if (parenDepth === 0) { end = i; break; }
-        parenDepth--;
+    // Legacy fallback: old BibleBracket: keywords format (no end-marker)
+    const legacyMarker = 'BibleBracket:';
+    const legacyIdx = text.indexOf(legacyMarker);
+    if (legacyIdx !== -1) {
+      const kStart = legacyIdx + legacyMarker.length;
+      const chunk = text.substring(kStart, kStart + 65536);
+      const endMatch = chunk.match(/(?<!\\)\)/);
+      const encoded = endMatch ? chunk.substring(0, endMatch.index) : chunk;
+      if (encoded) {
+        try {
+          const data = JSON.parse(decodeURIComponent(encoded));
+          if (data && Array.isArray(data.propositions)) return data;
+        } catch (_) {}
       }
     }
-    if (end <= start) return null;
-    const encoded = text.substring(start, end);
-    return JSON.parse(decodeURIComponent(encoded));
   } catch (_) {}
   return null;
 }
@@ -3285,6 +3379,17 @@ async function saveImageWithData() {
     return;
   }
   try {
+    // Force a consistent "clean" state for export (comments OFF)
+    const prevShowComments = showCommentsEnabled;
+    if (showCommentsEnabled) {
+      showCommentsEnabled = false;
+      renderPropositions();
+      renderBrackets();
+      renderCommentPreviews();
+      // Wait for browser to reflow after hiding sidebar
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    }
+
     const workspaceRect = workspace.getBoundingClientRect();
     const coreElements = [
       ...Array.from(workspace.querySelectorAll('.proposition-text')),
@@ -3292,14 +3397,17 @@ async function saveImageWithData() {
     ];
     const infoElements = [
       workspace.querySelector('#passageRef'),
-      workspace.querySelector('#copyrightLabel')
+      workspace.querySelector('#copyrightLabel'),
+      workspace.querySelector('#passageAuthor')
     ];
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, found = false;
+    const scrollX = workspace.scrollLeft;
+    const scrollY = workspace.scrollTop;
     coreElements.forEach((el) => {
       const r = el.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) {
-        minX = Math.min(minX, r.left); minY = Math.min(minY, r.top);
-        maxX = Math.max(maxX, r.right); maxY = Math.max(maxY, r.bottom);
+        minX = Math.min(minX, r.left + scrollX); minY = Math.min(minY, r.top + scrollY);
+        maxX = Math.max(maxX, r.right + scrollX); maxY = Math.max(maxY, r.bottom + scrollY);
         found = true;
       }
     });
@@ -3307,21 +3415,40 @@ async function saveImageWithData() {
       if (!el) return;
       const r = el.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) {
-        minX = Math.min(minX, r.left); minY = Math.min(minY, r.top);
-        if (found && r.right < maxX + 500) maxX = Math.max(maxX, r.right);
-        else if (!found) maxX = Math.max(maxX, r.right);
-        maxY = Math.max(maxY, r.bottom); found = true;
+        minX = Math.min(minX, r.left + scrollX); minY = Math.min(minY, r.top + scrollY);
+        if (found && r.right + scrollX < maxX + 500) maxX = Math.max(maxX, r.right + scrollX);
+        else if (!found) maxX = Math.max(maxX, r.right + scrollX);
+        maxY = Math.max(maxY, r.bottom + scrollY); found = true;
       }
     });
+
     const padding = 16;
-    const opts = { useCORS: true, scale: 2, backgroundColor: null, logging: false };
+    const opts = { 
+      useCORS: true, 
+      scale: 2, 
+      backgroundColor: null, 
+      logging: false,
+      scrollX: 0,
+      scrollY: 0,
+      windowWidth: workspace.scrollWidth + 100,
+      windowHeight: workspace.scrollHeight + 100,
+      onclone: applyExportCloneStyles
+    };
     if (found) {
-      opts.x = Math.max(0, minX - workspaceRect.left - padding);
-      opts.y = Math.max(0, minY - workspaceRect.top - padding);
-      opts.width = Math.min(workspaceRect.width, (maxX - minX) + padding * 2);
-      opts.height = Math.min(workspaceRect.height, (maxY - minY) + padding * 2);
+      opts.x = Math.max(0, minX - (workspaceRect.left + scrollX) - padding);
+      opts.y = Math.max(0, minY - (workspaceRect.top + scrollY) - padding);
+      opts.width = (maxX - minX) + padding * 2;
+      opts.height = (maxY - minY) + padding * 2;
     }
     const canvas = await html2canvas(workspace, opts);
+
+    // Restore state
+    if (prevShowComments !== showCommentsEnabled) {
+      showCommentsEnabled = prevShowComments;
+      renderPropositions();
+      renderBrackets();
+      renderCommentPreviews();
+    }
     canvas.toBlob(async (blob) => {
       if (!blob) { showStatus('Save failed.', 'error'); return; }
       const enriched = await injectPngMetadata(blob, JSON.stringify(buildBracketData()));
@@ -3354,9 +3481,84 @@ dropZone.addEventListener('dragleave', (e) => {
   }
 });
 
+// ── Paste-to-import support (handle DNA from Word via Ctrl+V) ────────────────
+document.addEventListener('paste', async (e) => {
+  // Don't intercept if we're in a text input (unless it's the DNA itself)
+  if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+    const text = e.clipboardData.getData('text/plain');
+    if (!text.includes('DISCOURSE_DNA:')) return;
+  }
+
+  let encoded = null;
+  // Search all flavors (HTML, Text, etc.)
+  for (const type of e.clipboardData.types) {
+    const content = e.clipboardData.getData(type);
+    if (content && content.includes('DISCOURSE_DNA:')) {
+      const match = content.match(/DISCOURSE_DNA:([^"\s>]+)/);
+      if (match) { encoded = match[1]; break; }
+    }
+  }
+
+  if (encoded) {
+    e.preventDefault();
+    processDNA(encoded);
+  }
+});
+
+/**
+ * Shared logic to clean, decompress, and import DNA
+ */
+function processDNA(encoded) {
+  try {
+    let cleaned = decodeURIComponent(encoded).trim();
+    cleaned = cleaned.replace(/[\u2013\u2014]/g, "-");
+    
+    if (typeof LZString === 'undefined') {
+      showStatus('Decompression failed: LZString not loaded.', 'error');
+      return;
+    }
+
+    const json = LZString.decompressFromEncodedURIComponent(cleaned);
+    if (!json) {
+      showStatus('Found data, but decompression failed.', 'error');
+      return;
+    }
+
+    const data = JSON.parse(json);
+    if (data && Array.isArray(data.propositions)) {
+      importBracket(data);
+    } else {
+      showStatus('Data found, but it is not a valid bracket.', 'error');
+    }
+  } catch (err) {
+    console.error('Failed to parse DNA:', err);
+    showStatus('Failed to read data: ' + err.message, 'error');
+  }
+}
+
 dropZone.addEventListener('drop', async (e) => {
   e.preventDefault();
   dropZone.classList.remove('drag-over');
+
+  // 1. Robust Search: Check ALL available data types (HTML, Plain Text, etc.)
+  let encoded = null;
+  for (const type of e.dataTransfer.types) {
+    const content = e.dataTransfer.getData(type);
+    if (content && content.includes('DISCOURSE_DNA:')) {
+      const match = content.match(/DISCOURSE_DNA:([^"\s>]+)/);
+      if (match) {
+        encoded = match[1];
+        break;
+      }
+    }
+  }
+
+  if (encoded) {
+    processDNA(encoded);
+    return;
+  }
+
+  // 2. Fallback to standard file handling
   const file = e.dataTransfer.files?.[0];
   if (!file) return;
 
@@ -3873,10 +4075,11 @@ let _lastClipboardCheck = 0;
 let _lastClipboardText = '';
 
 window.addEventListener('paste', async (e) => {
-  // 1. Try to get HTML content (standard way Word shares Alt-Text)
+  // 1. Try to get HTML content (standard way Word shares Alt-Text and hidden divs)
   const html = e.clipboardData.getData('text/html');
   if (html && html.includes('DISCOURSE_DNA:')) {
-    const match = html.match(/alt="DISCOURSE_DNA:([^"]+)"/);
+    // Look for the DNA marker anywhere in the HTML (alt-text or hidden div)
+    const match = html.match(/DISCOURSE_DNA:([^"\s>]+)/);
     if (match) {
       const compressed = match[1];
       try {
@@ -3977,6 +4180,17 @@ async function exportPdf() {
   try {
     showStatus('Generating PDF…', 'success');
 
+    // Force a consistent "clean" state for export (comments OFF)
+    const prevShowComments = showCommentsEnabled;
+    if (showCommentsEnabled) {
+      showCommentsEnabled = false;
+      renderPropositions();
+      renderBrackets();
+      renderCommentPreviews();
+      // Wait for browser to reflow after hiding sidebar
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    }
+
     const workspaceRect = workspace.getBoundingClientRect();
     const coreElements = [
       ...Array.from(workspace.querySelectorAll('.proposition-text')),
@@ -3984,14 +4198,17 @@ async function exportPdf() {
     ];
     const infoElements = [
       workspace.querySelector('#passageRef'),
-      workspace.querySelector('#copyrightLabel')
+      workspace.querySelector('#copyrightLabel'),
+      workspace.querySelector('#passageAuthor')
     ];
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, found = false;
+    const scrollX = workspace.scrollLeft;
+    const scrollY = workspace.scrollTop;
     coreElements.forEach((el) => {
       const r = el.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) {
-        minX = Math.min(minX, r.left); minY = Math.min(minY, r.top);
-        maxX = Math.max(maxX, r.right); maxY = Math.max(maxY, r.bottom);
+        minX = Math.min(minX, r.left + scrollX); minY = Math.min(minY, r.top + scrollY);
+        maxX = Math.max(maxX, r.right + scrollX); maxY = Math.max(maxY, r.bottom + scrollY);
         found = true;
       }
     });
@@ -3999,23 +4216,42 @@ async function exportPdf() {
       if (!el) return;
       const r = el.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) {
-        minX = Math.min(minX, r.left); minY = Math.min(minY, r.top);
-        if (found && r.right < maxX + 500) maxX = Math.max(maxX, r.right);
-        else if (!found) maxX = Math.max(maxX, r.right);
-        maxY = Math.max(maxY, r.bottom); found = true;
+        minX = Math.min(minX, r.left + scrollX); minY = Math.min(minY, r.top + scrollY);
+        if (found && r.right + scrollX < maxX + 500) maxX = Math.max(maxX, r.right + scrollX);
+        else if (!found) maxX = Math.max(maxX, r.right + scrollX);
+        maxY = Math.max(maxY, r.bottom + scrollY); found = true;
       }
     });
 
     const padding = 16;
-    const opts = { useCORS: true, scale: 2, backgroundColor: '#ffffff', logging: false };
+    const opts = { 
+      useCORS: true, 
+      scale: 2, 
+      backgroundColor: '#ffffff', 
+      logging: false,
+      scrollX: 0,
+      scrollY: 0,
+      windowWidth: workspace.scrollWidth + 100,
+      windowHeight: workspace.scrollHeight + 100,
+      onclone: applyExportCloneStyles
+    };
+
     if (found) {
-      opts.x = Math.max(0, minX - workspaceRect.left - padding);
-      opts.y = Math.max(0, minY - workspaceRect.top - padding);
-      opts.width = Math.min(workspaceRect.width, (maxX - minX) + padding * 2);
-      opts.height = Math.min(workspaceRect.height, (maxY - minY) + padding * 2);
+      opts.x = Math.max(0, minX - (workspaceRect.left + scrollX) - padding);
+      opts.y = Math.max(0, minY - (workspaceRect.top + scrollY) - padding);
+      opts.width = (maxX - minX) + padding * 2;
+      opts.height = (maxY - minY) + padding * 2;
     }
 
     const canvas = await html2canvas(workspace, opts);
+
+    // Restore state
+    if (prevShowComments !== showCommentsEnabled) {
+      showCommentsEnabled = prevShowComments;
+      renderPropositions();
+      renderBrackets();
+      renderCommentPreviews();
+    }
     const imgData = canvas.toDataURL('image/png');
     const imgW = canvas.width;
     const imgH = canvas.height;
@@ -4062,21 +4298,27 @@ async function exportPdf() {
     pdf.text('josiahhoi.github.io/discourse-analysis', pageW - margin, pageH - margin, { align: 'right' });
 
     // ── Hidden DNA Layer ───────────────────────────────────────────────────
-    // This microsopic, white text survives merges that strip metadata.
+    // We compress with LZString to keep the payload small enough for PDF metadata.
+    // A unique end-marker (|||END) lets the extractor find the boundary reliably.
     const bracketJson = JSON.stringify(buildBracketData());
-    const signature = 'BibleBracketDNA:' + encodeURIComponent(bracketJson);
-    pdf.setFontSize(0.1);
-    pdf.setTextColor(255, 255, 255); // White on white
-    pdf.text(signature, margin, pageH - 2); 
+    const compressed = (typeof LZString !== 'undefined')
+      ? LZString.compressToEncodedURIComponent(bracketJson)
+      : encodeURIComponent(bracketJson);
+    const signature = 'BibleBracketDNA:' + compressed + '|||END';
 
-    // Still keep the standard metadata for clean imports from original files
+    // Embed in PDF metadata keywords (most reliable — uncompressed section of file)
     pdf.setProperties({
       title: passageRef || 'Discourse Analysis',
       author: authorName || '',
       subject: 'Discourse Analysis Bracket Export',
-      keywords: 'BibleBracket:' + encodeURIComponent(bracketJson),
+      keywords: signature,
       creator: 'Discourse Analysis App',
     });
+
+    // Also embed as tiny white text as a secondary fallback
+    pdf.setFontSize(0.1);
+    pdf.setTextColor(255, 255, 255);
+    pdf.text(signature, margin, pageH - 2);
 
     pdf.save(`${getExportFilename()}.pdf`);
     showStatus('PDF exported with bracket data embedded.', 'success');
