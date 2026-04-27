@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Discourse Analysis</title>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Roboto+Mono:wght@400;500;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
@@ -18,7 +21,7 @@
         <select id="versionSelect" title="Bible version to fetch">
           <option value="esv">ESV</option>
           <option value="nasb">NASB (1995)</option>
-          <option value="sblgnt">SBL Greek NT</option>
+          <option value="greek">Greek (LXX / SBL NT)</option>
         </select>
         <input type="text" id="passageInput" placeholder="e.g. John 1:1-5, Romans 8:28" value="Eph 1:3-4">
         <button id="fetchBtn" type="button">Fetch Passage</button>
@@ -47,7 +50,9 @@
           <div class="sidebar-help-content">
             <div class="shortcut-item"><kbd>Enter</kbd> <span>Split line at cursor</span></div>
             <div class="shortcut-item"><kbd>Backspace</kbd> <span>Join to line above</span></div>
-            <div class="shortcut-item"><span>Double-Click</span> <span>Edit relationship</span></div>
+            <div class="shortcut-item"><span>Double-Click Bracket</span> <span>Edit relationship</span></div>
+            <div class="shortcut-item"><span>Double-Click Label</span> <span>Switch stars</span></div>
+            <div class="shortcut-item"><span>Right-Click</span> <span>Delete bracket</span></div>
             <div class="shortcut-item"><kbd>Ctrl</kbd>+<kbd>S</kbd> <span>Quick Save</span></div>
             <div class="shortcut-item"><kbd>Ctrl</kbd>+<kbd>Z</kbd> <span>Undo</span></div>
             <div class="shortcut-item"><span>Drop File</span> <span>Import JSON/PNG/PDF</span></div>
@@ -68,25 +73,23 @@
           <label>Project</label>
           <div class="save-load-row">
             <button id="newBracketBtn" type="button" class="secondary" title="Start a new bracket">New</button>
-            <button id="openFileBtn" type="button" class="secondary" title="Open JSON file">Open</button>
+            <button id="openMenuBtn" type="button" class="secondary" title="Open file or join cloud session">Open...</button>
           </div>
           <div class="save-load-row">
             <button id="saveBtn" type="button" title="Save to current file (Ctrl+S)">Save</button>
             <button id="saveAsBtn" type="button" class="secondary" title="Save current bracket as a new JSON file">Save As</button>
           </div>
+          <div class="save-load-row">
+            <button id="projectSettingsBtn" type="button" class="secondary" title="Project and personal settings">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+              Settings
+            </button>
+          </div>
         </div>
 
-        <div class="sidebar-group">
-          <label>Metadata</label>
-          <div class="sidebar-field">
-            <label for="pageAuthor" class="field-label">Author</label>
-            <input type="text" id="pageAuthor" placeholder="Your name">
-          </div>
-          <div class="sidebar-field">
-            <label for="exportFilename" class="field-label">Filename</label>
-            <input type="text" id="exportFilename" placeholder="Custom filename">
-          </div>
-        </div>
 
         <div class="sidebar-group export-group">
           <button id="exportMenuBtn" type="button" class="primary-action" title="Export as image, PDF, or data">Export As...</button>
@@ -103,7 +106,7 @@
       </aside>
 
       <section class="workspace">
-        <div class="passage-header" id="passageHeader">
+        <div class="passage-header" id="workspaceHeader">
           <div class="passage-header-left">
             <button id="toggleLeftSidebarBtn" class="sidebar-toggle-btn" title="Toggle Sidebar">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -112,6 +115,11 @@
             </button>
             <span id="passageRef" contenteditable="true" role="textbox" title="Click to edit passage reference">—</span>
             <span class="copyright" id="copyrightLabel">(ESV)</span>
+            <div id="cloudHeaderStatus" class="cloud-status-badge" style="display: none;">
+              <span class="cloud-icon">🌐</span>
+              <span class="cloud-label">LIVE:</span>
+              <span id="headerProjectId" class="cloud-id">----</span>
+            </div>
           </div>
           <div class="workspace-toolbar" id="workspaceToolbar">
             <button id="textEditModeBtn" type="button" class="toolbar-btn" title="Toggle text edit mode: edit text freely with newlines and indentation.">Text Edit</button>
@@ -140,9 +148,41 @@
 
     <footer class="footer">
       <p>ESV via <a href="https://api.esv.org" target="_blank" rel="noopener">api.esv.org</a>. Greek: <a href="https://sblgnt.com" target="_blank" rel="noopener">SBLGNT</a> (CC-BY 4.0).</p>
-      <p class="footer-version">Version 2.4.6 · Made by Josiah Hoi and Bryce Bussert, based on the method taught by Dr. Daniel M. Gurtner.</p>
+      <p class="footer-version">Version 2.5.0 · Made by Josiah Hoi and Bryce Bussert, based on the method taught by Dr. Daniel M. Gurtner.</p>
     </footer>
   </div>
+  <div id="settingsModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content settings-modal">
+      <div class="modal-header">
+        <h2>Project Settings</h2>
+        <button id="closeSettingsBtn" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-section">
+          <h3>Identity</h3>
+          <div class="sidebar-field">
+            <label for="pageAuthor" class="field-label">Project Owner</label>
+            <input type="text" id="pageAuthor" placeholder="e.g. Original Author">
+          </div>
+          <div class="sidebar-field">
+            <label for="reviewerName" class="field-label">Reviewing As</label>
+            <input type="text" id="reviewerName" placeholder="Your name">
+          </div>
+        </div>
+        <div class="settings-section">
+          <h3>File Defaults</h3>
+          <div class="sidebar-field">
+            <label for="exportFilename" class="field-label">Filename Template</label>
+            <input type="text" id="exportFilename" placeholder="Passage_Owner_Date">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="saveSettingsBtn" class="primary-action">Done</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>

@@ -6,6 +6,23 @@
 const ESV_API = 'https://api.esv.org/v3/passage/text/';
 const SBLGNT_BASE = 'https://raw.githubusercontent.com/Faithlife/SBLGNT/master/data/sblgnt/text/';
 
+// --- Firebase Cloud Sync Configuration ---
+const firebaseConfig = {
+  apiKey: "AIzaSyCflZaQ0TdXImPp5-eSdpq8mkclJaltzDU",
+  authDomain: "discourse-analysis-f4a8e.firebaseapp.com",
+  projectId: "discourse-analysis-f4a8e",
+  storageBucket: "discourse-analysis-f4a8e.firebasestorage.app",
+  messagingSenderId: "628335300315",
+  appId: "1:628335300315:web:d26312b8d26e83ebbf06fe",
+  measurementId: "G-YHGZ85KGFS"
+};
+
+// Initialize Firebase
+if (typeof firebase !== 'undefined') {
+  firebase.initializeApp(firebaseConfig);
+}
+const db = typeof firebase !== 'undefined' ? firebase.firestore() : null;
+
 // SBLGNT book name → file name (Faithlife repo)
 const SBLGNT_BOOKS = {
   matt: 'Matt.txt', matthew: 'Matt.txt', mt: 'Matt.txt',
@@ -37,7 +54,6 @@ const SBLGNT_BOOKS = {
   rev: 'Rev.txt', revelation: 'Rev.txt', re: 'Rev.txt',
 };
 
-// Bolls.life Book IDs (1-66)
 const BOLLS_BOOKS = {
   gen: 1, genesis: 1, exod: 2, exodus: 2, lev: 3, leviticus: 3, num: 4, numbers: 4, deut: 5, deuteronomy: 5,
   josh: 6, joshua: 6, judg: 7, judges: 7, ruth: 8, '1sam': 9, '1 samuel': 9, '2sam': 10, '2 samuel': 10,
@@ -52,7 +68,8 @@ const BOLLS_BOOKS = {
   phil: 50, philippians: 50, col: 51, colossians: 51, '1thess': 52, '1 thess': 52, '2thess': 53, '2 thess': 53,
   '1tim': 54, '1 tim': 54, '2tim': 55, '2 tim': 55, titus: 56, phlm: 57, philemon: 57, heb: 58, hebrews: 58,
   jas: 59, james: 59, '1pet': 60, '1 peter': 60, '2pet': 61, '2 peter': 61, '1jn': 62, '1 john': 62,
-  '2jn': 63, '2 john': 63, '3jn': 64, '3 john': 64, jude: 65, rev: 66, revelation: 66
+  '2jn': 63, '2 john': 63, '3jn': 64, '3 john': 64, jude: 65, rev: 66, revelation: 66,
+  tobit: 67, judith: 68, wisdom: 69, sirach: 70, baruch: 71, '1macc': 72, '1 maccabees': 72, '2macc': 73, '2 maccabees': 73, '3macc': 74, '3 maccabees': 74, '4macc': 75, '4 maccabees': 75
 };
 
 // State
@@ -76,6 +93,10 @@ let selectedArrowIdx = null; // { fromProp, fromStart, fromEnd, toProp, toStart,
 let pendingArrowStart = null; // { propIndex, start, end }
 let arrowHighlight = null; // DOM element for hovering word overlay
 let showCommentsEnabled = false;
+
+let activeProjectId = null;
+let cloudUnsubscribe = null;
+let isUpdatingFromCloud = false;
 
 function clearAllFormatting() {
   brackets = [];
@@ -175,6 +196,7 @@ if (versionSelect) {
 // Theme toggle (light/dark)
 const THEME_KEY = 'biblebracket_theme';
 const COMMENT_AUTHOR_KEY = 'biblebracket_comment_author';
+const REVIEWER_NAME_KEY = 'biblebracket_reviewer_name';
 const PAGE_AUTHOR_KEY = 'biblebracket_page_author';
 function updateThemeButtonText() {
   const themeToggle = document.getElementById('themeToggle');
@@ -227,30 +249,80 @@ function updateFontByAuthor() {
   }
 }
 
-// Page/bracket author (persisted in localStorage, included in saved/exported bracket, shown top-right in workspace for export/copy)
+// Page/bracket author (Project Owner)
 const pageAuthorInput = document.getElementById('pageAuthor');
 const passageAuthorEl = document.getElementById('passageAuthor');
+const reviewerNameInput = document.getElementById('reviewerName');
+
 function syncPassageAuthorDisplay() {
   if (passageAuthorEl) {
-    const name = (pageAuthorInput?.value || '').trim() || (typeof localStorage !== 'undefined' ? localStorage.getItem(PAGE_AUTHOR_KEY) : '') || '';
+    const name = (pageAuthorInput?.value || '').trim() || (localStorage.getItem(PAGE_AUTHOR_KEY) || '');
     passageAuthorEl.textContent = name;
   }
 }
+
+// Settings Modal Logic
+const settingsModal = document.getElementById('settingsModal');
+const projectSettingsBtn = document.getElementById('projectSettingsBtn');
+const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+
+function openSettings() {
+  if (settingsModal) settingsModal.style.display = 'flex';
+}
+function closeSettings() {
+  if (settingsModal) settingsModal.style.display = 'none';
+}
+
+if (projectSettingsBtn) projectSettingsBtn.addEventListener('click', openSettings);
+if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', closeSettings);
+if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', closeSettings);
+if (settingsModal) {
+  settingsModal.addEventListener('click', (e) => {
+    if (e.target === settingsModal) closeSettings();
+  });
+}
+
 if (pageAuthorInput) {
   pageAuthorInput.value = localStorage.getItem(PAGE_AUTHOR_KEY) || '';
   syncPassageAuthorDisplay();
-  pageAuthorInput.addEventListener('change', () => {
-    try { localStorage.setItem(PAGE_AUTHOR_KEY, pageAuthorInput.value.trim()); } catch (_) { }
-    syncPassageAuthorDisplay();
-    updateFontByAuthor();
-  });
-  pageAuthorInput.addEventListener('blur', () => {
+  pageAuthorInput.addEventListener('input', () => {
     try { localStorage.setItem(PAGE_AUTHOR_KEY, pageAuthorInput.value.trim()); } catch (_) { }
     syncPassageAuthorDisplay();
     updateFontByAuthor();
   });
   updateFontByAuthor(); // Run once on init
 }
+
+if (reviewerNameInput) {
+  reviewerNameInput.value = localStorage.getItem(REVIEWER_NAME_KEY) || localStorage.getItem(COMMENT_AUTHOR_KEY) || '';
+  reviewerNameInput.addEventListener('input', () => {
+    try { 
+      localStorage.setItem(REVIEWER_NAME_KEY, reviewerNameInput.value.trim());
+      // Also update comment author key for consistency with existing code
+      localStorage.setItem(COMMENT_AUTHOR_KEY, reviewerNameInput.value.trim());
+    } catch (_) { }
+    // Update labels immediately if Gurtner mode is toggled
+    renderBrackets();
+  });
+}
+
+function isGurtnerMode() {
+  const name = (reviewerNameInput?.value || '').trim().toLowerCase();
+  return name.includes('gurtner');
+}
+
+const GURTNER_LABELS = {
+  conditional: 'C?/E*',
+  'action-purpose': 'M/Ed*',
+  'action-manner': 'W*/Ed',
+};
+
+const GURTNER_RELATIONSHIP_NAMES = {
+  conditional: 'Condition?-Effect (C?/E)',
+  'action-purpose': 'Means-End (M/Ed)',
+  'action-manner': 'Way-End (W/Ed)',
+};
 
 // Initialize theme on load
 initTheme();
@@ -292,12 +364,16 @@ const RELATIONSHIP_TYPES = {
   'negative-positive': 'Negative-Positive (-/+)',
   'idea-explanation': 'Idea-Explanation (Id/Exp)',
   'question-answer': 'Question-Answer (Q/A)',
+  'general-specific': 'General-Specific (Gn/Sp)',
+  'fact-interpretation': 'Fact-Interpretation (Ft/In)',
+  'anticipation-fulfillment': 'Anticipation-Fulfillment (Ant/F)',
+  'both-and': 'Both-And (B-A)',
   concessive: 'Concessive (Csv)',
   'situation-response': 'Situation-Response (Sit/R)',
 };
 
 // Series, Alternative, Bilateral, and unspecified get a single center label; all others get two (one per end)
-const SINGLE_LABEL_TYPES = new Set(['series', 'alternative', 'bilateral', 'unspecified']);
+const SINGLE_LABEL_TYPES = new Set(['series', 'alternative', 'bilateral', 'both-and', 'unspecified']);
 
 const undoDivideBtn = document.getElementById('undoDivideBtn');
 if (undoDivideBtn) undoDivideBtn.addEventListener('click', undoLastAction);
@@ -457,17 +533,41 @@ async function fetchPassage() {
   fetchBtn.textContent = 'Fetching…';
 
   try {
-    if (version === 'sblgnt') {
-      const result = await fetchSBLGNTPassage(query);
-      propositions = result.propositions;
-      verseRefs = result.verseRefs;
-      passageRef = result.passageRef;
-      if (copyrightLabel) copyrightLabel.textContent = '(SBLGNT)';
-      if (propositionsContainer) propositionsContainer.classList.add('greek-text');
+    if (version === 'greek') {
+      const ref = parsePassageReference(query);
+      if (ref && ref.file) {
+        // It's a New Testament book, use SBLGNT logic
+        const result = await fetchSBLGNTPassage(query);
+        propositions = result.propositions;
+        verseRefs = result.verseRefs;
+        passageRef = result.passageRef;
+        if (copyrightLabel) copyrightLabel.textContent = '(SBLGNT)';
+        if (propositionsContainer) propositionsContainer.classList.add('greek-text');
+      } else {
+        // It's an Old Testament book, use LXX logic via Bolls
+        const data = await fetchFromBolls('LXX', query);
+        passageRef = data.passageRef;
+        if (copyrightLabel) copyrightLabel.textContent = data.copyright;
+        if (propositionsContainer) propositionsContainer.classList.add('greek-text');
+        
+        // Parse Bolls text into propositions
+        const verseParts = data.text.split(/(?=\[\d+\])/);
+        propositions = [];
+        verseRefs = [];
+        for (const part of verseParts) {
+          const m = part.match(/^\[(\d+)\]\s*(.*)$/s);
+          if (m) {
+            propositions.push(m[2].trim());
+            verseRefs.push(m[1]);
+          }
+        }
+      }
     } else {
       let data = null;
       let error = null;
       const key = apiKeyInput?.value?.trim() || '';
+
+      if (propositionsContainer) propositionsContainer.classList.remove('greek-text');
 
       // 1. Try Official ESV API if key exists and version is ESV
       if (version === 'esv' && key) {
@@ -500,7 +600,9 @@ async function fetchPassage() {
       // 2. Fallback to Bolls.life for NASB or if ESV Key missing/failed
       if (!data) {
         try {
-          const bollsTranslation = version === 'nasb' ? 'NASB' : 'ESV';
+          let bollsTranslation = 'ESV';
+          if (version === 'nasb') bollsTranslation = 'NASB';
+          
           data = await fetchFromBolls(bollsTranslation, query);
         } catch (err) {
           throw new Error(error ? `${error} -> Fallback failed: ${err.message}` : err.message);
@@ -812,6 +914,13 @@ function renderPropositions() {
     });
 
     block.addEventListener('keydown', (e) => {
+      // Bold and Underline shortcuts (should work in both normal and textEditMode)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'u')) {
+        e.preventDefault();
+        document.execCommand(e.key === 'b' ? 'bold' : 'underline');
+        return;
+      }
+
       if (textEditMode) {
         if (e.key === 'Tab') {
           e.preventDefault();
@@ -885,6 +994,11 @@ function renderPropositions() {
                 preRange.setStart(textSpan, 0);
                 preRange.setEnd(range.startContainer, range.startOffset);
                 const cursorOffset = preRange.toString().length;
+                if (cursorOffset === 0 && i > 0) {
+                  e.preventDefault();
+                  mergePropositions(i);
+                  return;
+                }
                 const fullText = textSpan.innerText || textSpan.textContent || '';
                 const beforeCursor = fullText.slice(0, cursorOffset);
                 const lineStartIdx = beforeCursor.lastIndexOf('\n') + 1;
@@ -900,11 +1014,6 @@ function renderPropositions() {
           }
         }
         return; // Allow other keys to be natively edited
-      }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'u')) {
-        e.preventDefault();
-        document.execCommand(e.key === 'b' ? 'bold' : 'underline');
-        return;
       }
       if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
@@ -927,6 +1036,28 @@ function renderPropositions() {
         if (offset != null && offset > 0 && offset < currentText.length) {
           propositions[i] = currentText;
           splitPropositionAtOffset(i, offset);
+        }
+      }
+
+      if (e.key === 'Backspace') {
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount) {
+          const range = sel.getRangeAt(0);
+          if (range.collapsed) {
+            const textSpan = block.querySelector('.proposition-text') || block;
+            const preRange = document.createRange();
+            try {
+              preRange.setStart(textSpan, 0);
+              preRange.setEnd(range.startContainer, range.startOffset);
+              const cursorOffset = preRange.toString().length;
+              if (cursorOffset === 0 && i > 0) {
+                e.preventDefault();
+                e.stopPropagation();
+                mergePropositions(i);
+                return;
+              }
+            } catch (_) { }
+          }
         }
       }
     }, true);
@@ -1186,6 +1317,7 @@ function getVerseBase(ref) {
 
 function incrementVerseRef(ref) {
   const m = ref.match(/^(.+?)([a-z]*)$/);
+  if (!m) return ref + 'a';
   const base = m[1];
   const suffix = m[2] || '';
   if (suffix === '') return base + 'a';
@@ -1193,6 +1325,26 @@ function incrementVerseRef(ref) {
   const rest = suffix.slice(0, -1);
   if (last === 'z') return base + rest + 'za';
   return base + rest + String.fromCharCode(last.charCodeAt(0) + 1);
+}
+
+function renumberSubVerses(base) {
+  if (!base) return;
+  const indices = [];
+  verseRefs.forEach((ref, i) => {
+    if (getVerseBase(ref) === base) {
+      indices.push(i);
+    }
+  });
+
+  if (indices.length === 0) return;
+  if (indices.length === 1) {
+    verseRefs[indices[0]] = base;
+  } else {
+    indices.forEach((idx, i) => {
+      // 97 is 'a'. i=0 -> a, i=1 -> b, etc.
+      verseRefs[idx] = base + String.fromCharCode(97 + i);
+    });
+  }
 }
 
 function splitPropositionAtOffset(index, offset) {
@@ -1211,11 +1363,8 @@ function splitPropositionAtOffset(index, offset) {
   verseRefs[index] = firstRef;
   verseRefs.splice(index + 1, 0, secondRef);
 
-  for (let j = verseRefs.length - 1; j >= index + 2; j--) {
-    if (getVerseBase(verseRefs[j]) === verseBase) {
-      verseRefs[j] = incrementVerseRef(verseRefs[j]);
-    }
-  }
+  renumberSubVerses(verseBase);
+
   brackets = brackets.map(({ from, to, type, labelsSwapped }) => ({
     from: from > index ? from + 1 : from,
     to: to > index ? to + 1 : to,
@@ -1280,6 +1429,96 @@ function splitPropositionAtOffset(index, offset) {
   showStatus('Divided. Use Undo divide to merge back.', 'success');
 }
 
+function mergePropositions(index) {
+  if (index <= 0 || index >= propositions.length) return;
+  
+  const textToAppend = (propositions[index] || '').trim();
+  pushUndo('merge');
+  
+  if (textToAppend === '(empty)' || !textToAppend) {
+    // If empty, just remove it without appending
+    propositions.splice(index, 1);
+    verseRefs.splice(index, 1);
+  } else {
+    const originalText = propositions[index - 1];
+    const originalLength = originalText.length;
+    // Join with space if both have content
+    const needsSpace = originalText.trim() !== '(empty)' && originalText.trim() !== '';
+    const joinedText = needsSpace ? originalText + ' ' + textToAppend : textToAppend;
+    const spaceAdded = needsSpace ? 1 : 0;
+    
+    propositions[index - 1] = joinedText;
+    propositions.splice(index, 1);
+
+    // Update verse refs: if merging 3a and 3b, try to get '3' or re-letter siblings
+    const base = getVerseBase(verseRefs[index - 1]);
+    verseRefs.splice(index, 1);
+    renumberSubVerses(base);
+
+    // Update comments
+    comments.forEach(c => {
+      if (c.type === 'text' && c.target) {
+        if (c.target.propIndex === index) {
+          c.target.propIndex = index - 1;
+          c.target.start += originalLength + spaceAdded;
+          c.target.end += originalLength + spaceAdded;
+        } else if (c.target.propIndex > index) {
+          c.target.propIndex -= 1;
+        }
+      }
+    });
+
+    // Update format tags
+    formatTags.forEach(f => {
+      if (f.propIndex === index) {
+        f.propIndex = index - 1;
+        f.start += originalLength + spaceAdded;
+        f.end += originalLength + spaceAdded;
+      } else if (f.propIndex > index) {
+        f.propIndex -= 1;
+      }
+    });
+
+    // Update word arrows
+    wordArrows.forEach(wa => {
+      if (wa.fromProp === index) {
+        wa.fromProp = index - 1;
+        wa.fromStart += originalLength + spaceAdded;
+        wa.fromEnd += originalLength + spaceAdded;
+      } else if (wa.fromProp > index) {
+        wa.fromProp -= 1;
+      }
+      
+      if (wa.toProp === index) {
+        wa.toProp = index - 1;
+        wa.toStart += originalLength + spaceAdded;
+        wa.toEnd += originalLength + spaceAdded;
+      } else if (wa.toProp > index) {
+        wa.toProp -= 1;
+      }
+    });
+  }
+
+  // Update brackets
+  brackets = brackets.map(({ from, to, type, labelsSwapped }) => {
+    let newFrom = from;
+    let newTo = to;
+    if (from === index) newFrom = index - 1;
+    else if (from > index) newFrom = from - 1;
+    
+    if (to === index) newTo = index - 1;
+    else if (to > index) newTo = to - 1;
+    
+    return { from: newFrom, to: newTo, type, labelsSwapped: labelsSwapped ?? false };
+  });
+  
+  // Filter out brackets that became zero-width
+  brackets = brackets.filter(b => b.from !== b.to);
+  
+  renderPropositions();
+  showStatus('Propositions merged.', 'success');
+}
+
 function undoLastAction() {
   if (undoStack.length === 0) {
     showStatus('Nothing to undo.', 'error');
@@ -1325,6 +1564,10 @@ const BRACKET_LABELS = {
   'question-answer': 'Q/A*',
   concessive: 'Csv',
   'situation-response': 'Sit/R*',
+  'general-specific': 'Gn/Sp*',
+  'fact-interpretation': 'Ft/In*',
+  'anticipation-fulfillment': 'Ant/F*',
+  'both-and': 'B-A',
   unspecified: '?',
 };
 
@@ -1411,7 +1654,7 @@ function getConnectionPoints(spanFrom, spanTo, positions, excludeBracketIdx = -1
       topY = (innerPoints.topY + innerPoints.bottomY) / 2;
       topLeft = getBracketX(innerAtTop.i);
     } else {
-      const innerLabels = getBracketLabels(a.type, a.labelsSwapped ?? false);
+      const innerLabels = getBracketLabels(a.type, a.labelsSwapped ?? false, a.dominanceFlipped ?? false);
       const starAtTop = (innerLabels.top || '').includes('*');
       topY = starAtTop ? innerPoints.topY : innerPoints.bottomY;
       topLeft = getBracketX(innerAtTop.i);
@@ -1428,7 +1671,7 @@ function getConnectionPoints(spanFrom, spanTo, positions, excludeBracketIdx = -1
       bottomY = (innerPoints.topY + innerPoints.bottomY) / 2;
       bottomLeft = getBracketX(innerAtBottom.i);
     } else {
-      const innerLabels = getBracketLabels(a.type, a.labelsSwapped ?? false);
+      const innerLabels = getBracketLabels(a.type, a.labelsSwapped ?? false, a.dominanceFlipped ?? false);
       const starAtTop = (innerLabels.top || '').includes('*');
       bottomY = starAtTop ? innerPoints.topY : innerPoints.bottomY;
       bottomLeft = getBracketX(innerAtBottom.i);
@@ -1443,7 +1686,7 @@ function getConnectionPoints(spanFrom, spanTo, positions, excludeBracketIdx = -1
       bottomLeft = getBracketX(adjacentAtBottom.i);
     } else {
       // Two-label: connect to whichever end has the *, same as nested bracket logic
-      const innerLabels = getBracketLabels(a.type, a.labelsSwapped ?? false);
+      const innerLabels = getBracketLabels(a.type, a.labelsSwapped ?? false, a.dominanceFlipped ?? false);
       const starAtTop = (innerLabels.top || '').includes('*');
       bottomY = starAtTop ? innerPoints.topY : innerPoints.bottomY;
       bottomLeft = getBracketX(adjacentAtBottom.i);
@@ -1456,11 +1699,17 @@ function getConnectionPoints(spanFrom, spanTo, positions, excludeBracketIdx = -1
   return { topY, topLeft, bottomY, bottomLeft };
 }
 
-function getBracketLabels(type, labelsSwapped = false) {
-  const label = BRACKET_LABELS[type] || type.slice(0, 2);
+function getBracketLabels(type, labelsSwapped = false, dominanceFlipped = false) {
+  let label = BRACKET_LABELS[type] || type.slice(0, 2);
+  
+  if (isGurtnerMode() && GURTNER_LABELS[type]) {
+    label = GURTNER_LABELS[type];
+  }
+
   if (SINGLE_LABEL_TYPES.has(type)) {
     return { single: label };
   }
+
   let top, bottom;
   if (label.includes('/')) {
     const parts = label.split('/');
@@ -1470,7 +1719,23 @@ function getBracketLabels(type, labelsSwapped = false) {
     top = label;
     bottom = '*';
   }
-  if (labelsSwapped) [top, bottom] = [bottom, top];
+
+  if (labelsSwapped) {
+    [top, bottom] = [bottom, top];
+  }
+
+  if (dominanceFlipped) {
+    const topHasStar = top.includes('*');
+    const bottomHasStar = bottom.includes('*');
+    if (topHasStar && !bottomHasStar) {
+      top = top.replace('*', '');
+      bottom = bottom.includes('*') ? bottom : bottom + '*';
+    } else if (!topHasStar && bottomHasStar) {
+      bottom = bottom.replace('*', '');
+      top = top.includes('*') ? top : top + '*';
+    }
+  }
+
   return { top, bottom };
 }
 
@@ -1652,7 +1917,7 @@ function renderBrackets() {
   renderWordArrows(wrapper);
 
   brackets.forEach((bracket, idx) => {
-    const { from, to, type, labelsSwapped } = bracket;
+    const { from, to, type, labelsSwapped, dominanceFlipped } = bracket;
     const a = positions[from];
     const b = positions[to];
     if (!a || !b) return;
@@ -1703,14 +1968,16 @@ function renderBrackets() {
     }
 
     const attachBracketEvents = (el, setPointerEvents = true) => {
-      if (setPointerEvents) el.style.pointerEvents = 'all';
+      if (setPointerEvents || el.classList.contains('bracket-label') || el.nodeName.toLowerCase() === 'text') el.style.pointerEvents = 'all';
       el.style.cursor = 'pointer';
       el.addEventListener('mouseenter', () => {
+        bracketCanvas.classList.add('bracket-canvas-dimmed');
         if (g) g.classList.add('bracket-hover');
-        // Bold the labels for this bracket
+        // Highlight the labels for this bracket
         bracketCanvas.querySelectorAll(`.bracket-label[data-bracket-index="${idx}"]`).forEach(lbl => {
-          lbl.style.fontWeight = 'bold';
+          lbl.classList.add('bracket-hover');
         });
+
         if (hasComment) {
           const comment = getCommentForBracket(idx);
           if (comment) {
@@ -1727,32 +1994,53 @@ function renderBrackets() {
         }
       });
       el.addEventListener('mouseleave', () => {
+        bracketCanvas.classList.remove('bracket-canvas-dimmed');
         if (g) g.classList.remove('bracket-hover');
-        // Un-bold the labels for this bracket
+        // Un-highlight the labels for this bracket
         bracketCanvas.querySelectorAll(`.bracket-label[data-bracket-index="${idx}"]`).forEach(lbl => {
-          lbl.style.fontWeight = '';
+          lbl.classList.remove('bracket-hover');
         });
+
         document.querySelectorAll('.comments-preview-card.comment-hover-active').forEach(c => c.classList.remove('comment-hover-active'));
         document.querySelectorAll('.proposition-block.bracket-hover').forEach((b) => b.classList.remove('bracket-hover'));
       });
+      let clickTimer = null;
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         const centerY = topY + (bottomY - topY) / 2;
         const centerX = BRACKET_X + BRACKET_WIDTH / 2;
-        if (commentMode) {
-          showCommentPopoverForBracket(idx, centerY, centerX);
-          return;
-        }
+
         if (e.detail === 2) {
+          if (clickTimer) clearTimeout(clickTimer);
+          // Safety: remove menu if it somehow opened on the first click
+          document.getElementById('bracketActions')?.remove();
+
+          // If double-clicked on a label text element, cycle dominance
+          const isLabel = el.nodeName.toLowerCase() === 'text' || el.classList.contains('bracket-label');
+          if (isLabel && !SINGLE_LABEL_TYPES.has(type)) {
+            pushUndo('bracket');
+            brackets[idx].dominanceFlipped = !brackets[idx].dominanceFlipped;
+            renderBrackets();
+            showStatus('Stars switched.', 'success');
+            return;
+          }
+          // Otherwise open label picker (if double clicked the bracket line)
           bracketSelectStep = 0;
           bracketFrom = null;
           clearPropositionHighlights();
           showLabelPicker(idx, centerY, centerX);
-        } else if (type === 'unspecified') {
-          // Unlabelled bracket: single click opens relationship picker to choose type
-          showLabelPicker(idx, centerY, centerX);
         } else {
-          showBracketActions(idx, centerY, centerX);
+          // Wait a tiny bit to see if it's a double click
+          if (clickTimer) clearTimeout(clickTimer);
+          clickTimer = setTimeout(() => {
+            if (commentMode) {
+              showCommentPopoverForBracket(idx, centerY, centerX);
+            } else if (type === 'unspecified') {
+              showLabelPicker(idx, centerY, centerX);
+            } else {
+              showBracketActions(idx, centerY, centerX);
+            }
+          }, 200);
         }
       });
       el.addEventListener('contextmenu', (e) => {
@@ -1765,14 +2053,17 @@ function renderBrackets() {
       });
     };
 
-    const labels = getBracketLabels(type, labelsSwapped ?? false);
+    const labels = getBracketLabels(type, labelsSwapped ?? false, bracket.dominanceFlipped ?? false);
     if (labels.single !== undefined) {
       const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      textEl.setAttribute('x', BRACKET_X - 4);
+      // Single labels (like 'S' for Sequence) now stay to the RIGHT of the vertical line
+      // to avoid overlapping with outer vertical lines.
+      textEl.setAttribute('x', BRACKET_X + 6);
       textEl.setAttribute('y', topY + (bottomY - topY) / 2);
-      textEl.setAttribute('text-anchor', 'end');
+      textEl.setAttribute('text-anchor', 'start');
       textEl.setAttribute('dominant-baseline', 'central');
-      textEl.setAttribute('font-size', '12');
+      textEl.setAttribute('font-size', '11');
+      textEl.setAttribute('font-weight', '500');
       textEl.setAttribute('class', `bracket-label ${type}`);
       textEl.setAttribute('data-bracket-index', idx);
       textEl.textContent = labels.single;
@@ -1780,23 +2071,29 @@ function renderBrackets() {
       labelsLayer.appendChild(textEl);
     } else {
       const topLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      topLabel.setAttribute('x', BRACKET_X - 4);
-      topLabel.setAttribute('y', topY);
-      topLabel.setAttribute('text-anchor', 'end');
-      topLabel.setAttribute('dominant-baseline', 'central');
-      topLabel.setAttribute('font-size', '12');
+      // Top label sits above the top horizontal arm, offset slightly right from the vertical line
+      topLabel.setAttribute('x', BRACKET_X + 6);
+      topLabel.setAttribute('y', topY - 3);
+      topLabel.setAttribute('text-anchor', 'start');
+      topLabel.setAttribute('dominant-baseline', 'alphabetic');
+      topLabel.setAttribute('font-size', '11');
+      topLabel.setAttribute('font-weight', '500');
       topLabel.setAttribute('class', `bracket-label ${type}`);
       topLabel.setAttribute('data-bracket-index', idx);
       topLabel.textContent = labels.top;
+      
       const bottomLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      bottomLabel.setAttribute('x', BRACKET_X - 4);
-      bottomLabel.setAttribute('y', bottomY);
-      bottomLabel.setAttribute('text-anchor', 'end');
-      bottomLabel.setAttribute('dominant-baseline', 'central');
-      bottomLabel.setAttribute('font-size', '12');
+      // Bottom label sits above the bottom horizontal arm
+      bottomLabel.setAttribute('x', BRACKET_X + 6);
+      bottomLabel.setAttribute('y', bottomY - 3);
+      bottomLabel.setAttribute('text-anchor', 'start');
+      bottomLabel.setAttribute('dominant-baseline', 'alphabetic');
+      bottomLabel.setAttribute('font-size', '11');
+      bottomLabel.setAttribute('font-weight', '500');
       bottomLabel.setAttribute('class', `bracket-label ${type}`);
       bottomLabel.setAttribute('data-bracket-index', idx);
       bottomLabel.textContent = labels.bottom;
+      
       attachBracketEvents(topLabel, false);
       attachBracketEvents(bottomLabel, false);
       labelsLayer.appendChild(topLabel);
@@ -2091,14 +2388,12 @@ function setupReplies(popover, existingComment, idSuffix) {
   renderReplies();
 
   const replyTa = popover.querySelector('.comment-reply-add textarea');
-  const replyAuthorInput = popover.querySelector(`#replyAuthor${idSuffix}`);
   const addReplyBtn = popover.querySelector('[data-action="add-reply"]');
   if (addReplyBtn && replyTa) {
     addReplyBtn.addEventListener('click', () => {
       const replyText = (replyTa.value || '').trim();
       if (!replyText) return;
-      const replyAuthor = (replyAuthorInput && replyAuthorInput.value || '').trim() || (localStorage.getItem(COMMENT_AUTHOR_KEY) || '');
-      if (replyAuthor) try { localStorage.setItem(COMMENT_AUTHOR_KEY, replyAuthor); } catch (_) { }
+      const replyAuthor = (localStorage.getItem(REVIEWER_NAME_KEY) || localStorage.getItem(COMMENT_AUTHOR_KEY) || '').trim();
       if (!existingComment.replies) existingComment.replies = [];
       existingComment.replies.push({
         id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
@@ -2120,13 +2415,12 @@ function showCommentPopover(config) {
 
   const { type, existingComment, titleLabel, idSuffix, onReopen, onSave, onDelete, positionPopover, options = {} } = config;
   const viewMode = options.viewMode === true || (!!existingComment && options.viewMode !== false);
-  const commentAuthor = (existingComment && existingComment.author) || localStorage.getItem(COMMENT_AUTHOR_KEY) || '';
 
   const popover = document.createElement('div');
   popover.id = 'commentPopover';
   popover.className = 'comment-popover';
 
-  const repliesHtml = (comment) => `<div class="comment-replies-section"><p class="comment-replies-title">Replies (${(comment.replies || []).length})</p><div class="comment-replies-list" data-comment-id="${comment.id}"></div><div class="comment-reply-add"><div class="comment-reply-author-row"><label for="replyAuthor${idSuffix}">Author:</label><input type="text" id="replyAuthor${idSuffix}" class="author-input" placeholder="Your name" value="${escapeHtml(localStorage.getItem(COMMENT_AUTHOR_KEY) || '')}"></div><textarea rows="2" placeholder="Add a reply…"></textarea><button type="button" data-action="add-reply" class="secondary">Reply</button></div></div>`;
+  const repliesHtml = (comment) => `<div class="comment-replies-section"><p class="comment-replies-title">Replies (${(comment.replies || []).length})</p><div class="comment-replies-list" data-comment-id="${comment.id}"></div><div class="comment-reply-add"><textarea rows="2" placeholder="Add a reply…"></textarea><button type="button" data-action="add-reply" class="secondary">Reply</button></div></div>`;
 
   if (viewMode) {
     const metaStr = `${escapeHtml((existingComment.author || '').trim() || '')} · ${existingComment.createdAt ? new Date(existingComment.createdAt).toLocaleString() : ''}`;
@@ -2148,14 +2442,9 @@ function showCommentPopover(config) {
   } else {
     popover.innerHTML = `
       <p class="comment-popover-title">${existingComment ? `View / Edit comment${type === 'text' ? ' on text' : ''}` : `Add comment to ${type === 'text' ? 'highlighted text' : 'bracket'}`}</p>
-      <div class="comment-popover-author-row">
-        <label for="commentAuthor${idSuffix}">Author:</label>
-        <input type="text" id="commentAuthor${idSuffix}" class="author-input" placeholder="Your name" value="${escapeHtml(commentAuthor)}">
-      </div>
       <textarea rows="3" placeholder="Your note${type === 'bracket' ? ' on this bracket' : ''}…">${existingComment ? escapeHtml(existingComment.text || '') : ''}</textarea>
       <div class="comment-popover-actions">
-        <button type="button" data-action="save">${existingComment ? 'Update' : 'Save'}</button>
-        ${existingComment ? '<button type="button" data-action="delete" class="secondary">Remove comment</button>' : ''}
+        <button type="button" data-action="save" class="primary-action">${existingComment ? 'Update' : 'Add'} Comment</button>
         <button type="button" data-action="cancel" class="secondary">Cancel</button>
       </div>
       ${existingComment ? repliesHtml(existingComment) : ''}
@@ -2199,15 +2488,13 @@ function showCommentPopover(config) {
     setupReplies(popover, existingComment, idSuffix);
   } else {
     const ta = popover.querySelector('textarea');
-    const authorInput = popover.querySelector(`#commentAuthor${idSuffix}`);
     ta.focus();
 
     if (existingComment) setupReplies(popover, existingComment, idSuffix);
 
     popover.querySelector('[data-action="save"]').addEventListener('click', () => {
       const text = (ta.value || '').trim();
-      const author = (authorInput && authorInput.value || '').trim();
-      if (author) try { localStorage.setItem(COMMENT_AUTHOR_KEY, author); } catch (_) { }
+      const author = (localStorage.getItem(REVIEWER_NAME_KEY) || localStorage.getItem(COMMENT_AUTHOR_KEY) || '').trim();
       const state = getPopoverState();
       closePopover();
       const savedCommentId = onSave(text, author, state);
@@ -2373,6 +2660,7 @@ function showBracketActions(bracketIdx, centerY, centerX) {
     <button data-action="delete">Delete</button>
     <button data-action="label">Change label</button>
     ${hasTwoLabels ? '<button data-action="swap">⇅ Swap labels</button>' : ''}
+    ${hasTwoLabels ? '<button data-action="flip-dominance">★ Switch stars</button>' : ''}
     <button data-action="select" title="Select bracket, then click a proposition to connect to (reparents) or another bracket to create bracket">Select to connect</button>
     <button data-action="comment" title="Add or view a comment on this bracket">${hasComment ? 'View comment' : 'Add comment'}</button>
   `;
@@ -2422,6 +2710,18 @@ function showBracketActions(bracketIdx, centerY, centerX) {
     });
   }
 
+  const flipBtn = popover.querySelector('[data-action="flip-dominance"]');
+  if (flipBtn) {
+    flipBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      pushUndo('bracket');
+      brackets[bracketIdx].dominanceFlipped = !brackets[bracketIdx].dominanceFlipped;
+      renderBrackets();
+      clearAndDismiss();
+      showStatus('Stars switched.', 'success');
+    });
+  }
+
   popover.querySelector('[data-action="select"]').addEventListener('click', (e) => {
     e.stopPropagation();
     popover.remove();
@@ -2457,11 +2757,82 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
   title.textContent = 'Choose relationship';
   picker.appendChild(title);
 
-  const typeKeys = Object.keys(RELATIONSHIP_TYPES).filter((k) => k !== 'action-result');
-  typeKeys.forEach((typeKey) => {
+  const RELATIONSHIP_GROUPS = [
+    {
+      name: 'COORDINATE RELATIONSHIPS',
+      types: ['series', 'progression', 'alternative', 'both-and', 'anticipation-fulfillment']
+    },
+    {
+      name: 'SUBORDINATE RELATIONSHIPS',
+      subgroups: [
+        {
+          name: 'Support by Restatement',
+          types: ['action-manner', 'comparison', 'negative-positive', 'question-answer', 'idea-explanation', 'general-specific', 'fact-interpretation']
+        },
+        {
+          name: 'Support by Distinct Statement',
+          types: ['ground', 'inference', 'bilateral', 'action-result', 'action-purpose', 'conditional', 'temporal', 'locative']
+        },
+        {
+          name: 'Support by Contrary Statement',
+          types: ['concessive', 'situation-response']
+        }
+      ]
+    }
+  ];
+
+  const createGroup = (group) => {
+    const groupDiv = document.createElement('div');
+    groupDiv.className = 'picker-group';
+    
+    const header = document.createElement('h4');
+    header.className = 'picker-group-header';
+    header.textContent = group.name;
+    groupDiv.appendChild(header);
+
+    if (group.types) {
+      const btnContainer = document.createElement('div');
+      btnContainer.className = 'picker-btn-container';
+      group.types.forEach(typeKey => {
+        const btn = createButton(typeKey);
+        if (btn) btnContainer.appendChild(btn);
+      });
+      groupDiv.appendChild(btnContainer);
+    }
+
+    if (group.subgroups) {
+      group.subgroups.forEach(sub => {
+        const subDiv = document.createElement('div');
+        subDiv.className = 'picker-subgroup';
+        
+        const subHeader = document.createElement('h5');
+        subHeader.className = 'picker-subgroup-header';
+        subHeader.textContent = sub.name;
+        subDiv.appendChild(subHeader);
+
+        const btnContainer = document.createElement('div');
+        btnContainer.className = 'picker-btn-container';
+        sub.types.forEach(typeKey => {
+          const btn = createButton(typeKey);
+          if (btn) btnContainer.appendChild(btn);
+        });
+        subDiv.appendChild(btnContainer);
+        groupDiv.appendChild(subDiv);
+      });
+    }
+
+    return groupDiv;
+  };
+
+  const createButton = (typeKey) => {
+    if (!RELATIONSHIP_TYPES[typeKey]) return null;
     const btn = document.createElement('button');
-    btn.textContent = RELATIONSHIP_TYPES[typeKey] ?? typeKey;
-    btn.title = RELATIONSHIP_TYPES[typeKey];
+    let labelText = RELATIONSHIP_TYPES[typeKey] ?? typeKey;
+    if (isGurtnerMode() && GURTNER_RELATIONSHIP_NAMES[typeKey]) {
+      labelText = GURTNER_RELATIONSHIP_NAMES[typeKey];
+    }
+    btn.textContent = labelText;
+    btn.title = labelText;
     btn.className = typeKey;
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -2471,7 +2842,11 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
       document.removeEventListener('click', dismiss);
       showStatus(`Label changed to ${RELATIONSHIP_TYPES[typeKey]}`, 'success');
     });
-    picker.appendChild(btn);
+    return btn;
+  };
+
+  RELATIONSHIP_GROUPS.forEach(group => {
+    picker.appendChild(createGroup(group));
   });
 
   const deleteBtn = document.createElement('button');
@@ -2529,6 +2904,15 @@ function startNewBracket() {
   document.getElementById('commentPopover')?.remove();
   renderCommentPreviews();
   if (typeof clearDraft === 'function') clearDraft();
+  if (pageAuthorInput) {
+    const reviewerName = localStorage.getItem(REVIEWER_NAME_KEY) || localStorage.getItem(COMMENT_AUTHOR_KEY) || '';
+    if (reviewerName) {
+      pageAuthorInput.value = reviewerName;
+      try { localStorage.setItem(PAGE_AUTHOR_KEY, reviewerName); } catch (_) { }
+      syncPassageAuthorDisplay();
+      updateFontByAuthor();
+    }
+  }
   showStatus('New bracket started. Fetch or import a passage to begin.', 'success');
 }
 
@@ -3618,9 +4002,27 @@ function showExportMenu(e) {
         await navigator.clipboard.writeText(JSON.stringify(data));
         showStatus('Data copied to clipboard.', 'success');
     }},
+    { label: 'divider' }, // Visual separator
   ];
 
+  if (!activeProjectId) {
+    options.push({ label: '🌐 Go Live / Start Sync', action: startCloudSync });
+  } else {
+    options.push({ label: '📋 Copy Project ID', action: () => {
+      navigator.clipboard.writeText(activeProjectId).then(() => showStatus('Project ID copied: ' + activeProjectId, 'success'));
+    }});
+    options.push({ label: '🛑 Stop Cloud Sync', action: stopCloudSync });
+  }
+
   options.forEach(opt => {
+    if (opt.label === 'divider') {
+      const hr = document.createElement('div');
+      hr.style.height = '1px';
+      hr.style.background = 'var(--border)';
+      hr.style.margin = '4px 0';
+      picker.appendChild(hr);
+      return;
+    }
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.textContent = opt.label;
@@ -3669,6 +4071,65 @@ if (exportMenuBtn) exportMenuBtn.addEventListener('click', showExportMenu);
 
 if (saveBtn) saveBtn.addEventListener('click', () => saveBracket());
 if (saveAsBtn) saveAsBtn.addEventListener('click', () => saveBracketAs());
+
+function showOpenMenu(e) {
+  const existing = document.getElementById('openPicker');
+  if (existing) {
+    existing.remove();
+    return;
+  }
+
+  const picker = document.createElement('div');
+  picker.id = 'openPicker';
+  picker.className = 'label-picker relationship-picker-fixed';
+  
+  const options = [
+    { label: '📂 Open local file', action: openBracketFile },
+    { label: '🔗 Join cloud session', action: () => {
+        const id = prompt('Enter Project ID to join:');
+        if (id) joinCloudSync(id.trim().toUpperCase());
+    }},
+  ];
+
+  if (activeProjectId) {
+    options.push({ label: 'divider' });
+    options.push({ label: '🛑 Leave cloud session', action: stopCloudSync });
+  }
+
+  options.forEach(opt => {
+    if (opt.label === 'divider') {
+      const hr = document.createElement('div');
+      hr.style.height = '1px';
+      hr.style.background = 'var(--border)';
+      hr.style.margin = '4px 0';
+      picker.appendChild(hr);
+      return;
+    }
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = opt.label;
+    btn.style.width = '100%';
+    btn.style.textAlign = 'left';
+    btn.style.padding = '0.75rem 1rem';
+    btn.addEventListener('click', () => {
+      picker.remove();
+      opt.action();
+    });
+    picker.appendChild(btn);
+  });
+
+  document.body.appendChild(picker);
+  const rect = document.getElementById('openMenuBtn').getBoundingClientRect();
+  
+  let top = rect.top;
+  let left = rect.right + 10;
+  
+  picker.style.top = `${Math.max(10, top)}px`;
+  picker.style.left = `${Math.max(10, left)}px`;
+}
+
+const openMenuBtn = document.getElementById('openMenuBtn');
+if (openMenuBtn) openMenuBtn.addEventListener('click', showOpenMenu);
 
 async function openBracketFile() {
   if ('showOpenFilePicker' in window) {
@@ -4343,4 +4804,174 @@ if (window.electronAPI && typeof window.electronAPI.onOpenFile === 'function') {
       showStatus('Could not open file.', 'error');
     }
   });
+}
+// ── Cloud Sync Logic ─────────────────────────────────────────────────────────
+
+async function startCloudSync() {
+  if (!db) return showStatus('Firebase not initialized.', 'error');
+  
+  const projectId = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const projectData = {
+    propositions,
+    verseRefs,
+    brackets,
+    formatTags,
+    wordArrows,
+    comments,
+    passageRef,
+    author: localStorage.getItem(PAGE_AUTHOR_KEY) || 'Anonymous',
+    lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  try {
+    await db.collection('projects').doc(projectId).set(projectData);
+    activeProjectId = projectId;
+    initCloudSync(projectId);
+    updateCloudUI(true, projectId);
+    
+    // Update URL without reloading
+    const url = new URL(window.location);
+    url.searchParams.set('project', projectId);
+    window.history.pushState({}, '', url);
+    
+    showStatus('Cloud Sync started!', 'success');
+  } catch (err) {
+    showStatus('Failed to start sync: ' + err.message, 'error');
+  }
+}
+
+async function joinCloudSync(projectId) {
+  if (!db) return showStatus('Firebase not initialized.', 'error');
+  if (!projectId) return;
+
+  try {
+    const doc = await db.collection('projects').doc(projectId).get();
+    if (!doc.exists) {
+      throw new Error('Project not found.');
+    }
+    
+    activeProjectId = projectId;
+    updateCloudUI(true, projectId);
+    initCloudSync(projectId);
+    
+    // Update URL
+    const url = new URL(window.location);
+    url.searchParams.set('project', projectId);
+    window.history.pushState({}, '', url);
+    
+    showStatus('Connected to project ' + projectId, 'success');
+  } catch (err) {
+    showStatus('Failed to join: ' + err.message, 'error');
+  }
+}
+
+function initCloudSync(projectId) {
+  if (cloudUnsubscribe) cloudUnsubscribe();
+  
+  cloudUnsubscribe = db.collection('projects').doc(projectId).onSnapshot((doc) => {
+    if (doc.exists && !isUpdatingFromCloud) {
+      const data = doc.data();
+      // Apply data if it's newer or if we don't have local data
+      handleCloudData(data);
+    }
+  });
+}
+
+function handleCloudData(data) {
+  isUpdatingFromCloud = true;
+  
+  propositions = data.propositions || [];
+  verseRefs = data.verseRefs || [];
+  brackets = data.brackets || [];
+  formatTags = data.formatTags || [];
+  wordArrows = data.wordArrows || [];
+  comments = data.comments || [];
+  passageRef = data.passageRef || '';
+  
+  if (passageHeader) passageHeader.textContent = passageRef;
+  
+  renderPropositions();
+  renderBrackets();
+  renderCommentPreviews();
+  
+  isUpdatingFromCloud = false;
+}
+
+async function syncToCloud() {
+  if (!activeProjectId || isUpdatingFromCloud || !db) return;
+  
+  const projectData = {
+    propositions,
+    verseRefs,
+    brackets,
+    formatTags,
+    wordArrows,
+    comments,
+    passageRef,
+    lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  try {
+    await db.collection('projects').doc(activeProjectId).update(projectData);
+  } catch (err) {
+    console.error('Sync error:', err);
+  }
+}
+
+function stopCloudSync() {
+  if (cloudUnsubscribe) cloudUnsubscribe();
+  cloudUnsubscribe = null;
+  activeProjectId = null;
+  updateCloudUI(false);
+  
+  // Clear URL
+  const url = new URL(window.location);
+  url.searchParams.delete('project');
+  window.history.pushState({}, '', url);
+  
+  showStatus('Cloud Sync stopped.', 'info');
+}
+
+
+// Add event listeners for cloud buttons
+document.addEventListener('DOMContentLoaded', () => {
+  const startBtn = document.getElementById('startCloudBtn');
+  const stopBtn = document.getElementById('stopCloudBtn');
+  const joinBtn = document.getElementById('joinCloudBtn');
+  const copyBtn = document.getElementById('copyCloudUrlBtn');
+  const joinInput = document.getElementById('joinCloudId');
+
+  if (startBtn) startBtn.addEventListener('click', startCloudSync);
+  if (stopBtn) stopBtn.addEventListener('click', stopCloudSync);
+  if (joinBtn) joinBtn.addEventListener('click', () => joinCloudSync(joinInput.value.trim().toUpperCase()));
+  if (copyBtn) copyBtn.addEventListener('click', () => {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url).then(() => showStatus('Link copied!', 'success'));
+  });
+
+  // Check URL for existing project
+  const urlParams = new URLSearchParams(window.location.search);
+  const projectFromUrl = urlParams.get('project');
+  if (projectFromUrl) {
+    setTimeout(() => joinCloudSync(projectFromUrl), 1000);
+  }
+});
+
+// Wrap existing pushUndo to also trigger cloud sync
+const originalPushUndo = pushUndo;
+pushUndo = function(action) {
+  originalPushUndo(action);
+  syncToCloud();
+};
+
+function updateCloudUI(isActive, projectId = '') {
+  const badge = document.getElementById('cloudHeaderStatus');
+  const idSpan = document.getElementById('headerProjectId');
+  
+  if (isActive) {
+    if (badge) badge.style.display = 'flex';
+    if (idSpan) idSpan.textContent = projectId;
+  } else {
+    if (badge) badge.style.display = 'none';
+  }
 }
