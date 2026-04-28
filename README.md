@@ -1,55 +1,58 @@
-# Bible Brackets
+# Discourse Analysis
 
-A Bible study tool for diagramming the logical structure of Scripture using **bracketing** — splitting passages into propositions and drawing logic brackets between them. Similar to [BibleArc](https://biblearc.com).
+A powerful Bible study tool for diagramming the logical structure of Scripture using **bracketing** — splitting passages into propositions and drawing logic brackets between them. Similar to [BibleArc](https://biblearc.com), built for speed, portability, and collaboration.
 
 ## Features
 
-- **ESV API integration** — Fetch passages directly from the ESV (English Standard Version) Bible
-- **SBL Greek NT** — Fetch Greek text from the SBLGNT (no API key required)
-- **Proposition splitting** — Automatic initial split by logical connectors (for, therefore, but, etc.); refine manually
-- **Logic brackets** — Draw visible brackets between propositions to show relationships (all 18 standard logical relationship types)
-- **Import text** — Paste your own passage and split by lines or `/` characters
-- **Export/Import** — Save your work to a JSON file and load it later
+- **ESV API integration** — Fetch passages directly from the ESV (English Standard Version) Bible.
+- **SBL Greek NT** — Fetch Greek text from the SBLGNT (no API key required).
+- **Logic Brackets** — Draw visible brackets between propositions to show relationships (all 18 standard logical relationship types).
+- **Word Arrows** — Draw orthogonal arrows between specific words to show grammatical or lexical connections.
+- **Comments & Collaboration** — Add comments to any bracket or text highlight, with support for replies.
+- **Cloud Sync** — Join live sessions to collaborate with others in real-time using Project IDs (powered by Firebase).
+- **Portable Apps** — Available as a standalone desktop app for Windows (Portable) and macOS.
+- **Themes** — Toggle between sleek Dark Mode and high-contrast Light Mode.
+- **Export/Import** — Save your work to JSON, or export high-quality images and PDFs for sharing.
 
-## Setup
+## Setup & Desktop Apps
 
-1. Get a free ESV API key at [api.esv.org/account/create-application/](https://api.esv.org/account/create-application/)
-2. Open `index.html` in your browser (or serve it locally)
-3. Enter your API key (stored in browser localStorage only)
+### Desktop (Recommended)
+1. Download the latest release for your platform from the `dist/` folder or the Releases page.
+   - **Windows**: `Discourse Analysis 2.5.0 x64 Portable.exe` (No installation required)
+   - **macOS**: `Discourse Analysis-2.5.0-arm64-mac.zip`
+2. Run the application directly.
+
+### Web / Development
+1. Open `index.html` in a modern browser.
+2. For ESV fetching, get a free API key at [api.esv.org](https://api.esv.org/account/create-application/).
+3. Enter your API key in the settings (stored in browser `localStorage` only).
 
 ## Usage
 
-### Fetch a passage
+### 1. Fetch a Passage
+- Select **ESV** or **SBL Greek NT** from the dropdown.
+- Enter a reference (e.g., `John 1:1-5`, `Romans 8:28-30`).
+- Click **Fetch Passage**.
+- The text is split into propositions. You can refine the split manually.
+- **Pro-tip**: Press **Enter** inside a proposition block to split it into two at your cursor.
 
-1. Select **ESV** or **SBL Greek NT** from the dropdown (ESV requires an API key)
-2. Enter a reference (e.g. `John 1:1-5`, `Romans 8:28-30`)
-3. Click **Fetch Passage**
-4. The text is split into propositions. Edit any block to refine the split.
-5. Press **Enter** inside a proposition to split it into two at the cursor.
+### 2. Draw Logic Brackets
+- Select a relationship type (e.g., Ground, Series) from the sidebar.
+- Click the first proposition dot, then the second.
+- A bracket is drawn. **Double-click** a bracket to change its relationship or **Double-click** a label to switch dominance (the asterisk).
+- **Right-click** a bracket to delete it.
 
-### Draw logic brackets
+### 3. Word Arrows & Comments
+- Toggle **Add Arrows** mode to draw orthogonal arrows between words.
+- Toggle **Comment** mode to add notes to specific highlights or brackets.
+- Comments support author names and threaded replies for peer review.
 
-1. Select a relationship type from the sidebar
-2. Click the first proposition
-3. Click the second proposition
-4. A visible bracket is drawn, grouping the two propositions with a labeled relationship
-5. Click a bracket to delete it; use **Clear All Brackets** to remove everything
+### 4. Cloud Collaboration
+- Click **Open...** → **Join cloud session**.
+- Enter a Project ID to sync your workspace with a collaborator.
+- Changes are updated in real-time for everyone in the session.
 
-### Save and load your work
-
-- **Save** (Ctrl/Cmd+S) — Saves to the current file. First time: choose where to save. After using **Open**, Save overwrites that file. (Requires Chrome/Edge; elsewhere falls back to Export.)
-- **Export** — Downloads a new JSON file each time
-- **Open** — Opens a JSON file and links it for Save (use Open → edit → Save to update the file)
-- **Import file** — Loads a JSON file without linking (use when you just want to load, not overwrite)
-
-### Import pasted text
-
-1. Expand **Or paste text to bracket**
-2. Paste your passage
-3. Use newlines or ` / ` to separate propositions
-4. Click **Import & Split**
-
-## Logical relationships
+## Logical Relationships
 
 | Abbrev | Type | Category |
 |--------|------|----------|
@@ -72,9 +75,12 @@ A Bible study tool for diagramming the logical structure of Scripture using **br
 | Csv | Concessive | Support by Contrary |
 | Sit/R | Situation-Response | Support by Contrary |
 
-## Tech
+## Tech Stack
 
-Plain HTML, CSS, and JavaScript — no build step. Works offline for bracket drawing; ESV API and SBLGNT fetch require network.
+- **Frontend**: Vanilla HTML5, CSS3, and JavaScript.
+- **Desktop**: Electron.
+- **Database**: Firebase Firestore (for Cloud Sync).
+- **Libraries**: `html2canvas` and `jsPDF` for exports, `LZ-String` for data compression.
 
 ## License
 
