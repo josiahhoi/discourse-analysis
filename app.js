@@ -4030,8 +4030,12 @@ function showExportMenu(e) {
     btn.style.textAlign = 'left';
     btn.style.padding = '0.75rem 1rem';
     btn.addEventListener('click', () => {
-      picker.remove();
-      opt.action();
+      if (opt.label && typeof opt.label === 'string' && opt.label.includes('Join cloud session')) {
+        opt.action(btn);
+      } else {
+        picker.remove();
+        if (typeof opt.action === 'function') opt.action();
+      }
     });
     picker.appendChild(btn);
   });
@@ -4085,9 +4089,36 @@ function showOpenMenu(e) {
   
   const options = [
     { label: '📂 Open local file', action: openBracketFile },
-    { label: '🔗 Join cloud session', action: () => {
-        const id = prompt('Enter Project ID to join:');
-        if (id) joinCloudSync(id.trim().toUpperCase());
+    { label: '🔗 Join cloud session', action: (btnEl) => {
+        // Replace button content with an input
+        btnEl.innerHTML = '';
+        btnEl.style.display = 'flex';
+        btnEl.style.gap = '8px';
+        btnEl.style.padding = '0.5rem';
+        
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = 'Project ID';
+        input.style.flex = '1';
+        input.style.padding = '4px';
+        input.style.textTransform = 'uppercase';
+        input.onclick = (e) => e.stopPropagation();
+        
+        const joinBtn = document.createElement('button');
+        joinBtn.textContent = 'Join';
+        joinBtn.style.padding = '4px 8px';
+        joinBtn.onclick = (e) => {
+          e.stopPropagation();
+          const id = input.value.trim().toUpperCase();
+          if (id) {
+            joinCloudSync(id);
+            document.getElementById('openPicker')?.remove();
+          }
+        };
+        
+        btnEl.appendChild(input);
+        btnEl.appendChild(joinBtn);
+        input.focus();
     }},
   ];
 
@@ -4112,8 +4143,12 @@ function showOpenMenu(e) {
     btn.style.textAlign = 'left';
     btn.style.padding = '0.75rem 1rem';
     btn.addEventListener('click', () => {
-      picker.remove();
-      opt.action();
+      if (opt.label && typeof opt.label === 'string' && opt.label.includes('Join cloud session')) {
+        opt.action(btn);
+      } else {
+        picker.remove();
+        if (typeof opt.action === 'function') opt.action();
+      }
     });
     picker.appendChild(btn);
   });
