@@ -4,16 +4,36 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 
 ## Features
 
-- **ESV API integration** — Fetch passages directly from the ESV (English Standard Version) Bible.
-- **NASB (1995)** — Full support for the NASB via bolls.life API.
-- **Greek NT & LXX** — Fetch Greek text from the SBLGNT (New Testament) or the Septuagint (Old Testament) via bolls.life.
-- **Logic Brackets** — Draw visible brackets between propositions to show relationships (all 18 standard logical relationship types).
-- **Word Arrows** — Draw orthogonal arrows between specific words to show grammatical or lexical connections.
-- **Comments & Collaboration** — Add comments to any bracket or text highlight, with support for replies.
-- **Cloud Sync** — Join live sessions to collaborate with others in real-time using Project IDs (powered by Firebase).
-- **Portable Apps** — Available as a standalone desktop app for Windows (Portable) and macOS.
-- **Themes** — Toggle between sleek Dark Mode and high-contrast Light Mode.
-- **Export/Import** — Save your work to JSON, or export high-quality images and PDFs for sharing.
+### 1. Biblical Text & Multi-Source Integration
+- **Direct API Fetching**:
+    - **ESV Integration**: Fetches directly from Crossway (requires API key).
+    - **NASB (1995)**: Support for classic English translations via bolls.life.
+    - **Greek NT & LXX**: Fetch Greek text from SBLGNT or Septuagint with native rendering.
+- **Intelligent Text Parser**: 
+    - **Magic Paste**: Automatically detects bracket data or "Discourse DNA" on the clipboard.
+    - **Differential Splitting**: Press **Enter** to split propositions; the engine handles verse suffixes (e.g., 1a, 1b) and markers like `[1]` or `[2:1]` automatically.
+
+### 2. The Bracketing & Structural Engine
+- **18 Standard Logical Relationships**: Full support for the standard discourse analysis hierarchy (Coordinate, Support, etc.).
+- **Nomenclature "Modes"**:
+    - **Standard**: Classic abbreviations (G, S, Ac/Res).
+    - **Dan Gurtner Mode**: Academic preset with specialized nomenclature (e.g., Means-End, Way-End) and Iowan Old Style typography.
+    - **Brian Kim Mode**: Technical preset with Roboto Mono typography.
+- **Structural Folding (Nesting)**: Collapse complex sub-structures into a single summary label to simplify large-scale diagrams.
+- **Dynamic Re-parenting**: Automatically adjusts parent-child relationships when grouping existing bracketed structures.
+- **Integrity Validation**: Real-time enforcement of "No Crossing" and "Adjacency" rules.
+
+### 3. Collaboration & Synchronization
+- **Real-time Cloud Sync**: Join live sessions via a 6-digit Project ID powered by Firebase.
+- **Threaded Commenting**: Attach notes to text spans or specific bracket arms with support for replies and reviewer identification.
+- **Word Arrows**: Draw orthogonal (90-degree) arrows between specific words to show grammatical or lexical connections.
+
+### 4. Persistence & Metadata "Stenography"
+- **Metadata Embedding**: Projects are embedded directly into the metadata of exported **PNG** and **PDF** files. 
+- **Drag-and-Drop Loading**: Drop any previously exported project file (JSON, PNG, or PDF) back into the app to resume work instantly.
+- **Draft Recovery**: Auto-saves work every 30 seconds to local storage with a restoration banner for unexpected exits.
+- **Themes**: Toggle between sleek Dark Mode and high-contrast Light Mode.
+- **Export Options**: Save to JSON, or export high-quality images and PDFs with project metadata included.
 
 ## Setup & Desktop Apps
 
