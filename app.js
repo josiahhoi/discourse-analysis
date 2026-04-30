@@ -512,7 +512,7 @@ function initDelegatedListeners() {
   bracketCanvas?.addEventListener('click', (e) => {
     const node = e.target.closest('.connection-node');
     if (node) {
-      const bIdx = node.dataset.bracketIndex;
+      const bIdx = node.dataset.bracketIdx;
       DA_EDITOR.handleDotClick(`b${bIdx}`, e.clientX, e.clientY);
       return;
     }
