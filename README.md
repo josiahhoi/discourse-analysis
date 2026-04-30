@@ -8,13 +8,14 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 - **Direct API Fetching**:
     - **ESV Integration**: Fetches directly from Crossway (requires API key).
     - **NASB (1995)**: Support for classic English translations via bolls.life.
-    - **Greek NT & LXX**: Fetch Greek text from SBLGNT or Septuagint with native rendering.
+    - **Greek NT & LXX Support**: Fetch Greek text from SBLGNT (New Testament) or the **Septuagint (LXX)** via bolls.life with native rendering.
 - **Intelligent Text Parser**: 
     - **Magic Paste**: Automatically detects bracket data or "Discourse DNA" on the clipboard.
-    - **Differential Splitting**: Press **Enter** to split propositions; the engine handles verse suffixes (e.g., 1a, 1b) and markers like `[1]` or `[2:1]` automatically.
+    - **Intelligent Renumbering**: Press **Enter** to split propositions; the engine automatically handles **verse suffixes (e.g., 1a, 1b)** and markers like `[1]` or `[2:1]` dynamically.
 
 ### 2. The Bracketing & Structural Engine
-- **18 Standard Logical Relationships**: Full support for the standard discourse analysis hierarchy (Coordinate, Support, etc.).
+- **18+ Logical Relationships**: Full support for the standard discourse analysis hierarchy, including specialized Gurtner types like **Both-And (B-A)**, **Anticipation-Fulfillment (An/Fl)**, and **General-Specific (Gen/Sp)**.
+- **Switch Stars (Dominance Marking)**: Instantly swap the logical dominance (the asterisk `*`) between bracket ends via double-click or the relationship picker.
 - **Nomenclature "Modes"**:
     - **Standard**: Classic abbreviations (G, S, Ac/Res).
     - **Dan Gurtner Mode**: Academic preset with specialized nomenclature (e.g., Means-End, Way-End) and Iowan Old Style typography.
@@ -22,6 +23,7 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 - **Structural Folding (Nesting)**: Collapse complex sub-structures into a single summary label to simplify large-scale diagrams.
 - **Dynamic Re-parenting**: Automatically adjusts parent-child relationships when grouping existing bracketed structures.
 - **Integrity Validation**: Real-time enforcement of "No Crossing" and "Adjacency" rules.
+- **Right-Click Context Menus**: Native right-click functionality on brackets and text for quick access to folding, comments, and deletion.
 
 ### 3. Collaboration & Synchronization
 - **Real-time Cloud Sync**: Join live sessions via a 6-digit Project ID powered by Firebase.
