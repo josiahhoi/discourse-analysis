@@ -14,12 +14,17 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
       preload: path.join(__dirname, 'preload.js'),
     },
     title: 'Discourse Analysis',
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools();
+  }
 
   mainWindow.webContents.on('did-finish-load', () => {
     // Send any file that was passed via command line or double-click

@@ -5,7 +5,8 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 ## Features
 
 - **ESV API integration** — Fetch passages directly from the ESV (English Standard Version) Bible.
-- **SBL Greek NT** — Fetch Greek text from the SBLGNT (no API key required).
+- **NASB (1995)** — Full support for the NASB via bolls.life API.
+- **Greek NT & LXX** — Fetch Greek text from the SBLGNT (New Testament) or the Septuagint (Old Testament) via bolls.life.
 - **Logic Brackets** — Draw visible brackets between propositions to show relationships (all 18 standard logical relationship types).
 - **Word Arrows** — Draw orthogonal arrows between specific words to show grammatical or lexical connections.
 - **Comments & Collaboration** — Add comments to any bracket or text highlight, with support for replies.
@@ -18,8 +19,8 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 
 ### Desktop (Recommended)
 1. Download the latest release for your platform from the `dist/` folder or the Releases page.
-   - **Windows**: `Discourse Analysis 2.5.0 x64 Portable.exe` (No installation required)
-   - **macOS**: `Discourse Analysis-2.5.0-arm64-mac.zip`
+   - **Windows**: `Discourse Analysis 2.6.0 x64 Portable.exe` (No installation required)
+   - **macOS**: `Discourse Analysis-2.6.0-arm64-mac.zip`
 2. Run the application directly.
 
 ### Web / Development
@@ -30,8 +31,9 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 ## Usage
 
 ### 1. Fetch a Passage
-- Select **ESV** or **SBL Greek NT** from the dropdown.
-- Enter a reference (e.g., `John 1:1-5`, `Romans 8:28-30`).
+- Select **ESV**, **NASB (1995)**, or **Greek (LXX / SBLGNT)** from the dropdown.
+- Enter a reference (e.g., `John 1:1-5`, `Genesis 1:1`, `Eph 1`).
+- The app handles abbreviations and full chapter fetches automatically.
 - Click **Fetch Passage**.
 - The text is split into propositions. You can refine the split manually.
 - **Pro-tip**: Press **Enter** inside a proposition block to split it into two at your cursor.
@@ -81,6 +83,19 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 - **Desktop**: Electron.
 - **Database**: Firebase Firestore (for Cloud Sync).
 - **Libraries**: `html2canvas` and `jsPDF` for exports, `LZ-String` for data compression.
+
+## Changelog
+
+### Version 2.6.0
+- **Structural Folding Engine**: Collapse complex bracket sections into clean summary labels.
+- **Enhanced Export Service**: Included project metadata (ref, author, cloud code) in all exports.
+- **Cloud Sync Persistence**: Cloud IDs are now "baked" into project data for seamless resumption.
+- **Full-Structure Exports**: Automatically expands folded sections during capture.
+
+### Version 2.5.1
+- **Enhanced Bracketing Logic**: Implemented strict validation to prevent illegitimate bracket structures (crossing brackets, jumping over intermediate nodes).
+- **Intelligent Re-parenting**: Refined logic to allow grouping of already-bracketed items by automatically re-parenting existing structures to the new parent group.
+- **Stability Fixes**: Fixed a bug where deleting a parent bracket could cause children to disappear or trigger UI crashes.
 
 ## License
 

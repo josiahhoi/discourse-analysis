@@ -1,10 +1,11 @@
 {
     "name": "discourse-analysis",
-    "version": "2.5.0",
+    "version": "2.7.0",
     "description": "Discourse Analysis — diagram the logical structure of Scripture",
     "main": "main.js",
     "scripts": {
       "start": "electron .",
+      "dev": "electron .",
       "build": "electron-builder --mac --arm64 && electron-builder --win --x64",
       "build:mac": "electron-builder --mac --arm64",
       "build:win": "electron-builder --win --x64",
@@ -24,7 +25,8 @@
         "styles.css",
         "app.js",
         "main.js",
-        "preload.js"
+        "preload.js",
+        "js/**"
       ],
       "directories": {
         "output": "dist"
