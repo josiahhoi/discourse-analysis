@@ -28,7 +28,7 @@ async function startCloudSync() {
     wordArrows: DA_STATE.wordArrows,
     comments: DA_STATE.comments,
     passageRef: DA_STATE.passageRef,
-    author: localStorage.getItem(DA_CONSTANTS.PAGE_AUTHOR_KEY) || 'Anonymous',
+    author: (document.getElementById('pageAuthor')?.value || '').trim() || localStorage.getItem(DA_CONSTANTS.PAGE_AUTHOR_KEY) || 'Anonymous',
     lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
   };
 
@@ -93,6 +93,16 @@ function handleCloudData(data) {
   DA_STATE.wordArrows = data.wordArrows || [];
   DA_STATE.comments = data.comments || [];
   DA_STATE.passageRef = data.passageRef || '';
+
+  if (data.author) {
+    const pageAuthorInput = document.getElementById('pageAuthor');
+    if (pageAuthorInput) {
+      pageAuthorInput.value = data.author;
+      localStorage.setItem(DA_CONSTANTS.PAGE_AUTHOR_KEY, data.author);
+      if (typeof DA_UI.updateFontByAuthor === 'function') DA_UI.updateFontByAuthor();
+      if (typeof DA_UI.syncPassageAuthorDisplay === 'function') DA_UI.syncPassageAuthorDisplay();
+    }
+  }
   
   renderCallbacks.renderAll();
   
@@ -102,6 +112,9 @@ function handleCloudData(data) {
 async function syncToCloud() {
   if (!DA_STATE.activeProjectId || DA_STATE.isUpdatingFromCloud || !db) return;
   
+  const pageAuthorInput = document.getElementById('pageAuthor');
+  const currentAuthor = (pageAuthorInput?.value || '').trim() || 'Anonymous';
+
   const projectData = {
     propositions: DA_STATE.propositions,
     verseRefs: DA_STATE.verseRefs,
@@ -110,6 +123,7 @@ async function syncToCloud() {
     wordArrows: DA_STATE.wordArrows,
     comments: DA_STATE.comments,
     passageRef: DA_STATE.passageRef,
+    author: currentAuthor,
     lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
   };
 
