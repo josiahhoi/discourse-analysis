@@ -214,12 +214,17 @@ document.addEventListener('keydown', (e) => {
     // 2. Dismiss any active popovers
     const labelPicker = document.getElementById('labelPicker');
     const bracketActions = document.getElementById('bracketActions');
-    if (labelPicker || bracketActions) {
+    const commentPopover = document.getElementById('commentPopover');
+    const settingsModal = document.getElementById('settingsModal');
+    
+    if (labelPicker || bracketActions || commentPopover || (settingsModal && settingsModal.style.display === 'flex')) {
       if (labelPicker) labelPicker.remove();
       if (bracketActions) {
         bracketActions.remove();
         DA_UI.clearPropositionHighlights();
       }
+      if (commentPopover) commentPopover.remove();
+      if (settingsModal) DA_UI.closeSettings();
       return;
     }
 
