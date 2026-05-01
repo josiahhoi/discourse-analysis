@@ -83,9 +83,11 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 | S | Series | Coordinate |
 | P | Progression | Coordinate |
 | A | Alternative | Coordinate |
+| B-A | Both-And | Coordinate |
+| An/Fl | Anticipation-Fulfillment | Coordinate |
 | G | Ground | Support by Distinct Statement |
 | I | Inference | Support by Distinct Statement |
-| BL | Bilateral | Support by Distinct Statement |
+| Bl | Bilateral | Support by Distinct Statement |
 | Ac/Res | Action-Result | Support by Distinct Statement |
 | Ac/Pur | Action-Purpose | Support by Distinct Statement |
 | If/Th | Conditional | Support by Distinct Statement |
@@ -96,6 +98,8 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 | -/+ | Negative-Positive | Support by Restatement |
 | Id/Exp | Idea-Explanation | Support by Restatement |
 | Q/A | Question-Answer | Support by Restatement |
+| Gen/Sp | General-Specific | Support by Restatement |
+| Ft/In | Fact-Interpretation | Support by Restatement |
 | Csv | Concessive | Support by Contrary |
 | Sit/R | Situation-Response | Support by Contrary |
 
