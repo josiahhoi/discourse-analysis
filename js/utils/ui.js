@@ -881,9 +881,6 @@ function updateFontByAuthor() {
     if (authorLower === 'brian kim') {
         container.style.fontFamily = "'Roboto Mono', monospace";
         container.style.fontSize = "14px";
-    } else if (authorLower.includes('gurtner')) {
-        container.style.fontFamily = "'Iowan Old Style', 'Palatino', serif";
-        container.style.fontSize = "17px";
     } else {
         container.style.fontFamily = "";
         container.style.fontSize = "";
