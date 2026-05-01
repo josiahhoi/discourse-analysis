@@ -550,10 +550,10 @@ function initDelegatedListeners() {
   const wordArrowsSvg = document.getElementById('wordArrowsSvg');
   if (wordArrowsSvg) {
     wordArrowsSvg.addEventListener('click', (e) => {
-      const path = e.target.closest('.word-arrow-path');
-      if (path) {
-        const i = parseInt(path.dataset.index, 10);
-        if (confirm('Delete this arrow?')) {
+      const group = e.target.closest('.word-arrow-group');
+      if (group) {
+        const i = parseInt(group.dataset.index, 10);
+        if (!isNaN(i) && confirm('Delete this arrow?')) {
           DA_STATE.pushUndo('delete arrow');
           DA_STATE.wordArrows.splice(i, 1);
           renderAll();
