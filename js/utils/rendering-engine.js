@@ -417,7 +417,6 @@ function appendChunk(textSpan, chunk, startPos, propIdx, activeTags, allTags) {
       else { currentInner.appendChild(span); currentInner = span; }
     }
   });
-  });
 
   if (currentInner) {
     currentInner.appendChild(node);
