@@ -332,6 +332,113 @@ function initDelegatedListeners() {
     const i = parseInt(block.dataset.index, 10);
     const textSpan = block.querySelector('.proposition-text') || block;
 
+    // --- TEXT SHIFTING MODE ---
+    if (DA_STATE.shiftModeActive) {
+      e.preventDefault();
+      
+      if (e.key === 'Escape') {
+        DA_STATE.shiftModeActive = false;
+        DA_STATE._forceNextRender = true;
+        renderAll();
+        DA_STATE._forceNextRender = false;
+        return;
+      }
+      if (e.key === 'Enter') {
+        DA_STATE.pushUndo('shift text');
+        let srcText = DA_STATE.propositions[DA_STATE.shiftSourceIndex];
+        const before = srcText.substring(0, DA_STATE.shiftSourceStartOffset);
+        const after = srcText.substring(DA_STATE.shiftSourceEndOffset);
+        
+        DA_STATE.propositions[DA_STATE.shiftSourceIndex] = before + after;
+        
+        let targetText = DA_STATE.propositions[DA_STATE.shiftTargetIndex];
+        // Clean up spaces if targetText is empty
+        if (DA_STATE.shiftTargetPosition === 'end') {
+            DA_STATE.propositions[DA_STATE.shiftTargetIndex] = targetText ? targetText + ' ' + DA_STATE.shiftText : DA_STATE.shiftText;
+        } else {
+            DA_STATE.propositions[DA_STATE.shiftTargetIndex] = targetText ? DA_STATE.shiftText + ' ' + targetText : DA_STATE.shiftText;
+        }
+        
+        DA_STATE.shiftModeActive = false;
+        
+        // Clean up source line if it's now just spaces
+        DA_STATE.propositions[DA_STATE.shiftSourceIndex] = DA_STATE.propositions[DA_STATE.shiftSourceIndex].replace(/ +/g, ' ').trim();
+        
+        DA_STATE._forceNextRender = true;
+        renderAll();
+        DA_STATE._forceNextRender = false;
+        
+        // Put focus on the target block
+        requestAnimationFrame(() => {
+           const targetBlock = propositionsContainer.querySelector(`.proposition-block[data-index="${DA_STATE.shiftTargetIndex}"]`);
+           const newTextSpan = targetBlock?.querySelector('.proposition-text');
+           if (newTextSpan) {
+               newTextSpan.focus();
+           }
+        });
+        
+        return;
+      }
+      
+      if (e.key === 'ArrowUp') {
+        if (DA_STATE.shiftTargetIndex > 0) DA_STATE.shiftTargetIndex--;
+        renderAll();
+      } else if (e.key === 'ArrowDown') {
+        if (DA_STATE.shiftTargetIndex < DA_STATE.propositions.length - 1) DA_STATE.shiftTargetIndex++;
+        renderAll();
+      } else if (e.key === 'ArrowLeft') {
+        DA_STATE.shiftTargetPosition = 'start';
+        renderAll();
+      } else if (e.key === 'ArrowRight') {
+        DA_STATE.shiftTargetPosition = 'end';
+        renderAll();
+      }
+      return;
+    }
+
+    if (e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      const sel = window.getSelection();
+      
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+          if (typeof DA_UI !== 'undefined' && DA_UI.showStatus) {
+              DA_UI.showStatus("Shift Mode: Highlight text first.", "info");
+          }
+          return;
+      }
+      
+      const range = sel.getRangeAt(0);
+      
+      // Ensure the selection is within our text span
+      if (textSpan.contains(range.commonAncestorContainer) || textSpan === range.commonAncestorContainer) {
+          e.preventDefault();
+          
+          // Calculate character offset relative to the text content
+          const preRange = document.createRange();
+          preRange.setStart(textSpan, 0);
+          preRange.setEnd(range.startContainer, range.startOffset);
+          
+          DA_STATE.shiftSourceIndex = i;
+          DA_STATE.shiftSourceStartOffset = preRange.toString().length;
+          DA_STATE.shiftText = sel.toString();
+          DA_STATE.shiftSourceEndOffset = DA_STATE.shiftSourceStartOffset + DA_STATE.shiftText.length;
+          DA_STATE.shiftTargetPosition = 'end';
+          
+          if (e.key === 'ArrowDown') {
+              DA_STATE.shiftTargetIndex = Math.min(i + 1, DA_STATE.propositions.length - 1);
+          } else {
+              DA_STATE.shiftTargetIndex = Math.max(i - 1, 0);
+          }
+          
+          DA_STATE.shiftModeActive = true;
+          renderAll();
+          
+          if (typeof DA_UI !== 'undefined' && DA_UI.showStatus) {
+              DA_UI.showStatus("Shift Mode: Arrows to move, Enter to confirm.", "success");
+          }
+          return;
+      }
+    }
+    // --- END TEXT SHIFTING MODE ---
 
     // Backspace for merging or tab-removal (works in all modes)
     if (e.key === 'Backspace') {

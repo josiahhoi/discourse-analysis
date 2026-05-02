@@ -280,7 +280,7 @@ function updatePropositionBlock(block, text, i) {
     const isFocused = textSpan.contains(document.activeElement) || document.activeElement === textSpan;
     const domText = textSpan.innerText.trim();
     const stateText = text.trim();
-    const forceUpdate = DA_STATE.arrowMode || DA_STATE.activeCommentTarget || domText !== stateText;
+    const forceUpdate = DA_STATE._forceNextRender || DA_STATE.shiftModeActive || DA_STATE.arrowMode || DA_STATE.activeCommentTarget || domText !== stateText;
 
     if (!isFocused || forceUpdate) {
       renderInlineContent(textSpan, text, i);
@@ -357,6 +357,14 @@ function renderInlineContent(textSpan, text, i) {
     allTags.push({ ...DA_STATE.activeCommentTarget, type: 'comment', tag: { id: 'active-comment-target' } });
   }
 
+  if (DA_STATE.shiftModeActive && i === DA_STATE.shiftSourceIndex) {
+    allTags.push({
+      start: DA_STATE.shiftSourceStartOffset,
+      end: DA_STATE.shiftSourceEndOffset,
+      type: 'shift-source',
+      tag: { id: 'shift-source' }
+    });
+  }
 
   let events = [];
   allTags.forEach((t, tid) => {
@@ -381,6 +389,23 @@ function renderInlineContent(textSpan, text, i) {
     appendChunk(textSpan, text.slice(pos), pos, i, new Set(), allTags);
   }
 
+  if (DA_STATE.shiftModeActive && i === DA_STATE.shiftTargetIndex) {
+    const ghostSpan = document.createElement('span');
+    ghostSpan.className = 'shift-target-ghost';
+    ghostSpan.textContent = DA_STATE.shiftText;
+    
+    if (DA_STATE.shiftTargetPosition === 'end') {
+      if (textSpan.textContent.length > 0) {
+        textSpan.appendChild(document.createTextNode(' '));
+      }
+      textSpan.appendChild(ghostSpan);
+    } else {
+      if (textSpan.textContent.length > 0) {
+        ghostSpan.textContent += ' ';
+      }
+      textSpan.insertBefore(ghostSpan, textSpan.firstChild);
+    }
+  }
 }
 
 function appendChunk(textSpan, chunk, startPos, propIdx, activeTags, allTags) {
@@ -413,6 +438,15 @@ function appendChunk(textSpan, chunk, startPos, propIdx, activeTags, allTags) {
       const span = document.createElement('span');
       span.className = 'arrow-anchor';
       span.dataset.arrowId = t.tag.id;
+      if (!wrapper) wrapper = currentInner = span;
+      else { currentInner.appendChild(span); currentInner = span; }
+    }
+  });
+  activeIds.forEach(id => {
+    const t = allTags[id];
+    if (t.type === 'shift-source') {
+      const span = document.createElement('span');
+      span.className = 'shift-source-text';
       if (!wrapper) wrapper = currentInner = span;
       else { currentInner.appendChild(span); currentInner = span; }
     }

@@ -33,6 +33,15 @@ window.DA_STATE = {
   cloudUnsubscribe: null,
   isUpdatingFromCloud: false,
   
+  // Text Shifting Mode
+  shiftModeActive: false,
+  shiftSourceIndex: null,
+  shiftSourceStartOffset: null,
+  shiftSourceEndOffset: null,
+  shiftText: "",
+  shiftTargetIndex: null,
+  shiftTargetPosition: 'end', // 'start' or 'end'
+  
   // Helpers
   updateState: function(newData) {
     Object.assign(window.DA_STATE, newData);

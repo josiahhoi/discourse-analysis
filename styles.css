@@ -1792,6 +1792,27 @@ body.text-edit-mode-active .verse-ref {
   font-size: 1.05em;
 }
 
+/* Text Shifting Mode Styles */
+.shift-source-text {
+  opacity: 0.4;
+  text-decoration: line-through;
+  pointer-events: none;
+}
+
+.shift-target-ghost {
+  display: inline-block;
+  color: var(--accent);
+  background: var(--accent-15);
+  border-radius: 4px;
+  padding: 0 4px;
+  animation: pulse-ghost 1.5s infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes pulse-ghost {
+  from { opacity: 0.6; box-shadow: 0 0 4px var(--accent-15); }
+  to { opacity: 1; box-shadow: 0 0 12px var(--accent-50); }
+}
 
 .proposition-block:hover {
   background: rgba(255, 255, 255, 0.03);
