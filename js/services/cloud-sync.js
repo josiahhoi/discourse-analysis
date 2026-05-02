@@ -86,6 +86,10 @@ function initCloudSync(projectId) {
 
 function handleCloudData(data) {
   DA_STATE.isUpdatingFromCloud = true;
+
+  if (window.DA_PERSISTENCE && DA_PERSISTENCE.normalizeBracketData) {
+    data = DA_PERSISTENCE.normalizeBracketData(data);
+  }
   
   DA_STATE.propositions = data.propositions || [];
   DA_STATE.verseRefs = data.verseRefs || [];

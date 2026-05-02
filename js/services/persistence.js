@@ -588,7 +588,7 @@ function initDragAndDrop() {
 // Auto-save interval and beforeunload are registered once above (line ~281)
 
 window.DA_PERSISTENCE = {
-    saveDraft, clearDraft, getDraft, importBracket, initMagicPaste, initDraftRecovery,
+    normalizeBracketData, saveDraft, clearDraft, getDraft, importBracket, initMagicPaste, initDraftRecovery,
     addToRecent, renderRecentList, getExportFilename, attachFilenameObservers,
     injectPngMetadata, extractPngMetadata, extractPdfMetadata, processDNA, saveBracket, exportBracket, initDragAndDrop
 };
