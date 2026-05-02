@@ -1,6 +1,8 @@
 function splitPropositionAtOffset(i, offset) {
-  DA_STATE.pushUndo('split');
   const text = DA_STATE.propositions[i];
+  if (!text || offset >= text.length || text.slice(offset).trim().length === 0) return;
+
+  DA_STATE.pushUndo('split');
   const partsRef = (DA_STATE.verseRefs[i] || '').split('-');
   const startRef = partsRef[0];
   const endRef = partsRef[partsRef.length - 1];

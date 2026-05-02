@@ -20,6 +20,81 @@ function clearDraft() {
   try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
 }
 
+function normalizeBracketData(data) {
+  if (!data || !Array.isArray(data.propositions)) return data;
+  
+  const rawBrackets = Array.isArray(data.brackets) ? data.brackets : (Array.isArray(data.arcs) ? data.arcs : []);
+  if (rawBrackets.length === 0) return data;
+
+  // Only migrate if we find numeric 'from' or 'to' properties (legacy format)
+  const needsMigration = rawBrackets.some(b => typeof b.from === 'number' || typeof b.to === 'number');
+  if (!needsMigration) return data;
+
+  // 1. Prepare indexed brackets to track original order for comment mapping
+  const indexedBrackets = rawBrackets.map((b, i) => ({ ...b, _originalIdx: i }));
+  
+  // 2. Sort by span width (inner-most first) to reconstruct the logical hierarchy
+  // Narrower brackets must be processed first so they can be "owned" by wider ones.
+  indexedBrackets.sort((a, b) => {
+    const widthA = (a.to || 0) - (a.from || 0);
+    const widthB = (b.to || 0) - (b.from || 0);
+    return widthA - widthB || a._originalIdx - b._originalIdx;
+  });
+
+  // 3. Track what currently "owns" each proposition index
+  let owners = data.propositions.map((_, i) => `p${i}`);
+  const newBrackets = [];
+  const oldToNewIdx = {};
+
+  indexedBrackets.forEach((oldB, newIdx) => {
+    const fromIdx = oldB.from || 0;
+    const toIdx = oldB.to || 0;
+    
+    // The logical targets are whatever currently owns these indices at this point in the assembly
+    const newFrom = owners[fromIdx];
+    const newTo = owners[toIdx];
+    
+    const id = oldB.id || String(Date.now() + newIdx);
+    const { _originalIdx, ...cleanB } = oldB;
+    
+    newBrackets.push({
+      ...cleanB,
+      id,
+      from: newFrom,
+      to: newTo,
+      dominanceFlipped: !!oldB.dominanceFlipped,
+      labelsSwapped: !!oldB.labelsSwapped
+    });
+    
+    oldToNewIdx[_originalIdx] = newIdx;
+    
+    // Update the ownership map: this range is now covered by the new bracket
+    const bracketRef = `b${newIdx}`;
+    for (let k = fromIdx; k <= toIdx; k++) {
+      owners[k] = bracketRef;
+    }
+  });
+
+  // 4. Update comment targets to match the new bracket indices
+  const newComments = (Array.isArray(data.comments) ? data.comments : []).map(c => {
+    if (!c.target) return c;
+    let target = { ...c.target };
+    const oldIdx = target.bracketIdx !== undefined ? target.bracketIdx : target.arcIdx;
+    if (oldIdx !== undefined && oldToNewIdx[oldIdx] !== undefined) {
+      target.bracketIdx = oldToNewIdx[oldIdx];
+      delete target.arcIdx;
+    }
+    return { ...c, target };
+  });
+
+  return { 
+    ...data, 
+    brackets: newBrackets, 
+    comments: newComments,
+    version: 1 // Normalize to current version
+  };
+}
+
 function getDraft() {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
@@ -34,6 +109,9 @@ function importBracket(data) {
     DA_UI.showStatus('Invalid bracket file.', 'error');
     return;
   }
+  
+  // Legacy migration
+  data = normalizeBracketData(data);
   
   DA_STATE.updateState({
     passageRef: data.passageRef || 'Imported bracket',
@@ -60,6 +138,12 @@ function importBracket(data) {
 
   const passageRefEl = document.getElementById('passageRef');
   if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
+
+  if (data.customLabels) {
+    DA_STATE.customLabels = data.customLabels;
+    // We intentionally do NOT update localStorage.setItem('da_custom_labels', ...) here
+    // so that imported labels don't automatically enter the user's permanent bank.
+  }
   
   const pageAuthorInputEl = document.getElementById('pageAuthor');
   if (pageAuthorInputEl && data.pageAuthor != null) {

@@ -76,7 +76,16 @@ function showCommentPopover(config) {
   const isBracket = bracketIdx !== undefined;
   
   const existing = document.getElementById('commentPopover');
-  if (existing) existing.remove();
+  if (existing) {
+    existing.remove();
+    DA_STATE.activeCommentTarget = null;
+  }
+
+  // Set active target for highlighting while popover is open
+  DA_STATE.activeCommentTarget = isBracket 
+    ? { type: 'bracket', bracketIdx } 
+    : { type: 'text', propIndex, start, end };
+  if (window.renderAll) window.renderAll();
 
   const popover = document.createElement('div');
   popover.id = 'commentPopover';
@@ -184,7 +193,11 @@ function showCommentPopover(config) {
   };
 
   const attachListeners = () => {
-    popover.querySelector('.close-btn').onclick = () => popover.remove();
+    popover.querySelector('.close-btn').onclick = () => {
+      DA_STATE.activeCommentTarget = null;
+      if (window.renderAll) window.renderAll();
+      popover.remove();
+    };
 
     if (!comment) {
       popover.querySelector('.save-new-btn').onclick = () => {
@@ -233,6 +246,7 @@ function showCommentPopover(config) {
         if (!confirm('Delete this comment?')) return;
         DA_STATE.pushUndo('delete comment');
         DA_STATE.comments = DA_STATE.comments.filter(c => c.id !== comment.id);
+        DA_STATE.activeCommentTarget = null;
         popover.remove();
         if (window.renderAll) window.renderAll();
       };
@@ -301,14 +315,11 @@ function showCommentPopover(config) {
   const wrapper = document.getElementById('propositionsContainer')?.parentElement || document.body;
   const rect = wrapper.getBoundingClientRect();
   
-  if (anchorX !== undefined && anchorY !== undefined) {
-    popover.style.left = `${Math.max(10, Math.min(anchorX - rect.left - 300, wrapper.offsetWidth - 650))}px`;
-    popover.style.top = `${Math.max(10, anchorY - rect.top - 100)}px`;
-  } else {
-    popover.style.left = '50%';
-    popover.style.top = '20%';
-    popover.style.transform = 'translateX(-50%)';
-  }
+  // Standardize position for all comment popovers: always center horizontally, 
+  // and set to a consistent vertical position (28% is slightly lower than the old 20%).
+  popover.style.left = '50%';
+  popover.style.top = '28%';
+  popover.style.transform = 'translateX(-50%)';
 
   renderContent();
   wrapper.appendChild(popover);
@@ -316,7 +327,11 @@ function showCommentPopover(config) {
   if (typeof makeCommentPopoverDraggableAndResizable === 'function') {
     makeCommentPopoverDraggableAndResizable(popover);
   }
-  setupClickOutside(popover, () => popover.remove());
+  setupClickOutside(popover, () => {
+    DA_STATE.activeCommentTarget = null;
+    if (window.renderAll) window.renderAll();
+    popover.remove();
+  });
 }
 
 function showCommentPopoverForText(propIndex, start, end, existingCommentId = null, options = {}) {
@@ -436,10 +451,13 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
   const GURTNER_RELATIONSHIP_NAMES = DA_CONSTANTS.GURTNER_RELATIONSHIP_NAMES;
 
   picker.innerHTML = `
-    <div class="picker-title">Choose Relationship <button class="close-btn">&times;</button></div>
-    <div class="picker-tools-header">
-      ${hasTwoLabels ? '<button class="tool-btn" data-action="swap">⇅ Swap Labels</button>' : ''}
-      ${hasTwoLabels ? '<button class="tool-btn" data-action="flip-dominance">★ Switch Stars</button>' : ''}
+    <div class="picker-title">
+      <span>Choose Relationship</span>
+      <div class="picker-header-tools">
+        <button class="tool-btn" data-action="add-custom" title="Add Custom Label">Custom Label</button>
+        ${hasTwoLabels ? '<button class="tool-btn" data-action="swap" title="Swap Labels">⇅ Swap</button>' : ''}
+        ${hasTwoLabels ? '<button class="tool-btn" data-action="flip-dominance" title="Switch Stars">★ Switch Stars</button>' : ''}
+      </div>
     </div>
     <div class="relationship-picker-content"></div>
     <div class="picker-footer">
@@ -449,7 +467,7 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
 
   const content = picker.querySelector('.relationship-picker-content');
 
-  const RELATIONSHIP_GROUPS = [
+  const RELATIONSHIP_GROUPS_LIST = [
     {
       name: 'COORDINATE RELATIONSHIPS',
       types: ['series', 'progression', 'alternative', 'both-and', 'anticipation-fulfillment']
@@ -473,25 +491,82 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
     }
   ];
 
+  // Group 1: My Presets (Persistent)
+  if (DA_STATE.savedCustomLabels && DA_STATE.savedCustomLabels.length > 0) {
+    RELATIONSHIP_GROUPS_LIST.push({
+      name: 'MY PRESET LABELS',
+      types: DA_STATE.savedCustomLabels.map(cl => cl.id)
+    });
+  }
+
+  // Group 2: Project Labels (Session only, not in my bank)
+  const projectSpecific = (DA_STATE.customLabels || []).filter(cl => 
+    !DA_STATE.savedCustomLabels.some(s => s.id === cl.id)
+  );
+  if (projectSpecific.length > 0) {
+    RELATIONSHIP_GROUPS_LIST.push({
+      name: 'PROJECT-SPECIFIC LABELS',
+      types: projectSpecific.map(cl => cl.id)
+    });
+  }
+
   const createButton = (typeKey) => {
-    if (!RELATIONSHIP_LABELS[typeKey]) return null;
+    let labelText = RELATIONSHIP_LABELS[typeKey];
+    const isCustom = typeKey.startsWith('cl_');
+    
+    if (!labelText && isCustom) {
+      const custom = (DA_STATE.customLabels || []).find(cl => cl.id === typeKey) || 
+                     (DA_STATE.savedCustomLabels || []).find(cl => cl.id === typeKey);
+      if (custom) labelText = `${custom.name} (${custom.label})`;
+    }
+
+    if (!labelText) return null;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'picker-btn-wrapper';
+
     const btn = document.createElement('button');
-    let labelText = RELATIONSHIP_LABELS[typeKey] ?? typeKey;
     if (isGurtnerMode() && GURTNER_RELATIONSHIP_NAMES[typeKey]) {
       labelText = GURTNER_RELATIONSHIP_NAMES[typeKey];
     }
     btn.textContent = labelText;
     btn.title = labelText;
     btn.className = typeKey;
+    if (isCustom) btn.classList.add('custom-label-btn');
+
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       DA_STATE.pushUndo('change label');
       DA_STATE.brackets[bracketIdx].type = typeKey;
       picker.remove();
       if (window.renderAll) window.renderAll();
-      showStatus(`Label changed to ${RELATIONSHIP_LABELS[typeKey]}`, 'success');
+      showStatus(`Label changed to ${labelText}`, 'success');
     });
-    return btn;
+
+    wrapper.appendChild(btn);
+
+    if (isCustom) {
+      const isSaved = (DA_STATE.savedCustomLabels || []).some(cl => cl.id === typeKey);
+      const actionBtn = document.createElement('button');
+      actionBtn.className = 'picker-action-btn';
+      actionBtn.innerHTML = isSaved ? '&times;' : '+';
+      actionBtn.title = isSaved ? 'Remove from my bank' : 'Save to my bank';
+      actionBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (isSaved) {
+          DA_STATE.savedCustomLabels = DA_STATE.savedCustomLabels.filter(cl => cl.id !== typeKey);
+        } else {
+          const custom = (DA_STATE.customLabels || []).find(cl => cl.id === typeKey);
+          if (custom) DA_STATE.savedCustomLabels.push(custom);
+        }
+        localStorage.setItem('da_custom_labels', JSON.stringify(DA_STATE.savedCustomLabels));
+        picker.remove();
+        showLabelPicker(bracketIdx, centerY, centerX); // Re-open to refresh
+      });
+      wrapper.appendChild(actionBtn);
+    }
+
+    return wrapper;
   };
 
   const createGroup = (group) => {
@@ -537,8 +612,14 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
     return groupDiv;
   };
 
-  RELATIONSHIP_GROUPS.forEach(group => {
+  RELATIONSHIP_GROUPS_LIST.forEach(group => {
     content.appendChild(createGroup(group));
+  });
+
+  // Setup header tools
+  picker.querySelector('[data-action="add-custom"]').addEventListener('click', (e) => {
+    e.stopPropagation();
+    showCustomLabelDialog(bracketIdx, centerY, centerX, picker);
   });
 
   const propositionsContainer = document.getElementById('propositions');
@@ -548,7 +629,6 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
   const relY = centerY - rect.top;
 
   makePopupDraggable(picker, '.picker-title');
-  picker.querySelector('.close-btn').onclick = () => picker.remove();
 
   if (hasTwoLabels) {
     picker.querySelector('[data-action="swap"]').addEventListener('click', (e) => {
@@ -1166,6 +1246,55 @@ function setupReplies(popover, existingComment, idSuffix) {
   }
 }
 
+
+function showCustomLabelDialog(bracketIdx, centerY, centerX, mainPicker) {
+  const dialog = document.createElement('div');
+  dialog.className = 'label-picker custom-label-dialog';
+  dialog.style.width = '240px';
+  dialog.style.left = `${centerX}px`;
+  dialog.style.top = `${centerY}px`;
+  
+  dialog.innerHTML = `
+    <div class="picker-title">Add Custom Label</div>
+    <div style="padding: 5px;">
+      <input type="text" id="customInput" placeholder="e.g. MyRel or Top/Bot*" style="width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); box-sizing: border-box;">
+      <div class="hint-small" style="margin: 4px 0 8px; font-size: 0.7rem;">Use / for split, * for star</div>
+      <button id="submitCustom" class="series" style="width: 100%; padding: 6px;">Apply & Save</button>
+    </div>
+  `;
+  document.body.appendChild(dialog);
+  
+  const input = dialog.querySelector('#customInput');
+  input.focus();
+  
+  const handleAdd = () => {
+    const val = input.value.trim();
+    if (!val) return;
+    
+    DA_STATE.pushUndo('add custom label');
+    const id = 'cl_' + Date.now();
+    const name = val.split('/')[0].replace('*', '');
+    const newLabel = { id, name, label: val };
+    
+    DA_STATE.customLabels.push(newLabel);
+    DA_STATE.savedCustomLabels.push(newLabel);
+    localStorage.setItem('da_custom_labels', JSON.stringify(DA_STATE.savedCustomLabels));
+    
+    DA_STATE.brackets[bracketIdx].type = id;
+    dialog.remove();
+    mainPicker.remove();
+    if (window.renderAll) window.renderAll();
+    showStatus(`Label "${val}" created!`, 'success');
+  };
+  
+  dialog.querySelector('#submitCustom').onclick = handleAdd;
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter') handleAdd();
+    if (e.key === 'Escape') dialog.remove();
+  };
+  
+  setupClickOutside(dialog, () => dialog.remove());
+}
 
 window.DA_UI = {
     showStatus, updateCloudUI, isGurtnerMode, escapeHtml, makePopupDraggable, setupClickOutside, clearPropositionHighlights,

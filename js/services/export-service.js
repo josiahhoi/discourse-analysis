@@ -20,6 +20,7 @@ const DA_EXPORT = {
       copyrightLabel: document.getElementById('copyrightLabel')?.textContent || '',
       pageAuthor: (document.getElementById('pageAuthor')?.value || '').trim(),
       activeProjectId: DA_STATE.activeProjectId || null,
+      customLabels: (DA_STATE.customLabels || []).map(cl => ({ ...cl })),
       exportedAt: new Date().toISOString(),
     };
   },

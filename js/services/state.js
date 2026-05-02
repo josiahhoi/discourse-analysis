@@ -25,6 +25,9 @@ window.DA_STATE = {
   pendingArrowStart: null,
   showCommentsEnabled: false,
   indentation: [],
+  activeCommentTarget: null,
+  customLabels: [], // Session/Project-specific labels
+  savedCustomLabels: JSON.parse(localStorage.getItem('da_custom_labels') || '[]'), // User's personal bank
 
   activeProjectId: null,
   cloudUnsubscribe: null,

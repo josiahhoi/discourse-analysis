@@ -332,6 +332,7 @@ function initDelegatedListeners() {
     const i = parseInt(block.dataset.index, 10);
     const textSpan = block.querySelector('.proposition-text') || block;
 
+
     // Backspace for merging or tab-removal (works in all modes)
     if (e.key === 'Backspace') {
       const sel = window.getSelection();

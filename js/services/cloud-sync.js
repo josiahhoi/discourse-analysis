@@ -28,6 +28,7 @@ async function startCloudSync() {
     wordArrows: DA_STATE.wordArrows,
     comments: DA_STATE.comments,
     passageRef: DA_STATE.passageRef,
+    customLabels: DA_STATE.customLabels || [],
     author: (document.getElementById('pageAuthor')?.value || '').trim() || localStorage.getItem(DA_CONSTANTS.PAGE_AUTHOR_KEY) || 'Anonymous',
     lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
   };
@@ -93,6 +94,7 @@ function handleCloudData(data) {
   DA_STATE.wordArrows = data.wordArrows || [];
   DA_STATE.comments = data.comments || [];
   DA_STATE.passageRef = data.passageRef || '';
+  DA_STATE.customLabels = data.customLabels || [];
 
   if (data.author) {
     const pageAuthorInput = document.getElementById('pageAuthor');
@@ -123,6 +125,7 @@ async function syncToCloud() {
     wordArrows: DA_STATE.wordArrows,
     comments: DA_STATE.comments,
     passageRef: DA_STATE.passageRef,
+    customLabels: DA_STATE.customLabels || [],
     author: currentAuthor,
     lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
   };

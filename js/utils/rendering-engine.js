@@ -280,7 +280,7 @@ function updatePropositionBlock(block, text, i) {
     const isFocused = textSpan.contains(document.activeElement) || document.activeElement === textSpan;
     const domText = textSpan.innerText.trim();
     const stateText = text.trim();
-    const forceUpdate = DA_STATE.arrowMode || domText !== stateText;
+    const forceUpdate = DA_STATE.arrowMode || DA_STATE.activeCommentTarget || domText !== stateText;
 
     if (!isFocused || forceUpdate) {
       renderInlineContent(textSpan, text, i);
@@ -341,7 +341,9 @@ function renderInlineContent(textSpan, text, i) {
 
   textSpan.innerHTML = '';
 
-  if (textComments.length === 0 && textFormats.length === 0 && textArrows.length === 0) {
+  const isActiveProp = DA_STATE.activeCommentTarget && DA_STATE.activeCommentTarget.type === 'text' && DA_STATE.activeCommentTarget.propIndex === i;
+
+  if (textComments.length === 0 && textFormats.length === 0 && textArrows.length === 0 && !isActiveProp) {
     textSpan.textContent = text;
     return;
   }
@@ -350,6 +352,11 @@ function renderInlineContent(textSpan, text, i) {
   textComments.forEach(c => allTags.push({ ...c.target, type: 'comment', tag: c }));
   textFormats.forEach(f => allTags.push({ ...f, tag: f }));
   textArrows.forEach(a => allTags.push({ ...a, tag: a }));
+  
+  if (DA_STATE.activeCommentTarget && DA_STATE.activeCommentTarget.type === 'text' && DA_STATE.activeCommentTarget.propIndex === i) {
+    allTags.push({ ...DA_STATE.activeCommentTarget, type: 'comment', tag: { id: 'active-comment-target' } });
+  }
+
 
   let events = [];
   allTags.forEach((t, tid) => {
@@ -373,6 +380,7 @@ function renderInlineContent(textSpan, text, i) {
   if (pos < text.length) {
     appendChunk(textSpan, text.slice(pos), pos, i, new Set(), allTags);
   }
+
 }
 
 function appendChunk(textSpan, chunk, startPos, propIdx, activeTags, allTags) {
@@ -408,6 +416,7 @@ function appendChunk(textSpan, chunk, startPos, propIdx, activeTags, allTags) {
       if (!wrapper) wrapper = currentInner = span;
       else { currentInner.appendChild(span); currentInner = span; }
     }
+  });
   });
 
   if (currentInner) {
@@ -545,8 +554,9 @@ function renderBrackets() {
     
     // Create Group for Hovering and Selection
     const isBracketSelected = DA_STATE.firstBracketPoint === `b${i}`;
+    const isActiveTarget = DA_STATE.activeCommentTarget && DA_STATE.activeCommentTarget.type === 'bracket' && DA_STATE.activeCommentTarget.bracketIdx === i;
     const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    group.setAttribute('class', `bracket-group ${bracket.type} ${bracket.isCollapsed ? 'is-collapsed' : ''} ${isBracketSelected ? 'is-selected' : ''}`);
+    group.setAttribute('class', `bracket-group ${bracket.type} ${bracket.isCollapsed ? 'is-collapsed' : ''} ${isBracketSelected ? 'is-selected' : ''} ${isActiveTarget ? 'is-active-target' : ''}`);
     group.dataset.index = i;
     svg.appendChild(group);
 
@@ -763,7 +773,17 @@ function getConnectionPoints(fromId, toId, dotPositions, excludeBracketIdx = -1)
 
 function getBracketLabels(type, labelsSwapped = false, dominanceFlipped = false) {
   const typeKey = type.toLowerCase();
-  let labelStr = DA_CONSTANTS.BRACKET_LABELS[typeKey] || type.slice(0, 2);
+  let labelStr = DA_CONSTANTS.BRACKET_LABELS[typeKey];
+  
+  // Check for custom label in project state or saved bank
+  if (!labelStr && typeKey.startsWith('cl_')) {
+    const custom = DA_STATE.customLabels.find(cl => cl.id === typeKey) || 
+                   DA_STATE.savedCustomLabels.find(cl => cl.id === typeKey);
+    if (custom) labelStr = custom.label;
+  }
+  
+  if (!labelStr) labelStr = type.slice(0, 2);
+  
   if (DA_UI.isGurtnerMode() && DA_CONSTANTS.GURTNER_LABELS[typeKey]) labelStr = DA_CONSTANTS.GURTNER_LABELS[typeKey];
   
   if (DA_CONSTANTS.SINGLE_LABEL_TYPES.has(typeKey)) {
