@@ -1120,8 +1120,18 @@ function makePopupDraggable(popover, handleSelector) {
     e.preventDefault();
     const startX = e.clientX;
     const startY = e.clientY;
-    const startLeft = parseFloat(popover.style.left) || 0;
-    const startTop = parseFloat(popover.style.top) || 0;
+    
+    // Get current visual position relative to parent to handle % or transform positions
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const popRect = popover.getBoundingClientRect();
+    const startLeft = popRect.left - wrapperRect.left;
+    const startTop = popRect.top - wrapperRect.top;
+
+    // Reset styles to pixel-based absolute position to prevent jumping
+    popover.style.transform = 'none';
+    popover.style.left = startLeft + 'px';
+    popover.style.top = startTop + 'px';
+
     handle.style.cursor = 'grabbing';
 
     const onMove = (e2) => {
