@@ -628,8 +628,6 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
   const relX = centerX - rect.left;
   const relY = centerY - rect.top;
 
-  makePopupDraggable(picker, '.picker-title');
-
   if (hasTwoLabels) {
     picker.querySelector('[data-action="swap"]').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -657,6 +655,8 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
   picker.style.left = `${Math.max(10, Math.min(relX - 220, wrapper.offsetWidth - 450))}px`;
   picker.style.top = `${Math.max(10, relY - 150)}px`;
   wrapper.appendChild(picker);
+
+  makePopupDraggable(picker, '.picker-title');
 
   setupClickOutside(picker, () => picker.remove());
 }
@@ -1001,6 +1001,8 @@ function handleNewBracket() {
   dialog.style.top = `${Math.max(8, h / 2 - 55)}px`;
   wrapper.appendChild(dialog);
 
+  makePopupDraggable(dialog, '.picker-title');
+
   setupClickOutside(dialog, () => dialog.remove());
 
   dialog.querySelector('[data-action="save"]').addEventListener('click', async (e) => {
@@ -1274,6 +1276,8 @@ function showCustomLabelDialog(bracketIdx, centerY, centerX, mainPicker) {
   `;
   document.body.appendChild(dialog);
   
+  makePopupDraggable(dialog, '.picker-title');
+
   const input = dialog.querySelector('#customInput');
   input.focus();
   
