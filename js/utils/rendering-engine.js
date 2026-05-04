@@ -589,6 +589,8 @@ function renderBrackets() {
     const isBracketSelected = DA_STATE.firstBracketPoint === `b${i}`;
     const isActiveTarget = DA_STATE.activeCommentTarget && DA_STATE.activeCommentTarget.type === 'bracket' && DA_STATE.activeCommentTarget.bracketIdx === i;
     const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    const color = DA_CONSTANTS.RELATIONSHIP_COLORS[bracket.type] || DA_CONSTANTS.RELATIONSHIP_COLORS.unspecified;
+    group.setAttribute('style', `--bracket-color: ${color};`);
     group.setAttribute('class', `bracket-group ${bracket.type} ${bracket.isCollapsed ? 'is-collapsed' : ''} ${isBracketSelected ? 'is-selected' : ''} ${isActiveTarget ? 'is-active-target' : ''}`);
     group.dataset.index = i;
     svg.appendChild(group);

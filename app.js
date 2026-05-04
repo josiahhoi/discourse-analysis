@@ -194,7 +194,10 @@ document.addEventListener('keydown', (e) => {
     saveBracket();
   }
 
-  if (e.key === 'Escape') {
+    // --- TEXT SHIFTING MODE (Global Controls) ---
+    // (Handled immediately in delegated listener)
+
+    if (e.key === 'Escape') {
     // 1. Cancel in-progress bracket or arrow creation
     if (DA_STATE.bracketSelectStep === 1) {
       DA_STATE.bracketSelectStep = 0;
@@ -332,115 +335,119 @@ function initDelegatedListeners() {
     const i = parseInt(block.dataset.index, 10);
     const textSpan = block.querySelector('.proposition-text') || block;
 
-    // --- TEXT SHIFTING MODE ---
-    if (DA_STATE.shiftModeActive) {
-      e.preventDefault();
-      
-      if (e.key === 'Escape') {
-        DA_STATE.shiftModeActive = false;
-        DA_STATE._forceNextRender = true;
-        renderAll();
-        DA_STATE._forceNextRender = false;
-        return;
-      }
-      if (e.key === 'Enter') {
-        DA_STATE.pushUndo('shift text');
-        let srcText = DA_STATE.propositions[DA_STATE.shiftSourceIndex];
-        const before = srcText.substring(0, DA_STATE.shiftSourceStartOffset);
-        const after = srcText.substring(DA_STATE.shiftSourceEndOffset);
-        
-        DA_STATE.propositions[DA_STATE.shiftSourceIndex] = before + after;
-        
-        let targetText = DA_STATE.propositions[DA_STATE.shiftTargetIndex];
-        // Clean up spaces if targetText is empty
-        if (DA_STATE.shiftTargetPosition === 'end') {
-            DA_STATE.propositions[DA_STATE.shiftTargetIndex] = targetText ? targetText + ' ' + DA_STATE.shiftText : DA_STATE.shiftText;
-        } else {
-            DA_STATE.propositions[DA_STATE.shiftTargetIndex] = targetText ? DA_STATE.shiftText + ' ' + targetText : DA_STATE.shiftText;
-        }
-        
-        DA_STATE.shiftModeActive = false;
-        
-        // Clean up source line if it's now just spaces
-        DA_STATE.propositions[DA_STATE.shiftSourceIndex] = DA_STATE.propositions[DA_STATE.shiftSourceIndex].replace(/ +/g, ' ').trim();
-        
-        DA_STATE._forceNextRender = true;
-        renderAll();
-        DA_STATE._forceNextRender = false;
-        
-        // Put focus on the target block
-        requestAnimationFrame(() => {
-           const targetBlock = propositionsContainer.querySelector(`.proposition-block[data-index="${DA_STATE.shiftTargetIndex}"]`);
-           const newTextSpan = targetBlock?.querySelector('.proposition-text');
-           if (newTextSpan) {
-               newTextSpan.focus();
-           }
-        });
-        
-        return;
-      }
-      
-      if (e.key === 'ArrowUp') {
-        if (DA_STATE.shiftTargetIndex > 0) DA_STATE.shiftTargetIndex--;
-        renderAll();
-      } else if (e.key === 'ArrowDown') {
-        if (DA_STATE.shiftTargetIndex < DA_STATE.propositions.length - 1) DA_STATE.shiftTargetIndex++;
-        renderAll();
-      } else if (e.key === 'ArrowLeft') {
-        DA_STATE.shiftTargetPosition = 'start';
-        renderAll();
-      } else if (e.key === 'ArrowRight') {
-        DA_STATE.shiftTargetPosition = 'end';
-        renderAll();
-      }
-      return;
-    }
-
-    if (e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-      const sel = window.getSelection();
-      
-      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
-          if (typeof DA_UI !== 'undefined' && DA_UI.showStatus) {
-              DA_UI.showStatus("Shift Mode: Highlight text first.", "info");
-          }
-          return;
-      }
-      
+    const sel = window.getSelection();
+    const hasSelection = sel && !sel.isCollapsed;
+    const isArrowKey = e.key.startsWith('Arrow');
+    
+    if (hasSelection && isArrowKey && !e.shiftKey) {
       const range = sel.getRangeAt(0);
-      
-      // Ensure the selection is within our text span
       if (textSpan.contains(range.commonAncestorContainer) || textSpan === range.commonAncestorContainer) {
           e.preventDefault();
           
-          // Calculate character offset relative to the text content
+          const shiftText = sel.toString();
+          const srcText = DA_STATE.propositions[i];
+          
+          // Calculate global character offset
           const preRange = document.createRange();
           preRange.setStart(textSpan, 0);
           preRange.setEnd(range.startContainer, range.startOffset);
+          const startOffset = preRange.toString().length;
+
+          let lines = srcText.split('\n');
+          let currentPos = 0;
+          let lineIdx = -1;
+          let offsetInLine = -1;
           
-          DA_STATE.shiftSourceIndex = i;
-          DA_STATE.shiftSourceStartOffset = preRange.toString().length;
-          DA_STATE.shiftText = sel.toString();
-          DA_STATE.shiftSourceEndOffset = DA_STATE.shiftSourceStartOffset + DA_STATE.shiftText.length;
-          DA_STATE.shiftTargetPosition = 'end';
+          for (let j = 0; j < lines.length; j++) {
+              const lineEnd = currentPos + lines[j].length;
+              if (startOffset >= currentPos && startOffset <= lineEnd) {
+                  lineIdx = j;
+                  offsetInLine = startOffset - currentPos;
+                  break;
+              }
+              currentPos += lines[j].length + 1; // +1 for \n
+          }
+
+          if (lineIdx === -1) return;
+
+          DA_STATE.pushUndo('shift text');
+
+          // 1. Remove from current line
+          const lineLeading = lines[lineIdx].match(/^ +/)?.[0] || "";
+          const lineContent = lines[lineIdx].substring(lineLeading.length);
+          const lineOffset = Math.max(0, offsetInLine - lineLeading.length);
           
+          const beforeRem = lineContent.substring(0, lineOffset);
+          const afterRem = lineContent.substring(lineOffset + shiftText.length);
+          lines[lineIdx] = lineLeading + (beforeRem + afterRem).replace(/\s+$/, ''); // Only trim trailing spaces
+
+          let targetLineIdx = lineIdx;
+          let newOffsetInLine = 0;
+
           if (e.key === 'ArrowDown') {
-              DA_STATE.shiftTargetIndex = Math.min(i + 1, DA_STATE.propositions.length - 1);
-          } else {
-              DA_STATE.shiftTargetIndex = Math.max(i - 1, 0);
+              targetLineIdx = lineIdx + 1;
+              if (targetLineIdx >= lines.length) lines.push("");
+              
+              const leadingSpaces = lines[targetLineIdx].match(/^ +/)?.[0] || "";
+              const rest = lines[targetLineIdx].substring(leadingSpaces.length);
+              const hasContent = rest.trim().length > 0;
+              lines[targetLineIdx] = leadingSpaces + shiftText + (hasContent ? "        " + rest.replace(/^\s+/, '') : "");
+              newOffsetInLine = leadingSpaces.length;
+          } else if (e.key === 'ArrowUp') {
+              targetLineIdx = lineIdx - 1;
+              if (targetLineIdx < 0) {
+                  const rest = lines[0];
+                  const hasContent = rest.trim().length > 0;
+                  lines[0] = shiftText + (hasContent ? "        " + rest.replace(/^\s+/, '') : "");
+                  targetLineIdx = 0;
+                  newOffsetInLine = 0;
+              } else {
+                  const hasContent = lines[targetLineIdx].trim().length > 0;
+                  lines[targetLineIdx] = lines[targetLineIdx].replace(/\s+$/, '') + (hasContent ? "        " : "") + shiftText;
+                  newOffsetInLine = lines[targetLineIdx].length - shiftText.length;
+              }
+          } else if (e.key === 'ArrowLeft') {
+              targetLineIdx = lineIdx;
+              const leadingSpaces = lines[targetLineIdx].match(/^ +/)?.[0] || "";
+              const rest = lines[targetLineIdx].substring(leadingSpaces.length);
+              const hasContent = rest.trim().length > 0;
+              lines[targetLineIdx] = leadingSpaces + shiftText + (hasContent ? "        " + rest.replace(/^\s+/, '') : "");
+              newOffsetInLine = leadingSpaces.length;
+          } else if (e.key === 'ArrowRight') {
+              targetLineIdx = lineIdx;
+              const leadingSpaces = lines[targetLineIdx].match(/^ +/)?.[0] || "";
+              const rest = lines[targetLineIdx].substring(leadingSpaces.length);
+              const hasContent = rest.trim().length > 0;
+              lines[targetLineIdx] = leadingSpaces + rest.replace(/\s+$/, '') + (hasContent ? "        " : "") + shiftText;
+              newOffsetInLine = lines[targetLineIdx].length - shiftText.length;
           }
+
+          // Update state
+          DA_STATE.propositions[i] = lines.join('\n');
           
-          DA_STATE.shiftModeActive = true;
+          // 2. Render and restore focus/selection
+          DA_STATE._forceNextRender = true;
           renderAll();
+          DA_STATE._forceNextRender = false;
           
-          if (typeof DA_UI !== 'undefined' && DA_UI.showStatus) {
-              DA_UI.showStatus("Shift Mode: Arrows to move, Enter to confirm.", "success");
+          // Calculate new global offset
+          let newGlobalOffset = 0;
+          for (let j = 0; j < targetLineIdx; j++) {
+              newGlobalOffset += lines[j].length + 1;
           }
+          newGlobalOffset += newOffsetInLine;
+
+          requestAnimationFrame(() => {
+              const targetBlock = propositionsContainer.querySelector(`.proposition-block[data-index="${i}"]`);
+              const newTextSpan = targetBlock?.querySelector('.proposition-text');
+              if (newTextSpan) {
+                  newTextSpan.focus();
+                  DA_EDITOR.setSelectionByGlobalOffset(newTextSpan, newGlobalOffset, newGlobalOffset + shiftText.length);
+              }
+          });
           return;
       }
     }
-    // --- END TEXT SHIFTING MODE ---
-
-    // Backspace for merging or tab-removal (works in all modes)
     if (e.key === 'Backspace') {
       const sel = window.getSelection();
       if (sel?.rangeCount) {

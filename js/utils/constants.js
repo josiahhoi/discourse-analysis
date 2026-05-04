@@ -209,9 +209,37 @@ const COMMENT_AUTHOR_KEY = 'biblebracket_comment_author';
 const REVIEWER_NAME_KEY = 'biblebracket_reviewer_name';
 const PAGE_AUTHOR_KEY = 'biblebracket_page_author';
 
+const RELATIONSHIP_COLORS = {
+  series: '#ef4444',             // Red
+  progression: '#f97316',        // Orange
+  alternative: '#f59e0b',        // Amber
+  'both-and': '#84cc16',         // Lime
+  ground: '#10b981',             // Emerald
+  inference: '#06b6d4',          // Cyan
+  bilateral: '#3b82f6',          // Blue
+  'cause-effect': '#6366f1',     // Indigo
+  'action-result': '#8b5cf6',    // Violet
+  'action-purpose': '#a855f7',   // Purple
+  conditional: '#d946ef',        // Fuchsia
+  temporal: '#ec4899',           // Pink
+  locative: '#f43f5e',           // Rose
+  'action-manner': '#0ea5e9',    // Sky Blue
+  comparison: '#14b8a6',         // Teal
+  'negative-positive': '#4ade80', // Light Green
+  'idea-explanation': '#fbbf24', // Gold
+  'question-answer': '#2dd4bf',  // Aquamarine
+  'general-specific': '#60a5fa', // Light Blue
+  'fact-interpretation': '#fb7185', // Coral
+  'anticipation-fulfillment': '#c084fc', // Light Purple
+  concessive: '#94a3b8',         // Slate
+  'situation-response': '#475569', // Dark Slate
+  unspecified: '#94a3b8'         // Gray
+};
+
 window.DA_CONSTANTS = {
     ESV_API, SBLGNT_BASE, SBLGNT_BOOKS, FULL_BOOK_NAMES, BOLLS_BOOKS,
     BRACKET_LABELS, GURTNER_LABELS, RELATIONSHIP_LABELS, RELATIONSHIP_GROUPS,
     SINGLE_LABEL_TYPES, GURTNER_RELATIONSHIP_NAMES, BRACKET_GEO,
+    RELATIONSHIP_COLORS,
     THEME_KEY, COMMENT_AUTHOR_KEY, REVIEWER_NAME_KEY, PAGE_AUTHOR_KEY
 };

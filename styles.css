@@ -1508,10 +1508,10 @@ body {
   pointer-events: all !important;
 }
 
-.bracket-canvas path,
 .bracket-line,
-.bracket-arm {
-  stroke: var(--text-muted);
+.bracket-arm,
+.bracket-canvas path {
+  stroke: var(--bracket-color, var(--text-muted));
   stroke-width: 1.5;
   fill: none;
   transition: stroke 0.2s, stroke-width 0.2s;
@@ -1578,11 +1578,9 @@ body {
 .bracket-group:hover .bracket-line,
 .bracket-group:hover .bracket-arm {
   stroke-width: 3;
-  stroke: var(--accent) !important;
 }
 
 .bracket-group:hover .bracket-label {
-  fill: var(--accent) !important;
   font-weight: bold;
 }
 
@@ -1591,7 +1589,7 @@ body {
   font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;
-  fill: var(--label-text);
+  fill: var(--bracket-color, var(--label-text));
   stroke: none;
   opacity: 1;
   transition: opacity 0.2s, font-weight 0.2s;
@@ -1616,57 +1614,14 @@ body {
 }
 
 /* Color labels same as brackets */
-.bracket-label.ground { fill: var(--bracket-ground); }
-.bracket-label.inference { fill: var(--bracket-inference); }
-.bracket-label.series { fill: var(--bracket-series); }
-.bracket-label.both-and { fill: var(--bracket-both-and); }
-.bracket-label.general-specific { fill: var(--bracket-general-specific); }
-.bracket-label.fact-interpretation { fill: var(--bracket-fact-interpretation); }
-.bracket-label.anticipation-fulfillment { fill: var(--bracket-anticipation-fulfillment); }
-.bracket-label.progression { fill: #9bb87a; }
-.bracket-label.alternative { fill: var(--bracket-alternative); }
-.bracket-label.bilateral { fill: #7ba3d4; }
-.bracket-label.cause-effect,
-.bracket-label.action-result { fill: var(--bracket-action); }
-.bracket-label.action-purpose { fill: #b87bc9; }
-.bracket-label.conditional { fill: #c97b9b; }
-.bracket-label.temporal { fill: #7bc99b; }
-.bracket-label.locative { fill: #7bc9b8; }
-.bracket-label.action-manner { fill: #c9b87b; }
-.bracket-label.comparison { fill: var(--bracket-comparison); }
-.bracket-label.negative-positive { fill: #e8a060; }
-.bracket-label.idea-explanation { fill: #60a0e8; }
-.bracket-label.question-answer { fill: #a060e8; }
-.bracket-label.concessive { fill: #e86080; }
-.bracket-label.situation-response { fill: #e88060; }
-.bracket-label.unspecified { fill: var(--bracket-custom); }
+.bracket-label {
+  fill: var(--bracket-color, var(--text-muted));
+}
 
-
-/* Bracket colors - 18 logical relationship types (paths only; labels use white text) */
-.bracket-canvas path.ground { stroke: var(--bracket-ground); }
-.bracket-canvas path.inference { stroke: var(--bracket-inference); }
-.bracket-canvas path.series { stroke: var(--bracket-series); }
-.bracket-canvas path.both-and { stroke: var(--bracket-both-and); }
-.bracket-canvas path.general-specific { stroke: var(--bracket-general-specific); }
-.bracket-canvas path.fact-interpretation { stroke: var(--bracket-fact-interpretation); }
-.bracket-canvas path.anticipation-fulfillment { stroke: var(--bracket-anticipation-fulfillment); }
-.bracket-canvas path.progression { stroke: #9bb87a; }
-.bracket-canvas path.alternative { stroke: var(--bracket-alternative); }
-.bracket-canvas path.bilateral { stroke: #7ba3d4; }
-.bracket-canvas path.cause-effect,
-.bracket-canvas path.action-result { stroke: var(--bracket-action); }
-.bracket-canvas path.action-purpose { stroke: #b87bc9; }
-.bracket-canvas path.conditional { stroke: #c97b9b; }
-.bracket-canvas path.temporal { stroke: #7bc99b; }
-.bracket-canvas path.locative { stroke: #7bc9b8; }
-.bracket-canvas path.action-manner { stroke: #c9b87b; }
-.bracket-canvas path.comparison { stroke: var(--bracket-comparison); }
-.bracket-canvas path.negative-positive { stroke: #e8a060; }
-.bracket-canvas path.idea-explanation { stroke: #60a0e8; }
-.bracket-canvas path.question-answer { stroke: #a060e8; }
-.bracket-canvas path.concessive { stroke: #e86080; }
-.bracket-canvas path.situation-response { stroke: #e88060; }
-.bracket-canvas path.unspecified { stroke: var(--bracket-custom); }
+.connection-node {
+  stroke: var(--bracket-color, var(--text-muted));
+  fill: var(--bg);
+}
 
 .bracket-canvas path.hover {
   stroke-width: 12;

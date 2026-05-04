@@ -534,6 +534,12 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
     btn.className = typeKey;
     if (isCustom) btn.classList.add('custom-label-btn');
 
+    // Apply relationship color
+    const color = DA_CONSTANTS.RELATIONSHIP_COLORS[typeKey] || DA_CONSTANTS.RELATIONSHIP_COLORS.unspecified;
+    btn.style.setProperty('--bracket-color', color);
+    btn.style.borderColor = color;
+    btn.style.color = color;
+
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       DA_STATE.pushUndo('change label');
