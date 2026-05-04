@@ -2016,8 +2016,8 @@ body.text-edit-mode-active .verse-ref {
 .proposition-text mark.comment-highlight {
   background: var(--comment-note-40);
   color: inherit;
-  padding: 0 0.1em;
-  border-radius: 2px;
+  padding: 0;
+  border-radius: 0;
   border-bottom: 1px solid var(--comment-note-shadow);
   cursor: pointer;
   transition: background 0.2s, box-shadow 0.2s;
@@ -2205,7 +2205,7 @@ body.text-edit-mode-active .verse-ref {
 
 .word-arrow-path {
   fill: none;
-  stroke: var(--text-muted);
+  stroke: var(--text);
   stroke-width: 2.2;
   stroke-linejoin: round;
   stroke-linecap: round;
@@ -2215,7 +2215,7 @@ body.text-edit-mode-active .verse-ref {
 
 .word-arrow-path:hover {
   stroke-width: 3.5;
-  stroke: var(--accent);
+  stroke: var(--text);
   opacity: 1;
 }
 
@@ -2253,4 +2253,19 @@ body.text-edit-mode-active .verse-ref {
   margin: 0.4rem 0;
   border: none;
   border-top: 1px solid var(--border);
+}
+
+.arrow-anchor.active-anchor,
+.arrow-anchor.hover-anchor {
+  background-color: var(--surface-elevated);
+  box-shadow: 0 0 0 2px var(--border);
+  border-radius: 2px;
+  color: var(--text);
+  transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+[data-theme="light"] .arrow-anchor.active-anchor,
+[data-theme="light"] .arrow-anchor.hover-anchor {
+  background-color: #e0e0e0;
+  box-shadow: 0 0 0 2px #cccccc;
 }

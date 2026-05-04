@@ -438,6 +438,11 @@ function appendChunk(textSpan, chunk, startPos, propIdx, activeTags, allTags) {
       const span = document.createElement('span');
       span.className = 'arrow-anchor';
       span.dataset.arrowId = t.tag.id;
+      
+      const arrowIdx = parseInt(t.tag.id.split('-')[1]);
+      if (arrowIdx === DA_STATE.selectedArrowIdx) {
+        span.classList.add('active-anchor');
+      }
       if (!wrapper) wrapper = currentInner = span;
       else { currentInner.appendChild(span); currentInner = span; }
     }
@@ -995,7 +1000,7 @@ function renderWordArrows() {
     }
     const head = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     head.setAttribute('points', points);
-    head.setAttribute('fill', 'var(--accent)');
+    head.setAttribute('fill', 'var(--text)');
     head.setAttribute('class', 'word-arrow-head');
     g.appendChild(head);
 
