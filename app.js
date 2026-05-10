@@ -339,6 +339,40 @@ function initDelegatedListeners() {
     const hasSelection = sel && !sel.isCollapsed;
     const isArrowKey = e.key.startsWith('Arrow');
     
+    // --- BOLD / UNDERLINE SHORTCUTS ---
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'u')) {
+      e.preventDefault();
+      const command = e.key === 'b' ? 'bold' : 'underline';
+      document.execCommand(command, false, null);
+      
+      // CRITICAL: Immediately harvest formatting tags so they aren't lost on the next render
+      // This mimics the focusout logic but runs instantly.
+      if (textSpan) {
+        let extractedText = '';
+        let newFormatTags = [];
+        function traverse(node) {
+          if (node.nodeType === Node.TEXT_NODE) {
+            extractedText += node.textContent;
+          } else if (node.nodeType === Node.ELEMENT_NODE) {
+            if (node.tagName === 'BR') extractedText += '\n';
+            else if (node.tagName === 'DIV' && extractedText.length > 0 && !extractedText.endsWith('\n')) extractedText += '\n';
+            let start = extractedText.length;
+            node.childNodes.forEach(traverse);
+            let end = extractedText.length;
+            if (start < end) {
+              let type = null;
+              if (node.tagName === 'B' || node.tagName === 'STRONG') type = 'bold';
+              else if (node.tagName === 'U') type = 'underline';
+              if (type) newFormatTags.push({ type, propIndex: i, start, end });
+            }
+          }
+        }
+        textSpan.childNodes.forEach(traverse);
+        DA_STATE.formatTags = DA_STATE.formatTags.filter(f => f.propIndex !== i).concat(newFormatTags);
+      }
+      return;
+    }
+    
     if (hasSelection && isArrowKey && !e.shiftKey) {
       const range = sel.getRangeAt(0);
       if (textSpan.contains(range.commonAncestorContainer) || textSpan === range.commonAncestorContainer) {
