@@ -2129,7 +2129,7 @@ body.text-edit-mode-active .verse-ref {
   to { opacity: 1; }
 }
 
-.modal-content.settings-modal {
+.modal-content {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 12px;
