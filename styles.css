@@ -627,14 +627,15 @@ body {
 }
 
 .picker-info-panel {
-  margin-top: 8px;
-  padding: 8px;
-  background-color: var(--sidebar-bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 0.8rem;
-  line-height: 1.3;
-  color: var(--text-muted);
+  margin-top: 12px;
+  padding: 12px;
+  background-color: var(--surface-elevated);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--text);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 
 .picker-info-panel .info-name {
