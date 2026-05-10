@@ -59,7 +59,8 @@
             <div class="shortcut-item"><kbd>Ctrl</kbd>+<kbd>Z</kbd> <span>Undo</span></div>
             <div class="shortcut-item"><span>Drop File</span> <span>Import JSON/PNG/PDF</span></div>
             <hr>
-            <p><a href="https://s3.amazonaws.com/cdn.gospelpaths.com/tenants/5/1738104708694-The18LogicalRelationshipsEngnewlogo.pdf" target="_blank" rel="noopener">The 18 Logical Relationships</a></p>
+            <p><a href="https://s3.amazonaws.com/cdn.gospelpaths.com/tenants/5/1738104708694-The18LogicalRelationshipsEngnewlogo.pdf" target="_blank" rel="noopener">The 18 Logical Relationships (PDF)</a></p>
+            <button id="openReferenceGuideBtn" type="button" class="secondary" style="width: 100%; margin-top: 8px;">View Quick Reference Guide</button>
           </div>
         </details>
 
@@ -188,6 +189,30 @@
       </div>
       <div class="modal-footer">
         <button id="saveSettingsBtn" class="primary-action">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="referenceModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content reference-modal">
+      <div class="modal-header">
+        <h2>Logical Relationships Guide</h2>
+        <button id="closeReferenceBtn" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+        <table class="reference-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Abbr.</th>
+              <th>Key Word(s)</th>
+              <th>Definition</th>
+            </tr>
+          </thead>
+          <tbody id="referenceTableBody">
+            <!-- Populated by JS -->
+          </tbody>
+        </table>
       </div>
     </div>
   </div>

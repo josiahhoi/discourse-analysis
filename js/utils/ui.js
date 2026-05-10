@@ -460,12 +460,19 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
       </div>
     </div>
     <div class="relationship-picker-content"></div>
+    <div class="picker-info-panel" style="display: none;">
+      <strong class="info-name"></strong>
+      <div class="info-def"></div>
+      <div class="info-keywords"></div>
+    </div>
     <div class="picker-footer">
       <button class="delete-btn">Delete Bracket</button>
     </div>
   `;
 
   const content = picker.querySelector('.relationship-picker-content');
+  const infoPanel = picker.querySelector('.picker-info-panel');
+
 
   const RELATIONSHIP_GROUPS_LIST = [
     {
@@ -548,6 +555,20 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
       if (window.renderAll) window.renderAll();
       showStatus(`Label changed to ${labelText}`, 'success');
     });
+
+    const defData = DA_CONSTANTS.RELATIONSHIP_DEFINITIONS?.[typeKey];
+    if (defData) {
+      btn.addEventListener('mouseenter', () => {
+        infoPanel.style.display = 'block';
+        infoPanel.querySelector('.info-name').textContent = labelText;
+        infoPanel.querySelector('.info-name').style.color = color;
+        infoPanel.querySelector('.info-def').textContent = defData.definition;
+        infoPanel.querySelector('.info-keywords').textContent = defData.keywords ? 'Key words: ' + defData.keywords : '';
+      });
+      btn.addEventListener('mouseleave', () => {
+        infoPanel.style.display = 'none';
+      });
+    }
 
     wrapper.appendChild(btn);
 
@@ -958,6 +979,48 @@ function closeSettings() {
     if (modal) modal.style.display = 'none';
 }
 
+function openReferenceGuide() {
+    const modal = document.getElementById('referenceModal');
+    if (modal) {
+        populateReferenceGuide();
+        modal.style.display = 'flex';
+    }
+}
+
+function closeReferenceGuide() {
+    const modal = document.getElementById('referenceModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function populateReferenceGuide() {
+    const tbody = document.getElementById('referenceTableBody');
+    if (!tbody || tbody.children.length > 0) return; // Already populated
+
+    const defs = DA_CONSTANTS.RELATIONSHIP_DEFINITIONS;
+    const labels = DA_CONSTANTS.RELATIONSHIP_LABELS;
+    const abbrs = DA_CONSTANTS.BRACKET_LABELS;
+    
+    // Convert to array and sort alphabetically by name
+    const entries = Object.keys(defs).map(key => ({
+        key,
+        name: labels[key] ? labels[key].split(' (')[0] : key.charAt(0).toUpperCase() + key.slice(1),
+        abbr: abbrs[key] || '',
+        keywords: defs[key].keywords,
+        definition: defs[key].definition
+    })).sort((a, b) => a.name.localeCompare(b.name));
+
+    entries.forEach(entry => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><strong>${entry.name}</strong></td>
+            <td>${entry.abbr}</td>
+            <td class="keyword-cell">${entry.keywords}</td>
+            <td>${entry.definition}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
 function updateFontByAuthor() {
     const authorRaw = (document.getElementById('pageAuthor')?.value || '').trim();
     const authorLower = authorRaw.toLowerCase();
@@ -1321,6 +1384,7 @@ window.DA_UI = {
     getCommentForBracket, showCommentPopover, showCommentPopoverForText, showCommentPopoverForBracket,
     showBracketActions, showTextContextMenu, showLabelPicker, showExportMenu, showOpenMenu, saveState, restoreState,
     showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings,
+    openReferenceGuide, closeReferenceGuide,
     updateFontByAuthor, syncPassageAuthorDisplay, handleNewBracket, startNewBracket, parsePastedText,
     formatBracketType, makeCommentPopoverDraggableAndResizable, setupReplies
 };

@@ -626,6 +626,34 @@ body {
   transform: scale(1.1);
 }
 
+.picker-info-panel {
+  margin-top: 8px;
+  padding: 8px;
+  background-color: var(--sidebar-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+
+.picker-info-panel .info-name {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: bold;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.picker-info-panel .info-def {
+  margin-bottom: 4px;
+}
+
+.picker-info-panel .info-keywords {
+  font-style: italic;
+  color: var(--accent);
+}
+
 .label-picker .picker-title {
   width: 100%;
   margin: 0 0 0.4rem;
@@ -2145,6 +2173,41 @@ body.text-edit-mode-active .verse-ref {
   padding: 24px;
   max-height: 70vh;
   overflow-y: auto;
+}
+
+.reference-modal {
+  max-width: 800px;
+  width: 90%;
+}
+
+.reference-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.reference-table th, .reference-table td {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.reference-table th {
+  background-color: var(--sidebar-bg);
+  color: var(--text);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+
+.reference-table td {
+  color: var(--text-muted);
+}
+
+.reference-table .keyword-cell {
+  font-style: italic;
+  color: var(--accent);
 }
 
 .settings-section {

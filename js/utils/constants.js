@@ -236,10 +236,36 @@ const RELATIONSHIP_COLORS = {
   unspecified: '#94a3b8'         // Gray
 };
 
+const RELATIONSHIP_DEFINITIONS = {
+  series: { definition: "Each proposition makes an independent contribution to the whole", keywords: "and, moreover, furthermore, likewise" },
+  progression: { definition: "Each proposition is a further step to the climax", keywords: "then, and, moreover" },
+  alternative: { definition: "Each proposition expresses an opposite possibility arising from a situation", keywords: "but, on the other hand, while, or" },
+  'question-answer': { definition: "Statement of question and answer to that question", keywords: "?" },
+  'situation-response': { definition: "Statement of response to a stated situation or action", keywords: "and" },
+  'action-manner': { definition: "Statement of an action and one which tells more explicitly what is involved in carrying out this action", keywords: "in that, by" },
+  comparison: { definition: "Statement expressing an action, thing, etc. followed by a statement making that action, thing, etc. clearer by showing what it is like", keywords: "even as, as... so" },
+  'negative-positive': { definition: "Two alternatives, one of which is denied so that the other is enforced", keywords: "not... but, though, although, but" },
+  'general-specific': { definition: "Propositions stating a whole and one or more which set for the part of the whole", keywords: "that is, for" },
+  'fact-interpretation': { definition: "Proposition and one clarifying or explaining its meaning", keywords: "that is, for" },
+  ground: { definition: "Statement and the argument or basis on which it stands; supporting follows the supported", keywords: "for, because, since" },
+  inference: { definition: "As above, but now the supporting precedes the supported", keywords: "therefore, wherefore, thus, consequently" },
+  'action-result': { definition: "An action and one automatically consequent upon that action", keywords: "that, so that, with the result that" },
+  'cause-effect': { definition: "An action and one automatically consequent upon that action", keywords: "that, so that, with the result that" },
+  conditional: { definition: "Like above, except the existence of the cause is only potential", keywords: "if... then, if, except" },
+  'action-purpose': { definition: "An action and the one that is intended to come as a result or goal", keywords: "in order that, that, lest, to the end that" },
+  temporal: { definition: "Proposition and the occasion when it can occur", keywords: "when, whenever" },
+  locative: { definition: "Proposition and the place where it can be true", keywords: "where, wherever" },
+  concessive: { definition: "Main clause that stands despite a contrary statement", keywords: "nevertheless, although though, yet, however" },
+  'anticipation-fulfillment': { definition: "A main clause that fulfills the anticipation or promise of a prior clause (subset of progression)", keywords: "" },
+  'both-and': { definition: "Each proposition makes an independent contribution to the whole, but the contributions are inseparable (subset of series)", keywords: "" },
+  bilateral: { definition: "A bilateral relationship supporting the preceding proposition and supported by the following proposition.", keywords: "for... therefore" },
+  'idea-explanation': { definition: "A relationship where the second proposition explains the idea of the first.", keywords: "that is" }
+};
+
 window.DA_CONSTANTS = {
     ESV_API, SBLGNT_BASE, SBLGNT_BOOKS, FULL_BOOK_NAMES, BOLLS_BOOKS,
     BRACKET_LABELS, GURTNER_LABELS, RELATIONSHIP_LABELS, RELATIONSHIP_GROUPS,
     SINGLE_LABEL_TYPES, GURTNER_RELATIONSHIP_NAMES, BRACKET_GEO,
-    RELATIONSHIP_COLORS,
+    RELATIONSHIP_COLORS, RELATIONSHIP_DEFINITIONS,
     THEME_KEY, COMMENT_AUTHOR_KEY, REVIEWER_NAME_KEY, PAGE_AUTHOR_KEY
 };

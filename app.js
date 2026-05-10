@@ -32,7 +32,8 @@ const openFileBtn = document.getElementById('openFileBtn');
 const openMenuBtn = document.getElementById('openMenuBtn');
 const reviewerNameInput = document.getElementById('reviewerName');
 const closeSettingsBtn = document.getElementById('closeSettingsBtn');
-
+const openReferenceGuideBtn = document.getElementById('openReferenceGuideBtn');
+const closeReferenceBtn = document.getElementById('closeReferenceBtn');
 let arrowHighlight;
 let pendingArrowStart = null;
 
@@ -89,6 +90,15 @@ const settingsModal = document.getElementById('settingsModal');
 if (settingsModal) {
   settingsModal.addEventListener('click', (e) => {
     if (e.target === settingsModal) DA_UI.closeSettings();
+  });
+}
+
+if (openReferenceGuideBtn) openReferenceGuideBtn.addEventListener('click', DA_UI.openReferenceGuide);
+if (closeReferenceBtn) closeReferenceBtn.addEventListener('click', DA_UI.closeReferenceGuide);
+const referenceModal = document.getElementById('referenceModal');
+if (referenceModal) {
+  referenceModal.addEventListener('click', (e) => {
+    if (e.target === referenceModal) DA_UI.closeReferenceGuide();
   });
 }
 
