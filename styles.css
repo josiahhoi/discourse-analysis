@@ -1,3 +1,24 @@
+/**
+ * DISCOURSE ANALYSIS STYLESHEET
+ * 
+ * TABLE OF CONTENTS:
+ * 1. Reset, Variables & Base Elements
+ * 2. Main App Layout & Header
+ * 3. Sidebar, Forms & Buttons
+ * 4. Label Picker & Relationships
+ * 5. Dialogs & Save/Load Menus
+ * 6. Workspace & Comment Side-Panel
+ * 7. Comment Popover UI
+ * 8. Passage Header & Toolbars
+ * 9. Bracket Canvas & SVG Connectors
+ * 10. Propositions & Text Editor
+ * 11. Footer, Cloud Sync & States
+ * 12. Modals, Highlights & Context Menus
+ */
+
+/* ========================================= */
+/* 1. Reset, Variables & Base Elements       */
+/* ========================================= */
 :root {
   --bg: #1a1a1c;
   --surface: #242428;
@@ -103,6 +124,9 @@ body {
   line-height: 1.6;
 }
 
+/* ========================================= */
+/* 2. Main App Layout & Header               */
+/* ========================================= */
 .app {
   min-height: 100vh;
   display: flex;
@@ -286,7 +310,9 @@ body {
   /* Removed padding/gap here to let sidebar sit flush */
 }
 
-/* Sidebar */
+/* ========================================= */
+/* 3. Sidebar, Forms & Buttons               */
+/* ========================================= */
 .sidebar {
   flex-shrink: 0;
   width: 250px;
@@ -504,7 +530,9 @@ body {
   border-color: var(--accent);
 }
 
-/* Label picker popover */
+/* ========================================= */
+/* 4. Label Picker & Relationships           */
+/* ========================================= */
 .label-picker {
   position: absolute;
   z-index: 1000;
@@ -710,7 +738,9 @@ body {
 }
 
 
-/* New bracket dialog */
+/* ========================================= */
+/* 5. Dialogs & Save/Load Menus              */
+/* ========================================= */
 .new-bracket-dialog {
   min-width: 200px;
   max-width: 280px;
@@ -877,7 +907,9 @@ body {
   color: var(--text);
 }
 
-/* Workspace */
+/* ========================================= */
+/* 6. Workspace & Comment Side-Panel         */
+/* ========================================= */
 .workspace {
   flex: 1;
   display: flex;
@@ -1036,7 +1068,9 @@ body {
 }
 
 /* Popover UI Consistency */
-/* Comment Popover Redesign */
+/* ========================================= */
+/* 7. Comment Popover UI                     */
+/* ========================================= */
 .comment-popover {
   position: absolute;
   z-index: 1000;
@@ -1270,6 +1304,9 @@ body {
   padding: 0.5rem 0;
 }
 
+/* ========================================= */
+/* 8. Passage Header & Toolbars              */
+/* ========================================= */
 .passage-header {
   display: flex;
   justify-content: space-between;
@@ -1420,6 +1457,9 @@ body {
   font-style: normal;
 }
 
+/* ========================================= */
+/* 9. Bracket Canvas & SVG Connectors        */
+/* ========================================= */
 .bracket-canvas-wrapper {
   position: relative;
   margin: 0 auto; /* Center on widescreen */
@@ -1684,6 +1724,9 @@ body {
   stroke-width: 12;
 }
 
+/* ========================================= */
+/* 10. Propositions & Text Editor            */
+/* ========================================= */
 .propositions {
   position: relative;
   z-index: 1;
@@ -1853,7 +1896,9 @@ body.text-edit-mode-active .verse-ref {
   stroke-width: 4;
 }
 
-/* Footer */
+/* ========================================= */
+/* 11. Footer, Cloud Sync & States           */
+/* ========================================= */
 .footer {
   padding: 0.75rem 2rem;
   font-size: 0.8rem;
@@ -2140,7 +2185,9 @@ body.text-edit-mode-active .verse-ref {
 
 
 
-/* Settings Modal */
+/* ========================================= */
+/* 12. Modals, Highlights & Context Menus    */
+/* ========================================= */
 .modal-overlay {
   position: fixed;
   top: 0;
