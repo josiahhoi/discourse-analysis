@@ -444,6 +444,33 @@ body {
   transform: translateY(0);
 }
 
+.secondary {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  font-family: inherit;
+  background: var(--surface);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.secondary:hover {
+  background: var(--surface-elevated);
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.secondary:active {
+  transform: translateY(1px);
+}
+
 .danger-btn {
   margin-top: auto;
   opacity: 0.6;
@@ -2211,6 +2238,26 @@ body.text-edit-mode-active .verse-ref {
 .reference-table .keyword-cell {
   font-style: italic;
   color: var(--accent);
+}
+
+.reference-table .group-header td {
+  background-color: var(--surface);
+  color: var(--accent);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  padding: 12px;
+  border-bottom: 2px solid var(--border);
+}
+
+.reference-table .subgroup-header td {
+  background-color: var(--bg);
+  color: var(--text);
+  font-weight: 600;
+  font-style: italic;
+  font-size: 0.85rem;
+  padding: 8px 12px;
 }
 
 .settings-section {

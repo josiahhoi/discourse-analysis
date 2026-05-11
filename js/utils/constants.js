@@ -164,12 +164,29 @@ const RELATIONSHIP_LABELS = {
   'unspecified': '?'
 };
 
-const RELATIONSHIP_GROUPS = {
-  COORDINATE: ['series', 'progression', 'alternative', 'both-and'],
-  SUPPORT_BY_DISTINCT: ['ground', 'inference', 'bilateral', 'cause-effect', 'action-purpose', 'conditional', 'temporal', 'locative'],
-  SUPPORT_BY_RESTATEMENT: ['action-manner', 'comparison', 'negative-positive', 'idea-explanation', 'question-answer', 'general-specific', 'fact-interpretation', 'anticipation-fulfillment'],
-  SUPPORT_BY_CONTRARY: ['concessive', 'situation-response']
-};
+const RELATIONSHIP_GROUPS_HIERARCHY = [
+  {
+    name: 'COORDINATE RELATIONSHIPS',
+    types: ['series', 'progression', 'alternative', 'both-and', 'anticipation-fulfillment']
+  },
+  {
+    name: 'SUBORDINATE RELATIONSHIPS',
+    subgroups: [
+      {
+        name: 'Support by Restatement',
+        types: ['action-manner', 'comparison', 'negative-positive', 'question-answer', 'idea-explanation', 'general-specific', 'fact-interpretation']
+      },
+      {
+        name: 'Support by Distinct Statement',
+        types: ['ground', 'inference', 'bilateral', 'action-result', 'action-purpose', 'conditional', 'temporal', 'locative']
+      },
+      {
+        name: 'Support by Contrary Statement',
+        types: ['concessive', 'situation-response']
+      }
+    ]
+  }
+];
 
 const SINGLE_LABEL_TYPES = new Set(['series', 'alternative', 'bilateral', 'both-and', 'unspecified']);
 
@@ -264,7 +281,7 @@ const RELATIONSHIP_DEFINITIONS = {
 
 window.DA_CONSTANTS = {
     ESV_API, SBLGNT_BASE, SBLGNT_BOOKS, FULL_BOOK_NAMES, BOLLS_BOOKS,
-    BRACKET_LABELS, GURTNER_LABELS, RELATIONSHIP_LABELS, RELATIONSHIP_GROUPS,
+    BRACKET_LABELS, GURTNER_LABELS, RELATIONSHIP_LABELS, RELATIONSHIP_GROUPS_HIERARCHY,
     SINGLE_LABEL_TYPES, GURTNER_RELATIONSHIP_NAMES, BRACKET_GEO,
     RELATIONSHIP_COLORS, RELATIONSHIP_DEFINITIONS,
     THEME_KEY, COMMENT_AUTHOR_KEY, REVIEWER_NAME_KEY, PAGE_AUTHOR_KEY

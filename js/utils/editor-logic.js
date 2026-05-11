@@ -1,3 +1,31 @@
+/**
+ * Walks a contenteditable text span and extracts plain text + format tags (bold/underline).
+ * Used by focusout handler and Ctrl+B/U shortcut to sync DOM formatting back to state.
+ */
+function extractFormatTags(textSpan, propIndex) {
+  let text = '';
+  const tags = [];
+  function traverse(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      text += node.textContent;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.tagName === 'BR') text += '\n';
+      else if (node.tagName === 'DIV' && text.length > 0 && !text.endsWith('\n')) text += '\n';
+      const start = text.length;
+      node.childNodes.forEach(traverse);
+      const end = text.length;
+      if (start < end) {
+        let type = null;
+        if (node.tagName === 'B' || node.tagName === 'STRONG') type = 'bold';
+        else if (node.tagName === 'U') type = 'underline';
+        if (type) tags.push({ type, propIndex, start, end });
+      }
+    }
+  }
+  textSpan.childNodes.forEach(traverse);
+  return { text, tags };
+}
+
 function splitPropositionAtOffset(i, offset) {
   const text = DA_STATE.propositions[i];
   if (!text || offset >= text.length || text.slice(offset).trim().length === 0) return;
@@ -56,15 +84,17 @@ function splitPropositionAtOffset(i, offset) {
   DA_STATE.verseRefs.splice(i + 1, 0, secondPartRef);
   DA_STATE.indentation.splice(i + 1, 0, DA_STATE.indentation[i] || 0);
   
-  // Adjust brackets
-  DA_STATE.brackets.forEach(b => {
-    if (b.from > i) b.from++;
-    if (b.to > i) b.to++;
-    else if (b.to === i && b.from <= i) {
-        // Bracket ends at the split proposition - it should now include the new one?
-        // Usually, splitting a proposition means the bracket should extend to include the new block.
-        b.to++;
+  // Adjust brackets — references are strings like "p0", "b2"
+  const shiftRef = (ref, splitIdx) => {
+    if (typeof ref === 'string' && ref.startsWith('p')) {
+      const idx = parseInt(ref.slice(1), 10);
+      if (idx > splitIdx) return 'p' + (idx + 1);
     }
+    return ref;
+  };
+  DA_STATE.brackets.forEach(b => {
+    b.from = shiftRef(b.from, i);
+    b.to = shiftRef(b.to, i);
   });
   
   // Adjust word arrows
@@ -109,14 +139,18 @@ function mergePropositions(i) {
   DA_STATE.verseRefs.splice(i, 1);
   DA_STATE.indentation.splice(i, 1);
   
-  // Adjust brackets
-  DA_STATE.brackets.forEach((b, bIdx) => {
-    if (b.from >= i) b.from--;
-    if (b.to >= i) b.to--;
+  // Adjust brackets — shift pN references down for indices >= i
+  const unshiftRef = (ref, mergeIdx) => {
+    if (typeof ref === 'string' && ref.startsWith('p')) {
+      const idx = parseInt(ref.slice(1), 10);
+      if (idx >= mergeIdx) return 'p' + (idx - 1);
+    }
+    return ref;
+  };
+  DA_STATE.brackets.forEach(b => {
+    b.from = unshiftRef(b.from, i);
+    b.to = unshiftRef(b.to, i);
   });
-  
-  // Remove brackets that now have from > to
-  DA_STATE.brackets = DA_STATE.brackets.filter(b => b.from <= b.to);
   
   // Adjust word arrows
   DA_STATE.wordArrows.forEach(wa => {
@@ -400,5 +434,5 @@ function toggleBracketCollapse(bracketIdx) {
 
 window.DA_EDITOR = {
     splitPropositionAtOffset, mergePropositions, changeIndentation, setSelectionByGlobalOffset,
-    deleteBracket, findBestAttachment, handleDotClick, toggleBracketCollapse
+    deleteBracket, findBestAttachment, handleDotClick, toggleBracketCollapse, extractFormatTags
 };

@@ -169,32 +169,15 @@ function attachPropositionDelegatedListeners(container) {
     const i = parseInt(block.dataset.index, 10);
     if (isNaN(i)) return;
 
-    let extractedText = '';
-    let newFormatTags = [];
     const textSpanEl = block.querySelector('.proposition-text');
+    let currentText = '';
+    let newFormatTags = [];
 
     if (textSpanEl) {
-      function traverse(node) {
-        if (node.nodeType === Node.TEXT_NODE) {
-          extractedText += node.textContent;
-        } else if (node.nodeType === Node.ELEMENT_NODE) {
-          if (node.tagName === 'BR') extractedText += '\n';
-          else if (node.tagName === 'DIV' && extractedText.length > 0 && !extractedText.endsWith('\n')) extractedText += '\n';
-          let start = extractedText.length;
-          node.childNodes.forEach(traverse);
-          let end = extractedText.length;
-          if (start < end) {
-            let type = null;
-            if (node.tagName === 'B' || node.tagName === 'STRONG') type = 'bold';
-            else if (node.tagName === 'U') type = 'underline';
-            if (type) newFormatTags.push({ type, propIndex: i, start, end });
-          }
-        }
-      }
-      textSpanEl.childNodes.forEach(traverse);
+      const result = DA_EDITOR.extractFormatTags(textSpanEl, i);
+      currentText = result.text;
+      newFormatTags = result.tags;
     }
-
-    let currentText = extractedText;
     if (DA_STATE.textEditMode) {
       currentText = currentText.replace(/\n$/, '') || '(empty)';
     } else {

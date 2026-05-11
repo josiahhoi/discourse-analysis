@@ -474,29 +474,7 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
   const infoPanel = picker.querySelector('.picker-info-panel');
 
 
-  const RELATIONSHIP_GROUPS_LIST = [
-    {
-      name: 'COORDINATE RELATIONSHIPS',
-      types: ['series', 'progression', 'alternative', 'both-and', 'anticipation-fulfillment']
-    },
-    {
-      name: 'SUBORDINATE RELATIONSHIPS',
-      subgroups: [
-        {
-          name: 'Support by Restatement',
-          types: ['action-manner', 'comparison', 'negative-positive', 'question-answer', 'idea-explanation', 'general-specific', 'fact-interpretation']
-        },
-        {
-          name: 'Support by Distinct Statement',
-          types: ['ground', 'inference', 'bilateral', 'action-result', 'action-purpose', 'conditional', 'temporal', 'locative']
-        },
-        {
-          name: 'Support by Contrary Statement',
-          types: ['concessive', 'situation-response']
-        }
-      ]
-    }
-  ];
+  const RELATIONSHIP_GROUPS_LIST = [...DA_CONSTANTS.RELATIONSHIP_GROUPS_HIERARCHY];
 
   // Group 1: My Presets (Persistent)
   if (DA_STATE.savedCustomLabels && DA_STATE.savedCustomLabels.length > 0) {
@@ -996,28 +974,44 @@ function populateReferenceGuide() {
     const tbody = document.getElementById('referenceTableBody');
     if (!tbody || tbody.children.length > 0) return; // Already populated
 
+    const hierarchy = DA_CONSTANTS.RELATIONSHIP_GROUPS_HIERARCHY;
     const defs = DA_CONSTANTS.RELATIONSHIP_DEFINITIONS;
     const labels = DA_CONSTANTS.RELATIONSHIP_LABELS;
     const abbrs = DA_CONSTANTS.BRACKET_LABELS;
     
-    // Convert to array and sort alphabetically by name
-    const entries = Object.keys(defs).map(key => ({
-        key,
-        name: labels[key] ? labels[key].split(' (')[0] : key.charAt(0).toUpperCase() + key.slice(1),
-        abbr: abbrs[key] || '',
-        keywords: defs[key].keywords,
-        definition: defs[key].definition
-    })).sort((a, b) => a.name.localeCompare(b.name));
+    const addRow = (typeKey) => {
+        const defData = defs[typeKey];
+        if (!defData) return;
 
-    entries.forEach(entry => {
+        const name = labels[typeKey] ? labels[typeKey].split(' (')[0] : typeKey;
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td><strong>${entry.name}</strong></td>
-            <td>${entry.abbr}</td>
-            <td class="keyword-cell">${entry.keywords}</td>
-            <td>${entry.definition}</td>
+            <td><strong>${name}</strong></td>
+            <td>${abbrs[typeKey] || ''}</td>
+            <td class="keyword-cell">${defData.keywords || ''}</td>
+            <td>${defData.definition}</td>
         `;
         tbody.appendChild(tr);
+    };
+
+    const addHeader = (text, isSubgroup = false) => {
+        const tr = document.createElement('tr');
+        tr.className = isSubgroup ? 'subgroup-header' : 'group-header';
+        tr.innerHTML = `<td colspan="4">${text}</td>`;
+        tbody.appendChild(tr);
+    };
+
+    hierarchy.forEach(group => {
+        addHeader(group.name);
+        if (group.types) {
+            group.types.forEach(type => addRow(type));
+        }
+        if (group.subgroups) {
+            group.subgroups.forEach(sub => {
+                addHeader(sub.name, true);
+                sub.types.forEach(type => addRow(type));
+            });
+        }
     });
 }
 
@@ -1273,59 +1267,7 @@ function makeCommentPopoverDraggableAndResizable(popover) {
   });
 }
 
-function setupReplies(popover, existingComment, idSuffix) {
-  const repliesList = popover.querySelector('.comment-replies-list');
-  const replyCountEl = popover.querySelector('.comment-replies-title');
-  if (!repliesList || !replyCountEl) return;
 
-  const updateReplies = () => {
-    const replies = existingComment.replies || [];
-    replyCountEl.textContent = `Replies (${replies.length})`;
-    repliesList.innerHTML = '';
-    replies.forEach((r, idx) => {
-      const div = document.createElement('div');
-      div.className = 'reply-item';
-      div.innerHTML = `
-        <div class="reply-meta">
-          <span class="reply-author">${escapeHtml(r.author || 'Anonymous')}</span>
-          <span class="reply-date">${new Date(r.timestamp).toLocaleDateString()}</span>
-        </div>
-        <div class="reply-text">${escapeHtml(r.text)}</div>
-        <button type="button" class="delete-reply-btn" data-idx="${idx}">Delete</button>
-      `;
-      div.querySelector('.delete-reply-btn').addEventListener('click', () => {
-        if (confirm('Delete this reply?')) {
-          DA_STATE.pushUndo('delete reply');
-          existingComment.replies.splice(idx, 1);
-          updateReplies();
-        }
-      });
-      repliesList.appendChild(div);
-    });
-  };
-
-  updateReplies();
-
-  const form = popover.querySelector('.reply-form');
-  const input = popover.querySelector('.reply-input');
-  if (form && input) {
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const text = input.value.trim();
-      if (!text) return;
-      DA_STATE.pushUndo('add reply');
-      if (!existingComment.replies) existingComment.replies = [];
-      existingComment.replies.push({
-        id: 'r_' + Date.now(),
-        text,
-        author: localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || 'Anonymous',
-        timestamp: Date.now()
-      });
-      input.value = '';
-      updateReplies();
-    });
-  }
-}
 
 
 function showCustomLabelDialog(bracketIdx, centerY, centerX, mainPicker) {
@@ -1386,5 +1328,5 @@ window.DA_UI = {
     showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings,
     openReferenceGuide, closeReferenceGuide,
     updateFontByAuthor, syncPassageAuthorDisplay, handleNewBracket, startNewBracket, parsePastedText,
-    formatBracketType, makeCommentPopoverDraggableAndResizable, setupReplies
+    formatBracketType, makeCommentPopoverDraggableAndResizable
 };

@@ -218,8 +218,8 @@ document.addEventListener('keydown', (e) => {
       if (window.renderAll) window.renderAll();
       return;
     }
-    if (DA_STATE.arrowMode && (typeof DA_STATE.pendingArrowStart !== 'undefined' && DA_STATE.pendingArrowStart !== null)) {
-      DA_STATE.pendingArrowStart = null;
+    if (DA_STATE.arrowMode && pendingArrowStart !== null) {
+      pendingArrowStart = null;
       DA_UI.showStatus('Arrow selection cancelled.', 'info');
       return;
     }
@@ -356,29 +356,9 @@ function initDelegatedListeners() {
       document.execCommand(command, false, null);
       
       // CRITICAL: Immediately harvest formatting tags so they aren't lost on the next render
-      // This mimics the focusout logic but runs instantly.
       if (textSpan) {
-        let extractedText = '';
-        let newFormatTags = [];
-        function traverse(node) {
-          if (node.nodeType === Node.TEXT_NODE) {
-            extractedText += node.textContent;
-          } else if (node.nodeType === Node.ELEMENT_NODE) {
-            if (node.tagName === 'BR') extractedText += '\n';
-            else if (node.tagName === 'DIV' && extractedText.length > 0 && !extractedText.endsWith('\n')) extractedText += '\n';
-            let start = extractedText.length;
-            node.childNodes.forEach(traverse);
-            let end = extractedText.length;
-            if (start < end) {
-              let type = null;
-              if (node.tagName === 'B' || node.tagName === 'STRONG') type = 'bold';
-              else if (node.tagName === 'U') type = 'underline';
-              if (type) newFormatTags.push({ type, propIndex: i, start, end });
-            }
-          }
-        }
-        textSpan.childNodes.forEach(traverse);
-        DA_STATE.formatTags = DA_STATE.formatTags.filter(f => f.propIndex !== i).concat(newFormatTags);
+        const result = DA_EDITOR.extractFormatTags(textSpan, i);
+        DA_STATE.formatTags = DA_STATE.formatTags.filter(f => f.propIndex !== i).concat(result.tags);
       }
       return;
     }
@@ -799,11 +779,7 @@ if (importBtn) importBtn.addEventListener('click', () => {
   DA_UI.showStatus('Imported. Double-click in text to split / single click to edit. Use nodes or verse refs for DA_STATE.brackets.', 'success');
 });
 
-// Export / Import bracket as JSON file + Recent list
-DA_PERSISTENCE.renderRecentList();
-DA_PERSISTENCE.attachFilenameObservers();
 
-// Event listeners for save/export/open are registered above (lines 155-160) — not duplicated here
 
 document.addEventListener('paste', async (e) => {
   if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
