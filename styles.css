@@ -2195,11 +2195,13 @@ body.text-edit-mode-active .verse-ref {
 }
 
 .reference-table th {
-  background-color: var(--sidebar-bg);
+  background-color: var(--bg);
   color: var(--text);
   font-weight: 600;
   position: sticky;
   top: 0;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
 .reference-table td {
