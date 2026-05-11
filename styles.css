@@ -1422,8 +1422,9 @@ body {
 
 .bracket-canvas-wrapper {
   position: relative;
-  flex: 1;
-  min-width: 560px;
+  margin: 0 auto; /* Center on widescreen */
+  width: fit-content; /* Shrink-wrap around content */
+  min-width: min-content; /* Ensure it contains brackets and text */
   min-height: 100px;
   background: var(--surface);
   border-radius: var(--radius);
@@ -1687,6 +1688,8 @@ body {
   position: relative;
   z-index: 1;
   padding: 0.25rem 1.5rem 1.5rem 1.5rem;
+  width: 900px; /* FIXED WIDTH for the content area */
+  box-sizing: content-box; /* Ensures the 900px is added to the dynamic bracket padding */
   /* Removed height: 100% to prevent vertical stretching */
 }
 
@@ -1722,6 +1725,7 @@ body {
   border: 1px solid var(--border); /* Thin-line box around proposition */
   border-radius: 6px;
   min-height: 2rem;
+  width: 100%; /* Take full width of the propositions container */
   display: flex;
   align-items: flex-start;
   transition: all 0.15s ease;
@@ -1795,7 +1799,8 @@ body.text-edit-mode-active .verse-ref {
 
 .proposition-block .proposition-text {
   outline: none;
-  white-space: pre-wrap;
+  white-space: pre-wrap; /* Preserve manual spaces/newlines but wrap long lines within the fixed-width container */
+  overflow-wrap: break-word;
 }
 
 /* Greek text (SBLGNT) - slightly larger for readability */
