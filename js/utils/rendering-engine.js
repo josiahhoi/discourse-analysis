@@ -511,8 +511,6 @@ function renderBrackets() {
   svg.innerHTML = '';
   if (DA_STATE.brackets.length === 0) return;
   
-  computeSlotAssignments();
-  
   const dots = document.querySelectorAll('.prop-dot');
   const dotPositions = Array.from(dots).map(dot => {
     const rect = dot.getBoundingClientRect();
@@ -1050,21 +1048,6 @@ function renderCommentPreviews() {
     `;
     container.appendChild(card);
   });
-}
-
-function getPointExtent(id) {
-  if (typeof id === 'number') return { from: id, to: id };
-  if (!id) return { from: 0, to: 0 };
-  const sId = id.toString();
-  if (sId.startsWith('p')) {
-      const idx = parseInt(sId.slice(1), 10);
-      return { from: idx, to: idx };
-  }
-  if (sId.startsWith('b')) {
-      const bIdx = parseInt(sId.slice(1), 10);
-      return getBracketExtent(bIdx);
-  }
-  return { from: 0, to: 0 };
 }
 
 function getPointExtent(id) {

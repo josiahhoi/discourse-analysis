@@ -94,30 +94,52 @@ function splitPropositionAtOffset(i, offset) {
   };
   
   const targetPropId = 'p' + i;
-  const referencingBrackets = DA_STATE.brackets.filter(b => b.from === targetPropId || b.to === targetPropId);
+  // Capture which brackets reference this proposition BY INDEX before shiftRef mutates them
+  const referencingIndices = [];
+  DA_STATE.brackets.forEach((b, idx) => {
+    const refersFrom = b.from === targetPropId;
+    const refersTo = b.to === targetPropId;
+    if (refersFrom || refersTo) referencingIndices.push({ idx, refersFrom, refersTo });
+  });
 
   DA_STATE.brackets.forEach(b => {
     b.from = shiftRef(b.from, i);
     b.to = shiftRef(b.to, i);
   });
 
-  if (referencingBrackets.length > 0) {
+  if (referencingIndices.length > 0) {
     const newBracketIdx = DA_STATE.brackets.length;
     DA_STATE.brackets.push({
       from: 'p' + i,
       to: 'p' + (i + 1),
       type: 'unspecified'
     });
-    referencingBrackets.forEach(b => {
-      if (b.from === targetPropId) b.from = 'b' + newBracketIdx;
-      if (b.to === targetPropId) b.to = 'b' + newBracketIdx;
+    referencingIndices.forEach(({ idx, refersFrom, refersTo }) => {
+      const b = DA_STATE.brackets[idx];
+      if (refersFrom) b.from = 'b' + newBracketIdx;
+      if (refersTo) b.to = 'b' + newBracketIdx;
     });
   }
   
   // Adjust word arrows
+  const cutLenForArrows = isCleanBreak ? (markerIndexInText + 1) : offset;
   DA_STATE.wordArrows.forEach(wa => {
-    if (wa.fromProp > i) wa.fromProp++;
-    if (wa.toProp > i) wa.toProp++;
+    // From anchor
+    if (wa.fromProp > i) {
+      wa.fromProp++;
+    } else if (wa.fromProp === i && wa.fromStart >= offset) {
+      wa.fromProp = i + 1;
+      wa.fromStart = Math.max(0, wa.fromStart - cutLenForArrows);
+      wa.fromEnd = Math.max(0, wa.fromEnd - cutLenForArrows);
+    }
+    // To anchor
+    if (wa.toProp > i) {
+      wa.toProp++;
+    } else if (wa.toProp === i && wa.toStart >= offset) {
+      wa.toProp = i + 1;
+      wa.toStart = Math.max(0, wa.toStart - cutLenForArrows);
+      wa.toEnd = Math.max(0, wa.toEnd - cutLenForArrows);
+    }
   });
 
   // Adjust comments
@@ -210,14 +232,60 @@ function mergePropositions(i) {
     b.from = unshiftRef(b.from, i);
     b.to = unshiftRef(b.to, i);
   });
+
+  // Remove degenerate brackets where from === to (e.g., auto-created brackets whose halves merged back)
+  for (let j = DA_STATE.brackets.length - 1; j >= 0; j--) {
+    const b = DA_STATE.brackets[j];
+    if (b.from === b.to) {
+      const bRef = 'b' + j;
+      // Reparent: any bracket pointing to this one should now point to its child
+      DA_STATE.brackets.forEach((other, k) => {
+        if (k === j) return;
+        if (other.from === bRef) other.from = b.from;
+        if (other.to === bRef) other.to = b.to;
+      });
+      DA_STATE.brackets.splice(j, 1);
+      // Fix shifted bN references
+      DA_STATE.brackets.forEach(other => {
+        const fix = (val) => {
+          if (typeof val === 'string' && val.startsWith('b')) {
+            const idx = parseInt(val.slice(1), 10);
+            if (idx > j) return 'b' + (idx - 1);
+          }
+          return val;
+        };
+        other.from = fix(other.from);
+        other.to = fix(other.to);
+      });
+      // Fix comment references
+      DA_STATE.comments = DA_STATE.comments.filter(c => c.type !== 'bracket' || c.target?.bracketIdx !== j);
+      DA_STATE.comments.forEach(c => {
+        if (c.type === 'bracket' && c.target?.bracketIdx > j) c.target.bracketIdx--;
+      });
+    }
+  }
   
+  const prevLen = prevText.length + 1; // +1 for the space or zero-width space added
+
   // Adjust word arrows
   DA_STATE.wordArrows.forEach(wa => {
-    if (wa.fromProp >= i) wa.fromProp--;
-    if (wa.toProp >= i) wa.toProp--;
+    // From anchor
+    if (wa.fromProp > i) {
+      wa.fromProp--;
+    } else if (wa.fromProp === i) {
+      wa.fromProp = i - 1;
+      wa.fromStart += prevLen;
+      wa.fromEnd += prevLen;
+    }
+    // To anchor
+    if (wa.toProp > i) {
+      wa.toProp--;
+    } else if (wa.toProp === i) {
+      wa.toProp = i - 1;
+      wa.toStart += prevLen;
+      wa.toEnd += prevLen;
+    }
   });
-
-  const prevLen = prevText.length + 1; // +1 for the space or zero-width space added
 
   // Adjust comments
   DA_STATE.comments.forEach(c => {

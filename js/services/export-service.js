@@ -16,7 +16,11 @@ const DA_EXPORT = {
       brackets: DA_STATE.brackets.map((a) => ({ ...a })),
       formatTags: DA_STATE.formatTags.map((t) => ({ ...t })),
       wordArrows: DA_STATE.wordArrows.map((w) => ({ ...w })),
-      comments: DA_STATE.comments.map((c) => ({ ...c })),
+      comments: DA_STATE.comments.map((c) => ({
+        ...c,
+        target: c.target ? { ...c.target } : c.target,
+        replies: c.replies ? c.replies.map(r => ({ ...r })) : []
+      })),
       copyrightLabel: document.getElementById('copyrightLabel')?.textContent || '',
       pageAuthor: (document.getElementById('pageAuthor')?.value || '').trim(),
       activeProjectId: DA_STATE.activeProjectId || null,

@@ -34,8 +34,7 @@ const reviewerNameInput = document.getElementById('reviewerName');
 const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 const openReferenceGuideBtn = document.getElementById('openReferenceGuideBtn');
 const closeReferenceBtn = document.getElementById('closeReferenceBtn');
-let arrowHighlight;
-let pendingArrowStart = null;
+// arrowHighlight and pendingArrowStart are managed on window.* by mouse-handler.js
 
 // Global Aliases for backward compatibility in legacy handlers
 window.renderAll = () => DA_RENDERER.renderAll();
@@ -58,8 +57,9 @@ function clearAllFormatting() {
     comments: [],
     formatTags: [],
     undoStack: [],
+    indentation: [],
     bracketSelectStep: 0,
-    bracketFrom: null
+    firstBracketPoint: null
   });
 }
 
@@ -103,10 +103,6 @@ if (referenceModal) {
   });
 }
 
-// Initialize arrowHighlight div
-arrowHighlight = document.createElement('div');
-arrowHighlight.className = 'word-arrow-highlight';
-document.body.appendChild(arrowHighlight);
 
 // Resize observer is set up later (line ~845) on propositionsContainer.parentElement
 
@@ -252,6 +248,8 @@ function renderAll() {
   DA_RENDERER.renderAll();
   DA_UI.restoreState(uiState);
 }
+// Override the global alias to use the wrapping version (preserves UI state)
+window.renderAll = renderAll;
 
 // Event Delegation for Propositions
 function initDelegatedListeners() {
@@ -308,24 +306,7 @@ if (importBtn) importBtn.addEventListener('click', () => {
 
 
 
-document.addEventListener('paste', async (e) => {
-  if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
-    const text = e.clipboardData.getData('text/plain');
-    if (!text.includes('DISCOURSE_DNA:')) return;
-  }
-  let encoded = null;
-  for (const type of e.clipboardData.types) {
-    const content = e.clipboardData.getData(type);
-    if (content && content.includes('DISCOURSE_DNA:')) {
-      const match = content.match(/DISCOURSE_DNA:([^"\s>]+)/);
-      if (match) { encoded = match[1]; break; }
-    }
-  }
-  if (encoded) {
-    e.preventDefault();
-    DA_PERSISTENCE.processDNA(encoded);
-  }
-});
+// Paste handler for DISCOURSE_DNA is handled by DA_PERSISTENCE.initMagicPaste()
 
 
 // Filename placeholder observers are set up in attachFilenameObservers() below
