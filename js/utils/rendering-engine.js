@@ -990,16 +990,17 @@ function renderWordArrows() {
 }
 
 function renderCommentPreviews() {
-  const container = document.getElementById('commentsPreview');
-  if (!container) return;
+  const sidebar = document.getElementById('commentsPreview');
+  const list = document.getElementById('commentsPreviewList');
+  if (!sidebar || !list) return;
 
   if (!DA_STATE.showCommentsEnabled) {
-    container.style.display = 'none';
+    sidebar.style.display = 'none';
     return;
   }
-  container.style.display = 'flex';
+  sidebar.style.display = 'flex';
   
-  const existingCards = Array.from(container.children);
+  const existingCards = Array.from(list.children);
   const targetCount = DA_STATE.comments.length;
 
   // Remove excess cards
@@ -1012,7 +1013,7 @@ function renderCommentPreviews() {
     if (!card) {
       card = document.createElement('div');
       card.className = 'comments-preview-card';
-      container.appendChild(card);
+      list.appendChild(card);
     }
     card.dataset.commentId = comment.id;
     

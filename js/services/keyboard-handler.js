@@ -258,9 +258,6 @@ window.DA_KEYBOARD = {
               
               const prevBlock = container.querySelector(`.proposition-block[data-index="${i - 1}"]`);
               const prevTextSpan = prevBlock?.querySelector('.proposition-text');
-              if (prevTextSpan) {
-                DA_STATE.propositions[i-1] = prevTextSpan.innerText;
-              }
 
               const prevLen = DA_STATE.propositions[i - 1].length;
               DA_EDITOR.mergePropositions(i);
@@ -340,7 +337,6 @@ window.DA_KEYBOARD = {
           const offset = preRange.toString().length;
           DA_EDITOR.splitPropositionAtOffset(i, offset);
           
-          textSpan.textContent = DA_STATE.propositions[i];
           if (window.renderAll) window.renderAll();
           
           requestAnimationFrame(() => {

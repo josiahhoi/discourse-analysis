@@ -1,15 +1,7 @@
 window.DA_MOUSE = {
   initWorkspaceMouseHandlers: function(propositionsContainer, bracketCanvas, wordArrowsSvg) {
     if (propositionsContainer) {
-      // Sync text changes back to state as the user types
-      propositionsContainer.addEventListener('input', (e) => {
-        const textSpan = e.target.closest('.proposition-text');
-        if (!textSpan) return;
-        const block = textSpan.closest('.proposition-block');
-        if (!block) return;
-        const i = parseInt(block.dataset.index, 10);
-        DA_STATE.propositions[i] = textSpan.innerText;
-      });
+      // Input events are handled by rendering-engine.js to schedule visual updates.
 
       propositionsContainer.addEventListener('click', (e) => {
         if (DA_STATE.selectedArrowIdx !== null && !e.target.closest('.arrow-anchor')) {
