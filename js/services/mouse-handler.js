@@ -54,7 +54,7 @@ window.DA_MOUSE = {
           window.arrowHighlight.style.width = word.rect.width + 'px';
           window.arrowHighlight.style.height = word.rect.height + 'px';
           window.arrowHighlight.style.display = 'block';
-          window.arrowHighlight.classList.toggle('pending', typeof pendingArrowStart !== 'undefined' && pendingArrowStart !== null);
+          window.arrowHighlight.classList.toggle('pending', !!window.pendingArrowStart);
         } else {
           if (window.arrowHighlight) window.arrowHighlight.style.display = 'none';
         }
@@ -230,7 +230,7 @@ window.DA_MOUSE = {
             DA_STATE.pushUndo('add reply');
             comment.replies = comment.replies || [];
             comment.replies.push({
-              author: (localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || 'Guest').trim(),
+              author: localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || 'Anonymous',
               text,
               timestamp: Date.now()
             });
@@ -276,7 +276,7 @@ window.DA_MOUSE = {
           DA_STATE.pushUndo('add reply');
           comment.replies = comment.replies || [];
           comment.replies.push({
-            author: (document.getElementById('reviewerName')?.value || 'Guest').trim(),
+            author: localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || 'Anonymous',
             text,
             createdAt: new Date().toISOString()
           });

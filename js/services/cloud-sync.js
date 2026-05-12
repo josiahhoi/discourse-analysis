@@ -20,16 +20,11 @@ async function startCloudSync() {
   } else {
     projectId = Math.random().toString(36).substring(2, 8).toUpperCase();
   }
+  const currentAuthor = (document.getElementById('pageAuthor')?.value || '').trim() || localStorage.getItem(DA_CONSTANTS.PAGE_AUTHOR_KEY) || 'Anonymous';
+  const bracketData = DA_EXPORT.buildBracketData();
   const projectData = {
-    propositions: DA_STATE.propositions,
-    verseRefs: DA_STATE.verseRefs,
-    brackets: DA_STATE.brackets,
-    formatTags: DA_STATE.formatTags,
-    wordArrows: DA_STATE.wordArrows,
-    comments: DA_STATE.comments,
-    passageRef: DA_STATE.passageRef,
-    customLabels: DA_STATE.customLabels || [],
-    author: (document.getElementById('pageAuthor')?.value || '').trim() || localStorage.getItem(DA_CONSTANTS.PAGE_AUTHOR_KEY) || 'Anonymous',
+    ...bracketData,
+    author: currentAuthor,
     lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
   };
 
@@ -121,15 +116,9 @@ async function syncToCloud() {
   const pageAuthorInput = document.getElementById('pageAuthor');
   const currentAuthor = (pageAuthorInput?.value || '').trim() || 'Anonymous';
 
+  const bracketData = DA_EXPORT.buildBracketData();
   const projectData = {
-    propositions: DA_STATE.propositions,
-    verseRefs: DA_STATE.verseRefs,
-    brackets: DA_STATE.brackets,
-    formatTags: DA_STATE.formatTags,
-    wordArrows: DA_STATE.wordArrows,
-    comments: DA_STATE.comments,
-    passageRef: DA_STATE.passageRef,
-    customLabels: DA_STATE.customLabels || [],
+    ...bracketData,
     author: currentAuthor,
     lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
   };

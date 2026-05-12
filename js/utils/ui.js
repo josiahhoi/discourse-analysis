@@ -1073,7 +1073,7 @@ function startNewBracket() {
     indentation: [],
     undoStack: [],
     bracketSelectStep: 0,
-    bracketFrom: null,
+
     firstBracketPoint: null,
     connectBracketToBracketIdx: null,
     arrowMode: false,

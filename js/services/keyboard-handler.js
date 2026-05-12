@@ -25,14 +25,9 @@ window.DA_KEYBOARD = {
           if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
           return;
         }
-        if (DA_STATE.arrowMode && typeof pendingArrowStart !== 'undefined' && pendingArrowStart !== null) {
-          // This modifies a global variable pendingArrowStart inside app.js if it's declared globally, 
-          // but we should probably expose a setter or just reset state.
-          // Wait, pendingArrowStart is currently scoped to app.js. 
-          // We will move pendingArrowStart to DA_STATE or expose it.
-          // For now, we'll try to reset it using DA_MODES or DA_STATE if possible.
-          DA_STATE.arrowMode = false;
-          if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
+        if (DA_STATE.arrowMode && window.pendingArrowStart) {
+          window.pendingArrowStart = null;
+          if (window.arrowHighlight) window.arrowHighlight.style.display = 'none';
           DA_UI.showStatus('Arrow selection cancelled.', 'info');
           return;
         }
@@ -77,7 +72,8 @@ window.DA_KEYBOARD = {
 
       // Delete/Backspace globally
       if (e.key === 'Backspace' || e.key === 'Delete') {
-        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+        const activeNode = document.activeElement;
+        if (activeNode.tagName === 'INPUT' || activeNode.tagName === 'TEXTAREA' || activeNode.isContentEditable) return;
 
         if (DA_STATE.selectedArrowIdx !== null && DA_STATE.selectedArrowIdx < DA_STATE.wordArrows.length) {
           DA_STATE.pushUndo('delete arrow');
