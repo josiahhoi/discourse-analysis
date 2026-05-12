@@ -92,10 +92,27 @@ function splitPropositionAtOffset(i, offset) {
     }
     return ref;
   };
+  
+  const targetPropId = 'p' + i;
+  const referencingBrackets = DA_STATE.brackets.filter(b => b.from === targetPropId || b.to === targetPropId);
+
   DA_STATE.brackets.forEach(b => {
     b.from = shiftRef(b.from, i);
     b.to = shiftRef(b.to, i);
   });
+
+  if (referencingBrackets.length > 0) {
+    const newBracketIdx = DA_STATE.brackets.length;
+    DA_STATE.brackets.push({
+      from: 'p' + i,
+      to: 'p' + (i + 1),
+      type: 'unspecified'
+    });
+    referencingBrackets.forEach(b => {
+      if (b.from === targetPropId) b.from = 'b' + newBracketIdx;
+      if (b.to === targetPropId) b.to = 'b' + newBracketIdx;
+    });
+  }
   
   // Adjust word arrows
   DA_STATE.wordArrows.forEach(wa => {
