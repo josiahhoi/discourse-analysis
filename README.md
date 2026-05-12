@@ -42,8 +42,8 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 
 ### Desktop (Recommended)
 1. Download the latest release for your platform from the `dist/` folder or the Releases page.
-   - **Windows**: `Discourse Analysis 2.7.1 x64 Portable.exe` (No installation required)
-   - **macOS**: `Discourse Analysis-2.7.1-arm64-mac.zip`
+   - **Windows**: `Discourse Analysis 2.7.2 x64 Portable.exe` (No installation required)
+   - **macOS**: `Discourse Analysis-2.7.2-arm64-mac.zip`
 2. Run the application directly.
 
 ### Web / Development
@@ -112,6 +112,9 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 - **Libraries**: `html2canvas` and `jsPDF` for exports, `LZ-String` for data compression.
 
 ## Changelog
+
+### Version 2.7.2
+- **Maintenance Update**: Finalized color-coding and UI streamline fixes.
 
 ### Version 2.7.1
 - **Color-Coding**: Highlight text and right-click to color-code words.
