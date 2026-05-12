@@ -384,11 +384,25 @@ function showTextContextMenu(propIndex, start, end, centerY, centerX, anchorRect
   const existing = document.getElementById('textContextMenu');
   if (existing) existing.remove();
 
+  const colors = [
+    { val: '#E53935', name: 'Red' },
+    { val: '#1E88E5', name: 'Blue' },
+    { val: '#43A047', name: 'Green' },
+    { val: '#FB8C00', name: 'Orange' },
+    { val: '#8E24AA', name: 'Purple' }
+  ];
+
   const menu = document.createElement('div');
   menu.id = 'textContextMenu';
   menu.className = 'context-menu';
   menu.innerHTML = `
     <div class="menu-item" data-action="add-comment">Add Comment</div>
+    <div class="menu-divider"></div>
+    <div class="color-palette-title">Color Code</div>
+    <div class="color-palette">
+      ${colors.map(c => `<button class="color-swatch" data-color="${c.val}" title="${c.name}" style="background-color: ${c.val}"></button>`).join('')}
+      <button class="color-swatch clear-color" data-color="clear" title="Clear Color">✕</button>
+    </div>
   `;
 
   menu.style.left = `${centerX}px`;
@@ -399,6 +413,27 @@ function showTextContextMenu(propIndex, start, end, centerY, centerX, anchorRect
     e.stopPropagation();
     menu.remove();
     showCommentPopoverForText(propIndex, start, end, null, { anchorRect });
+  });
+
+  menu.querySelectorAll('.color-swatch').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const color = btn.dataset.color;
+      
+      DA_STATE.pushUndo('color text');
+      
+      // Remove any overlapping color tags
+      DA_STATE.formatTags = DA_STATE.formatTags.filter(t => 
+        !(t.type === 'color' && t.propIndex === propIndex && t.start === start && t.end === end)
+      );
+      
+      if (color !== 'clear') {
+        DA_STATE.formatTags.push({ propIndex, start, end, type: 'color', color });
+      }
+      
+      menu.remove();
+      if (window.renderAll) window.renderAll();
+    });
   });
 
   setupClickOutside(menu, () => menu.remove());

@@ -403,6 +403,12 @@ function appendChunk(textSpan, chunk, startPos, propIdx, activeTags, allTags) {
       const el = document.createElement(t.type === 'underline' ? 'u' : 'b');
       if (!wrapper) wrapper = currentInner = el;
       else { currentInner.appendChild(el); currentInner = el; }
+    } else if (t.type === 'color') {
+      const el = document.createElement('span');
+      el.className = 'color-text';
+      el.style.color = t.tag.color;
+      if (!wrapper) wrapper = currentInner = el;
+      else { currentInner.appendChild(el); currentInner = el; }
     }
   });
   activeIds.forEach(id => {

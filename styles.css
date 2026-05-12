@@ -2420,6 +2420,59 @@ body.text-edit-mode-active .verse-ref {
   border-top: 1px solid var(--border);
 }
 
+.menu-divider {
+  margin: 0.4rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.color-palette-title {
+  padding: 0.2rem 1rem 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.color-palette {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0 1rem 0.5rem;
+  align-items: center;
+}
+
+.color-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.2s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.color-swatch:hover {
+  transform: scale(1.15);
+  border-color: var(--text);
+}
+
+.color-swatch.clear-color {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.color-text {
+  /* color property is applied inline */
+  font-weight: 500;
+}
+
 .arrow-anchor.active-anchor,
 .arrow-anchor.hover-anchor {
   background-color: var(--surface-elevated);
