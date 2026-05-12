@@ -494,7 +494,9 @@ function processDNA(encoded) {
   }
 }
 
-async function saveBracket() {
+let _currentFileHandle = null;
+
+async function saveBracket(forceSaveAs = false) {
   if (DA_STATE.propositions.length === 0) {
     DA_UI.showStatus('Nothing to save.', 'error');
     return;
@@ -505,12 +507,14 @@ async function saveBracket() {
 
   try {
     if (!isLocalFile && 'showSaveFilePicker' in window) {
-      const name = `${getExportFilename()}.json`;
-      const handle = await window.showSaveFilePicker({
-        suggestedName: name,
-        types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
-      });
-      const writable = await handle.createWritable();
+      if (forceSaveAs || !_currentFileHandle) {
+        const name = `${getExportFilename()}.json`;
+        _currentFileHandle = await window.showSaveFilePicker({
+          suggestedName: name,
+          types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+        });
+      }
+      const writable = await _currentFileHandle.createWritable();
       await writable.write(json);
       await writable.close();
       addToRecent(data);

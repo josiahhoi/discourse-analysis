@@ -157,8 +157,8 @@ if (toggleCommentsBtn) {
 // Sidebar Buttons
 if (newBracketBtn) newBracketBtn.addEventListener('click', DA_UI.handleNewBracket);
 if (openMenuBtn) openMenuBtn.addEventListener('click', DA_UI.showOpenMenu);
-if (saveBtn) saveBtn.addEventListener('click', () => DA_PERSISTENCE.saveBracket());
-if (saveAsBtn) saveAsBtn.addEventListener('click', () => DA_PERSISTENCE.saveBracket());
+if (saveBtn) saveBtn.addEventListener('click', () => DA_PERSISTENCE.saveBracket(false));
+if (saveAsBtn) saveAsBtn.addEventListener('click', () => DA_PERSISTENCE.saveBracket(true));
 if (exportMenuBtn) exportMenuBtn.addEventListener('click', DA_UI.showExportMenu);
 if (clearBracketsBtn) clearBracketsBtn.addEventListener('click', () => {
   if (confirm('Clear all brackets and formatting?')) {

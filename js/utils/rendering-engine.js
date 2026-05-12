@@ -993,16 +993,21 @@ function renderCommentPreviews() {
   const container = document.getElementById('commentsPreview');
   if (!container) return;
   
-  container.innerHTML = '';
-  if (!DA_STATE.showCommentsEnabled) {
-    container.style.display = 'none';
-    return;
-  }
-  container.style.display = 'block';
+  const existingCards = Array.from(container.children);
+  const targetCount = DA_STATE.comments.length;
 
-  DA_STATE.comments.forEach(comment => {
-    const card = document.createElement('div');
-    card.className = 'comments-preview-card';
+  // Remove excess cards
+  while (existingCards.length > targetCount) {
+    existingCards.pop().remove();
+  }
+
+  DA_STATE.comments.forEach((comment, i) => {
+    let card = existingCards[i];
+    if (!card) {
+      card = document.createElement('div');
+      card.className = 'comments-preview-card';
+      container.appendChild(card);
+    }
     card.dataset.commentId = comment.id;
     
     const chapterMatch = (DA_STATE.passageRef || '').match(/(\d+):/);
@@ -1027,7 +1032,7 @@ function renderCommentPreviews() {
       targetDesc = `Bracket (${fullRef}): ${b ? formatBracketType(b.type) : 'Unknown'}`;
     }
 
-    card.innerHTML = `
+    const newHtml = `
       <div class="comment-card-header">
         <span class="comment-target">${DA_UI.escapeHtml(targetDesc)}</span>
       </div>
@@ -1046,7 +1051,11 @@ function renderCommentPreviews() {
         <button class="send-reply-btn" data-id="${comment.id}" title="Send reply">→</button>
       </div>
     `;
-    container.appendChild(card);
+    
+    if (card._lastHtml !== newHtml) {
+      card.innerHTML = newHtml;
+      card._lastHtml = newHtml;
+    }
   });
 }
 
