@@ -992,6 +992,12 @@ function renderWordArrows() {
 function renderCommentPreviews() {
   const container = document.getElementById('commentsPreview');
   if (!container) return;
+
+  if (!DA_STATE.showCommentsEnabled) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'flex';
   
   const existingCards = Array.from(container.children);
   const targetCount = DA_STATE.comments.length;
