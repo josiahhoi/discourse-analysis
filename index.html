@@ -218,6 +218,79 @@
     </div>
   </div>
 
+  <!-- UI Templates -->
+  <template id="commentPopoverTemplate">
+    <div class="popover-header">
+      <span class="popover-title"></span>
+      <div class="header-actions">
+        <button class="close-btn icon-btn" title="Close">&times;</button>
+      </div>
+    </div>
+    <div class="popover-body">
+      <!-- Comment Display / Edit -->
+      <div class="comment-display" style="display:none">
+        <div class="comment-meta">
+          <div class="meta-left">
+            <span class="comment-author"></span>
+            <span class="comment-time"></span>
+          </div>
+          <div class="action-buttons">
+            <button class="edit-btn action-btn">Edit</button>
+            <button class="delete-btn action-btn">Delete</button>
+          </div>
+        </div>
+        <div class="comment-text"></div>
+      </div>
+      <div class="comment-edit-area" style="display:none">
+        <textarea placeholder="Edit comment..."></textarea>
+        <div class="edit-actions">
+          <button class="save-btn">Save</button>
+          <button class="cancel-btn">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Replies Section -->
+      <div class="replies-section" style="display:none">
+        <div class="replies-list"></div>
+        <div class="reply-input-row">
+          <input type="text" class="reply-input" placeholder="Reply...">
+          <button class="send-reply-btn" title="Send reply">→</button>
+        </div>
+      </div>
+
+      <!-- New Comment Area -->
+      <div class="new-comment-area" style="display:none">
+        <textarea placeholder="Add a comment..."></textarea>
+        <div class="comment-actions">
+          <button class="save-new-btn">Add Comment</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <template id="replyItemTemplate">
+    <div class="reply-item">
+      <div class="comment-meta">
+        <div class="meta-left">
+          <span class="comment-author"></span>
+          <span class="comment-time"></span>
+        </div>
+        <div class="action-buttons">
+          <button class="edit-reply-btn action-btn">Edit</button>
+          <button class="delete-reply-btn action-btn">Delete</button>
+        </div>
+      </div>
+      <div class="comment-text"></div>
+      <div class="reply-edit-area" style="display:none">
+        <textarea></textarea>
+        <div class="edit-actions">
+          <button class="save-reply-btn">Save</button>
+          <button class="cancel-reply-btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>

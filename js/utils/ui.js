@@ -87,10 +87,12 @@ function showCommentPopover(config) {
     : { type: 'text', propIndex, start, end };
   if (window.renderAll) window.renderAll();
 
+  const template = document.getElementById('commentPopoverTemplate');
   const popover = document.createElement('div');
   popover.id = 'commentPopover';
   popover.className = 'comment-popover';
   popover.style.width = '640px'; 
+  popover.appendChild(template.content.cloneNode(true));
   
   let comment = existingCommentId ? DA_STATE.comments.find(c => c.id === existingCommentId) : null;
   
@@ -121,75 +123,73 @@ function showCommentPopover(config) {
     targetDesc = `${fullRef}: "${snippet}"`;
   }
 
+  popover.querySelector('.popover-title').textContent = targetDesc;
+
   const renderContent = () => {
-    popover.innerHTML = `
-      <div class="popover-header">
-        <span class="popover-title">${escapeHtml(targetDesc)}</span>
-        <div class="header-actions">
-          <button class="close-btn icon-btn" title="Close">&times;</button>
-        </div>
-      </div>
-      <div class="popover-body">
-        ${comment ? `
-          <div class="comment-display">
-            <div class="comment-meta">
-              <div class="meta-left">
-                <span class="comment-author">${escapeHtml(comment.author || 'Anonymous')}</span>
-                <span class="comment-time">${formatDate(comment.timestamp || comment.createdAt)}</span>
-              </div>
-              <div class="action-buttons">
-                <button class="edit-btn action-btn">Edit</button>
-                <button class="delete-btn action-btn">Delete</button>
-              </div>
-            </div>
-            <div class="comment-text">${escapeHtml(comment.text)}</div>
-          </div>
-          <div class="comment-edit-area" style="display:none">
-            <textarea placeholder="Edit comment...">${escapeHtml(comment.text)}</textarea>
-            <div class="edit-actions">
-              <button class="save-btn">Save</button>
-              <button class="cancel-btn">Cancel</button>
-            </div>
-          </div>
-          <div class="replies-section">
-            <div class="replies-list">
-              ${(comment.replies || []).map((r, rIdx) => `
-                <div class="reply-item" data-idx="${rIdx}">
-                  <div class="comment-meta">
-                    <div class="meta-left">
-                      <span class="comment-author">${escapeHtml(r.author)}</span>
-                      <span class="comment-time">${formatDate(r.timestamp || r.createdAt)}</span>
-                    </div>
-                    <div class="action-buttons">
-                      <button class="edit-reply-btn action-btn">Edit</button>
-                      <button class="delete-reply-btn action-btn">Delete</button>
-                    </div>
-                  </div>
-                  <div class="comment-text">${escapeHtml(r.text)}</div>
-                  <div class="reply-edit-area" style="display:none">
-                    <textarea>${escapeHtml(r.text)}</textarea>
-                    <div class="edit-actions">
-                      <button class="save-reply-btn">Save</button>
-                      <button class="cancel-reply-btn">Cancel</button>
-                    </div>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-            <div class="reply-input-row">
-              <input type="text" class="reply-input" placeholder="Reply...">
-              <button class="send-reply-btn" title="Send reply">→</button>
-            </div>
-          </div>
-        ` : `
-          <textarea placeholder="Add a comment..."></textarea>
-          <div class="comment-actions">
-            <button class="save-new-btn">Add Comment</button>
-          </div>
-        `}
-      </div>
-    `;
-    attachListeners();
+    const displayArea = popover.querySelector('.comment-display');
+    const newArea = popover.querySelector('.new-comment-area');
+    const repliesSection = popover.querySelector('.replies-section');
+
+    if (comment) {
+      displayArea.style.display = 'block';
+      newArea.style.display = 'none';
+      repliesSection.style.display = 'block';
+
+      popover.querySelector('.comment-author').textContent = comment.author || 'Anonymous';
+      popover.querySelector('.comment-time').textContent = formatDate(comment.timestamp || comment.createdAt);
+      popover.querySelector('.comment-text').textContent = comment.text;
+      popover.querySelector('.comment-edit-area textarea').value = comment.text;
+
+      const repliesList = popover.querySelector('.replies-list');
+      repliesList.innerHTML = '';
+      const replyTemplate = document.getElementById('replyItemTemplate');
+
+      (comment.replies || []).forEach((r, rIdx) => {
+        const replyEl = replyTemplate.content.cloneNode(true).querySelector('.reply-item');
+        replyEl.dataset.idx = rIdx;
+        replyEl.querySelector('.comment-author').textContent = r.author || 'Anonymous';
+        replyEl.querySelector('.comment-time').textContent = formatDate(r.timestamp || r.createdAt);
+        replyEl.querySelector('.comment-text').textContent = r.text;
+        replyEl.querySelector('textarea').value = r.text;
+
+        const rDisplay = replyEl.querySelector('.comment-text');
+        const rEditArea = replyEl.querySelector('.reply-edit-area');
+
+        replyEl.querySelector('.edit-reply-btn').onclick = () => {
+          rDisplay.style.display = 'none';
+          rEditArea.style.display = 'block';
+        };
+
+        replyEl.querySelector('.cancel-reply-btn').onclick = () => {
+          rDisplay.style.display = 'block';
+          rEditArea.style.display = 'none';
+        };
+
+        replyEl.querySelector('.save-reply-btn').onclick = () => {
+          const newText = rEditArea.querySelector('textarea').value.trim();
+          if (!newText) return;
+          DA_STATE.pushUndo('edit reply');
+          r.text = newText;
+          r.timestamp = Date.now();
+          renderContent();
+          if (window.renderAll) window.renderAll();
+        };
+
+        replyEl.querySelector('.delete-reply-btn').onclick = () => {
+          if (!confirm('Delete this reply?')) return;
+          DA_STATE.pushUndo('delete reply');
+          comment.replies.splice(rIdx, 1);
+          renderContent();
+          if (window.renderAll) window.renderAll();
+        };
+
+        repliesList.appendChild(replyEl);
+      });
+    } else {
+      displayArea.style.display = 'none';
+      repliesSection.style.display = 'none';
+      newArea.style.display = 'block';
+    }
   };
 
   const attachListeners = () => {
@@ -199,116 +199,81 @@ function showCommentPopover(config) {
       popover.remove();
     };
 
-    if (!comment) {
-      popover.querySelector('.save-new-btn').onclick = () => {
-        const text = popover.querySelector('textarea').value.trim();
-        if (!text) return;
-        DA_STATE.pushUndo('add comment');
-        const newComment = {
-          id: Date.now().toString(),
-          author: localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || 'Anonymous',
-          text,
-          timestamp: Date.now(),
-          type: isBracket ? 'bracket' : 'text',
-          target: isBracket ? { bracketIdx } : { propIndex, start, end },
-          replies: []
-        };
-        DA_STATE.comments.push(newComment);
-        comment = newComment;
-        renderContent();
-        if (window.renderAll) window.renderAll();
+    popover.querySelector('.save-new-btn').onclick = () => {
+      const text = popover.querySelector('.new-comment-area textarea').value.trim();
+      if (!text) return;
+      DA_STATE.pushUndo('add comment');
+      const newComment = {
+        id: Date.now().toString(),
+        author: localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || 'Anonymous',
+        text,
+        timestamp: Date.now(),
+        type: isBracket ? 'bracket' : 'text',
+        target: isBracket ? { bracketIdx } : { propIndex, start, end },
+        replies: []
       };
-    } else {
-      const display = popover.querySelector('.comment-display');
-      const editArea = popover.querySelector('.comment-edit-area');
-      
-      popover.querySelector('.edit-btn').onclick = () => {
-        display.style.display = 'none';
-        editArea.style.display = 'block';
-      };
-      
-      popover.querySelector('.cancel-btn').onclick = () => {
-        display.style.display = 'block';
-        editArea.style.display = 'none';
-      };
-      
-      popover.querySelector('.save-btn').onclick = () => {
-        const text = editArea.querySelector('textarea').value.trim();
-        if (!text) return;
-        DA_STATE.pushUndo('edit comment');
-        comment.text = text;
-        comment.timestamp = Date.now();
-        renderContent();
-        if (window.renderAll) window.renderAll();
-      };
-      
-      popover.querySelector('.delete-btn').onclick = () => {
-        if (!confirm('Delete this comment?')) return;
-        DA_STATE.pushUndo('delete comment');
-        DA_STATE.comments = DA_STATE.comments.filter(c => c.id !== comment.id);
-        DA_STATE.activeCommentTarget = null;
-        popover.remove();
-        if (window.renderAll) window.renderAll();
-      };
-      
-      const replyInput = popover.querySelector('.reply-input');
-      const sendBtn = popover.querySelector('.send-reply-btn');
-      
-      const submitReply = () => {
-        const text = replyInput.value.trim();
-        if (!text) return;
-        DA_STATE.pushUndo('reply to comment');
-        comment.replies = comment.replies || [];
-        comment.replies.push({
-          author: localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || 'Anonymous',
-          text,
-          timestamp: Date.now()
-        });
-        renderContent();
-        if (window.renderAll) window.renderAll();
-      };
+      DA_STATE.comments.push(newComment);
+      comment = newComment;
+      renderContent();
+      if (window.renderAll) window.renderAll();
+    };
 
-      if (sendBtn) sendBtn.onclick = submitReply;
-      if (replyInput) {
-        replyInput.onkeydown = (e) => {
-          if (e.key === 'Enter') submitReply();
-        };
-      }
-
-      popover.querySelectorAll('.reply-item').forEach(item => {
-        const idx = parseInt(item.dataset.idx, 10);
-        const reply = comment.replies[idx];
-        const rDisplay = item.querySelector('.comment-text');
-        const rEditArea = item.querySelector('.reply-edit-area');
-
-        item.querySelector('.edit-reply-btn').onclick = () => {
-          rDisplay.style.display = 'none';
-          rEditArea.style.display = 'block';
-        };
-
-        item.querySelector('.cancel-reply-btn').onclick = () => {
-          rDisplay.style.display = 'block';
-          rEditArea.style.display = 'none';
-        };
-
-        item.querySelector('.save-reply-btn').onclick = () => {
-          const newText = rEditArea.querySelector('textarea').value.trim();
-          if (!newText) return;
-          DA_STATE.pushUndo('edit reply');
-          reply.text = newText;
-          reply.timestamp = Date.now();
-          renderContent();
-          if (window.renderAll) window.renderAll();
-        };
-
-        item.querySelector('.delete-reply-btn').onclick = () => {
-          if (!confirm('Delete this reply?')) return;
-          DA_STATE.pushUndo('delete reply');
-          comment.replies.splice(idx, 1);
-          renderContent();
-          if (window.renderAll) window.renderAll();
-        };
+    const display = popover.querySelector('.comment-display');
+    const editArea = popover.querySelector('.comment-edit-area');
+    
+    popover.querySelector('.edit-btn').onclick = () => {
+      display.style.display = 'none';
+      editArea.style.display = 'block';
+    };
+    
+    popover.querySelector('.cancel-btn').onclick = () => {
+      display.style.display = 'block';
+      editArea.style.display = 'none';
+    };
+    
+    popover.querySelector('.save-btn').onclick = () => {
+      const text = editArea.querySelector('textarea').value.trim();
+      if (!text) return;
+      DA_STATE.pushUndo('edit comment');
+      comment.text = text;
+      comment.timestamp = Date.now();
+      editArea.style.display = 'none';
+      renderContent();
+      if (window.renderAll) window.renderAll();
+    };
+    
+    popover.querySelector('.delete-btn').onclick = () => {
+      if (!confirm('Delete this comment?')) return;
+      DA_STATE.pushUndo('delete comment');
+      DA_STATE.comments = DA_STATE.comments.filter(c => c.id !== comment.id);
+      DA_STATE.activeCommentTarget = null;
+      popover.remove();
+      if (window.renderAll) window.renderAll();
+    };
+    
+    const replyInput = popover.querySelector('.reply-input');
+    const sendBtn = popover.querySelector('.send-reply-btn');
+    
+    const submitReply = () => {
+      const text = replyInput.value.trim();
+      if (!text) return;
+      DA_STATE.pushUndo('reply to comment');
+      comment.replies = comment.replies || [];
+      comment.replies.push({
+        author: localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || 'Anonymous',
+        text,
+        timestamp: Date.now()
       });
+      replyInput.value = '';
+      renderContent();
+      if (window.renderAll) window.renderAll();
+    };
+
+    if (sendBtn) sendBtn.onclick = submitReply;
+    if (replyInput) {
+      replyInput.onkeydown = (e) => {
+        if (e.key === 'Enter') submitReply();
+      };
     }
   };
 
@@ -321,7 +286,9 @@ function showCommentPopover(config) {
   popover.style.top = '28%';
   popover.style.transform = 'translateX(-50%)';
 
+  attachListeners();
   renderContent();
+  
   wrapper.appendChild(popover);
   makePopupDraggable(popover, '.popover-header');
   if (typeof makeCommentPopoverDraggableAndResizable === 'function') {
