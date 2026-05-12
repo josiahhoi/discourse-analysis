@@ -11,11 +11,10 @@ window.DA_MOUSE = {
         DA_STATE.propositions[i] = textSpan.innerText;
       });
 
-      // Prop dot clicks and comment highlights
       propositionsContainer.addEventListener('click', (e) => {
         if (DA_STATE.selectedArrowIdx !== null && !e.target.closest('.arrow-anchor')) {
           DA_STATE.selectedArrowIdx = null;
-          if (window.renderAll) window.renderAll();
+          if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
         }
 
         const block = e.target.closest('.proposition-block');
@@ -89,7 +88,7 @@ window.DA_MOUSE = {
             toEnd: word.end
           });
           window.pendingArrowStart = null;
-          if (window.renderAll) window.renderAll();
+          if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
           DA_UI.showStatus('Arrow created.', 'success');
         }
       });
@@ -174,12 +173,12 @@ window.DA_MOUSE = {
           const i = parseInt(group.dataset.index, 10);
           if (!isNaN(i)) {
             DA_STATE.selectedArrowIdx = (DA_STATE.selectedArrowIdx === i) ? null : i;
-            if (window.renderAll) window.renderAll();
+            if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
           }
         } else {
           if (DA_STATE.selectedArrowIdx !== null) {
             DA_STATE.selectedArrowIdx = null;
-            if (window.renderAll) window.renderAll();
+            if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
           }
         }
       });

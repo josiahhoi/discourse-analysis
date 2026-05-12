@@ -39,6 +39,7 @@ let pendingArrowStart = null;
 
 // Global Aliases for backward compatibility in legacy handlers
 window.renderAll = () => DA_RENDERER.renderAll();
+window.scheduleVisualUpdate = () => DA_RENDERER.scheduleVisualUpdate();
 window.updateBracketPositions = () => DA_RENDERER.updateBracketPositions();
 window.saveBracket = () => DA_PERSISTENCE.saveBracket();
 

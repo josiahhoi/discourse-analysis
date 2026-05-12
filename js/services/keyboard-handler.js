@@ -22,7 +22,7 @@ window.DA_KEYBOARD = {
           DA_UI.clearPropositionHighlights();
           document.getElementById('bracketCanvas')?.classList.remove('connect-mode');
           DA_UI.showStatus('Bracket selection cancelled.', 'info');
-          if (window.renderAll) window.renderAll();
+          if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
           return;
         }
         if (DA_STATE.arrowMode && typeof pendingArrowStart !== 'undefined' && pendingArrowStart !== null) {
@@ -32,7 +32,7 @@ window.DA_KEYBOARD = {
           // We will move pendingArrowStart to DA_STATE or expose it.
           // For now, we'll try to reset it using DA_MODES or DA_STATE if possible.
           DA_STATE.arrowMode = false;
-          if (window.renderAll) window.renderAll();
+          if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
           DA_UI.showStatus('Arrow selection cancelled.', 'info');
           return;
         }
@@ -70,7 +70,7 @@ window.DA_KEYBOARD = {
 
         if (DA_STATE.selectedArrowIdx !== null) {
           DA_STATE.selectedArrowIdx = null;
-          if (window.renderAll) window.renderAll();
+          if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
           return;
         }
       }
@@ -83,7 +83,7 @@ window.DA_KEYBOARD = {
           DA_STATE.pushUndo('delete arrow');
           DA_STATE.wordArrows.splice(DA_STATE.selectedArrowIdx, 1);
           DA_STATE.selectedArrowIdx = null;
-          if (window.renderAll) window.renderAll();
+          if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
           DA_UI.showStatus('Arrow removed.', 'success');
         }
       }
