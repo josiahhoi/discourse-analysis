@@ -70,7 +70,7 @@ window.DA_KEYBOARD = {
 
         if (DA_STATE.selectedArrowIdx !== null) {
           DA_STATE.selectedArrowIdx = null;
-          if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
+          if (window.renderAll) window.renderAll();
           return;
         }
       }
@@ -83,7 +83,7 @@ window.DA_KEYBOARD = {
           DA_STATE.pushUndo('delete arrow');
           DA_STATE.wordArrows.splice(DA_STATE.selectedArrowIdx, 1);
           DA_STATE.selectedArrowIdx = null;
-          if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
+          if (window.renderAll) window.renderAll();
           DA_UI.showStatus('Arrow removed.', 'success');
         }
       }

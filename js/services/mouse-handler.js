@@ -14,7 +14,7 @@ window.DA_MOUSE = {
       propositionsContainer.addEventListener('click', (e) => {
         if (DA_STATE.selectedArrowIdx !== null && !e.target.closest('.arrow-anchor')) {
           DA_STATE.selectedArrowIdx = null;
-          if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
+          if (window.renderAll) window.renderAll();
         }
 
         const block = e.target.closest('.proposition-block');
@@ -88,7 +88,7 @@ window.DA_MOUSE = {
             toEnd: word.end
           });
           window.pendingArrowStart = null;
-          if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
+          if (window.renderAll) window.renderAll();
           DA_UI.showStatus('Arrow created.', 'success');
         }
       });
@@ -173,12 +173,12 @@ window.DA_MOUSE = {
           const i = parseInt(group.dataset.index, 10);
           if (!isNaN(i)) {
             DA_STATE.selectedArrowIdx = (DA_STATE.selectedArrowIdx === i) ? null : i;
-            if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
+            if (window.renderAll) window.renderAll();
           }
         } else {
           if (DA_STATE.selectedArrowIdx !== null) {
             DA_STATE.selectedArrowIdx = null;
-            if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
+            if (window.renderAll) window.renderAll();
           }
         }
       });
