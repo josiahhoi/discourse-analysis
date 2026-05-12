@@ -15,7 +15,7 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 
 ### 2. The Bracketing & Structural Engine
 - **18+ Logical Relationships**: Full support for the standard discourse analysis hierarchy, including specialized Gurtner types like **Both-And (B-A)**, **Anticipation-Fulfillment (An/Fl)**, and **General-Specific (Gen/Sp)**.
-- **Switch Stars (Dominance Marking)**: Instantly swap the logical dominance (the asterisk `*`) between bracket ends via double-click or the relationship picker.
+- **Switch Stars (Dominance Marking)**: Instantly swap the logical dominance (the asterisk `*`) between bracket ends via the bracket context menu.
 - **Nomenclature "Modes"**:
     - **Standard**: Classic abbreviations (G, S, Ac/Res).
     - **Dan Gurtner Mode**: Academic preset with specialized nomenclature (e.g., Means-End, Way-End) and Iowan Old Style typography.
@@ -23,11 +23,12 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 - **Structural Folding (Nesting)**: Collapse complex sub-structures into a single summary label to simplify large-scale diagrams.
 - **Dynamic Re-parenting**: Automatically adjusts parent-child relationships when grouping existing bracketed structures.
 - **Integrity Validation**: Real-time enforcement of "No Crossing" and "Adjacency" rules.
-- **Right-Click Context Menus**: Native right-click functionality on brackets and text for quick access to folding, comments, and deletion.
+- **Right-Click Context Menus**: Native right-click functionality on brackets for quick access to folding, swapping, and deletion. Right-click on text to add comments or color-code words.
 
 ### 3. Collaboration & Synchronization
 - **Real-time Cloud Sync**: Join live sessions via a 6-digit Project ID powered by Firebase.
-- **Threaded Commenting**: Attach notes to text spans or specific bracket arms with support for replies and reviewer identification.
+- **Threaded Commenting**: Attach notes to text spans or specific bracket arms via right-click, with support for replies and reviewer identification.
+- **Word Color-Coding**: Highlight words and right-click to apply color formatting.
 - **Word Arrows**: Draw orthogonal (90-degree) arrows between specific words to show grammatical or lexical connections.
 
 ### 4. Persistence & Metadata "Stenography"
@@ -41,8 +42,8 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 
 ### Desktop (Recommended)
 1. Download the latest release for your platform from the `dist/` folder or the Releases page.
-   - **Windows**: `Discourse Analysis 2.6.0 x64 Portable.exe` (No installation required)
-   - **macOS**: `Discourse Analysis-2.6.0-arm64-mac.zip`
+   - **Windows**: `Discourse Analysis 2.7.1 x64 Portable.exe` (No installation required)
+   - **macOS**: `Discourse Analysis-2.7.1-arm64-mac.zip`
 2. Run the application directly.
 
 ### Web / Development
@@ -61,14 +62,14 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 - **Pro-tip**: Press **Enter** inside a proposition block to split it into two at your cursor.
 
 ### 2. Draw Logic Brackets
-- Select a relationship type (e.g., Ground, Series) from the sidebar.
 - Click the first proposition dot, then the second.
-- A bracket is drawn. **Double-click** a bracket to change its relationship or **Double-click** a label to switch dominance (the asterisk).
-- **Right-click** a bracket to delete it.
+- A bracket is drawn and a **Relationship Picker** pops up.
+- **Click** a bracket to change its relationship. 
+- **Right-click** a bracket to open the options menu (Delete, Swap Labels, Switch Stars).
 
-### 3. Word Arrows & Comments
+### 3. Word Arrows, Comments, & Colors
 - Toggle **Add Arrows** mode to draw orthogonal arrows between words.
-- Toggle **Comment** mode to add notes to specific highlights or brackets.
+- **Right-click** on any text to add threaded **Comments** or **Color-Code** the selection.
 - Comments support author names and threaded replies for peer review.
 
 ### 4. Cloud Collaboration
@@ -111,6 +112,11 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 - **Libraries**: `html2canvas` and `jsPDF` for exports, `LZ-String` for data compression.
 
 ## Changelog
+
+### Version 2.7.1
+- **Color-Coding**: Highlight text and right-click to color-code words.
+- **UI Streamlining**: Context menus replace deprecated modes and double-click interactions.
+- **Rendering Optimization**: Differential rendering for brackets and highlights.
 
 ### Version 2.6.0
 - **Structural Folding Engine**: Collapse complex bracket sections into clean summary labels.
