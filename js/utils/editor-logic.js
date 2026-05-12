@@ -102,6 +102,48 @@ function splitPropositionAtOffset(i, offset) {
     if (wa.fromProp > i) wa.fromProp++;
     if (wa.toProp > i) wa.toProp++;
   });
+
+  // Adjust comments
+  DA_STATE.comments.forEach(c => {
+    if (c.type === 'text' && c.target) {
+      if (c.target.propIndex > i) {
+        c.target.propIndex++;
+      } else if (c.target.propIndex === i) {
+        const cutLen = isCleanBreak ? (markerIndexInText + 1) : offset;
+        if (c.target.start >= offset) {
+          c.target.propIndex++;
+          c.target.start = Math.max(0, c.target.start - cutLen);
+          c.target.end = Math.max(0, c.target.end - cutLen);
+        } else if (c.target.end > offset) {
+          c.target.end = offset;
+        }
+      }
+    }
+  });
+
+  // Adjust format tags
+  const newTags = [];
+  DA_STATE.formatTags.forEach(f => {
+    if (f.propIndex > i) {
+      f.propIndex++;
+    } else if (f.propIndex === i) {
+      const cutLen = isCleanBreak ? (markerIndexInText + 1) : offset;
+      if (f.start >= offset) {
+        f.propIndex++;
+        f.start = Math.max(0, f.start - cutLen);
+        f.end = Math.max(0, f.end - cutLen);
+      } else if (f.end > offset) {
+        newTags.push({
+          type: f.type,
+          propIndex: i + 1,
+          start: 0,
+          end: Math.max(0, f.end - cutLen)
+        });
+        f.end = offset;
+      }
+    }
+  });
+  if (newTags.length > 0) DA_STATE.formatTags.push(...newTags);
 }
 
 function mergePropositions(i) {
@@ -156,6 +198,32 @@ function mergePropositions(i) {
   DA_STATE.wordArrows.forEach(wa => {
     if (wa.fromProp >= i) wa.fromProp--;
     if (wa.toProp >= i) wa.toProp--;
+  });
+
+  const prevLen = prevText.length + 1; // +1 for the space or zero-width space added
+
+  // Adjust comments
+  DA_STATE.comments.forEach(c => {
+    if (c.type === 'text' && c.target) {
+      if (c.target.propIndex > i) {
+        c.target.propIndex--;
+      } else if (c.target.propIndex === i) {
+        c.target.propIndex = i - 1;
+        c.target.start += prevLen;
+        c.target.end += prevLen;
+      }
+    }
+  });
+
+  // Adjust format tags
+  DA_STATE.formatTags.forEach(f => {
+    if (f.propIndex > i) {
+      f.propIndex--;
+    } else if (f.propIndex === i) {
+      f.propIndex = i - 1;
+      f.start += prevLen;
+      f.end += prevLen;
+    }
   });
 }
 

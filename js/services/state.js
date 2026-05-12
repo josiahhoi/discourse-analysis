@@ -47,8 +47,22 @@ window.DA_STATE = {
     Object.assign(window.DA_STATE, newData);
   },
   
+  lastUndoTime: 0,
+  
   pushUndo: function(action) {
     const s = window.DA_STATE;
+    const now = Date.now();
+    
+    // Debounce rapid identical actions (e.g. continuous text shifting or typing)
+    if (s.undoStack.length > 0) {
+      const lastSnapshot = s.undoStack[s.undoStack.length - 1];
+      if (lastSnapshot.action === action && now - s.lastUndoTime < 1000) {
+        // Just update the timestamp, don't create a new snapshot
+        s.lastUndoTime = now;
+        return;
+      }
+    }
+    
     s.undoStack.push({
       action,
       propositions: s.propositions.slice(),
@@ -64,6 +78,7 @@ window.DA_STATE = {
       indentation: s.indentation.slice()
     });
     if (s.undoStack.length > 50) s.undoStack.shift();
+    s.lastUndoTime = now;
   },
   
   undo: function() {
