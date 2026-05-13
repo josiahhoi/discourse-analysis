@@ -358,10 +358,6 @@ function showBracketActions(bracketIdx, centerY, centerX) {
     clearAndDismiss();
   });
 
-  if (hasTwoLabels) {
-    // These actions are now moved to the label picker
-  }
-
   popover.querySelector('[data-action="select"]').addEventListener('click', (e) => {
     e.stopPropagation();
     DA_STATE.firstBracketPoint = `b${bracketIdx}`;
@@ -752,8 +748,8 @@ function showOpenMenu(e) {
   picker.className = 'label-picker relationship-picker-fixed';
   
   const options = [
-    { label: '📂 Open local file', action: openBracketFile },
-    { label: '🔗 Join cloud session', action: (btnEl) => {
+    { label: '📂 Open local file', action: openBracketFile, inline: false },
+    { label: '🔗 Join cloud session', inline: true, action: (btnEl) => {
         btnEl.innerHTML = '';
         btnEl.style.display = 'flex';
         btnEl.style.gap = '8px';
@@ -793,7 +789,7 @@ function showOpenMenu(e) {
     btn.style.textAlign = 'left';
     btn.style.padding = '0.75rem 1rem';
     btn.addEventListener('click', () => {
-      if (opt.label === '🔗 Join cloud session') {
+      if (opt.inline) {
         opt.action(btn);
       } else {
         picker.remove();
@@ -1221,8 +1217,6 @@ function makePopupDraggable(popover, handleSelector) {
       handle.style.cursor = 'grab';
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      popover._dragJustEnded = true;
-      setTimeout(() => { popover._dragJustEnded = false; }, 0);
     };
 
     document.addEventListener('mousemove', onMove);

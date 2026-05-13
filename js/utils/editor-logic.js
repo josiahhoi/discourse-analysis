@@ -511,10 +511,10 @@ function handleDotClick(pointId, x, y) {
         return;
     }
 
-    const p1AlreadyBusy = DA_STATE.brackets.some(b => b.from === p1 || b.to === p1);
-    const p2AlreadyBusy = DA_STATE.brackets.some(b => b.from === p2 || b.to === p2);
     const finalP1IsNode = finalP1.toString().startsWith('p');
     const finalP2IsNode = finalP2.toString().startsWith('p');
+    const p1AlreadyBusy = DA_STATE.brackets.some(b => b.from === finalP1 || b.to === finalP1);
+    const p2AlreadyBusy = DA_STATE.brackets.some(b => b.from === finalP2 || b.to === finalP2);
 
     if (finalP1IsNode && finalP2IsNode && p1AlreadyBusy && p2AlreadyBusy) {
         DA_UI.showStatus('Cannot connect two nodes that are already bracketed. Connect their dots instead.', 'error');

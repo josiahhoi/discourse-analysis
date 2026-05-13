@@ -270,7 +270,7 @@ window.DA_MOUSE = {
           comment.replies.push({
             author: localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || 'Anonymous',
             text,
-            createdAt: new Date().toISOString()
+            timestamp: Date.now()
           });
           if (window.renderAll) window.renderAll();
         }
@@ -307,6 +307,7 @@ window.DA_MOUSE = {
     const propIndex = parseInt(block.dataset.index);
     const textSpan = block.querySelector('.proposition-text');
 
+    if (!textSpan.firstChild) return null;
     const preRange = document.createRange();
     preRange.setStartBefore(textSpan.firstChild);
     preRange.setEnd(node, start);

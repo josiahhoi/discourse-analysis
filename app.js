@@ -42,14 +42,6 @@ window.scheduleVisualUpdate = () => DA_RENDERER.scheduleVisualUpdate();
 window.updateBracketPositions = () => DA_RENDERER.updateBracketPositions();
 window.saveBracket = () => DA_PERSISTENCE.saveBracket();
 
-function getCommentById(id) {
-  return DA_STATE.comments.find(c => c.id === id);
-}
-
-function nextCommentId() {
-  return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
-}
-
 function clearAllFormatting() {
   DA_STATE.updateState({
     brackets: [],
@@ -167,6 +159,9 @@ if (clearBracketsBtn) clearBracketsBtn.addEventListener('click', () => {
     DA_STATE.wordArrows = [];
     DA_STATE.comments = [];
     DA_STATE.formatTags = [];
+    DA_STATE.bracketSelectStep = 0;
+    DA_STATE.firstBracketPoint = null;
+    document.getElementById('bracketCanvas')?.classList.remove('connect-mode');
     renderAll();
     DA_UI.showStatus('All brackets cleared.', 'success');
   }
@@ -263,6 +258,7 @@ function initDelegatedListeners() {
 
 
 if (importBtn) importBtn.addEventListener('click', () => {
+  const pasteText = document.getElementById('pasteText');
   if (!pasteText) return;
   const raw = pasteText.value.trim();
   if (!raw) {
@@ -301,7 +297,7 @@ if (importBtn) importBtn.addEventListener('click', () => {
   
   clearAllFormatting();
   renderAll();
-  DA_UI.showStatus('Imported. Double-click in text to split / single click to edit. Use nodes or verse refs for DA_STATE.brackets.', 'success');
+  DA_UI.showStatus('Imported. Double-click to split a line, single-click to edit. Click the dots to create brackets.', 'success');
 });
 
 
@@ -359,9 +355,9 @@ if (propEditor) propEditor.placeholder = 'Fetch or import a passage to start. Cl
 
 // Initialize Electron "Open With" support
 if (window.electronAPI && typeof window.electronAPI.onOpenFile === 'function') {
-  window.electronAPI.onOpenFile(async (filePath) => {
+  window.electronAPI.onOpenFile(async (fileContent) => {
     try {
-      const data = JSON.parse(filePath);
+      const data = JSON.parse(fileContent);
       if (data && Array.isArray(data.propositions)) {
         DA_PERSISTENCE.importBracket(data);
       }

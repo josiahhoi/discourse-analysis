@@ -9,16 +9,16 @@
     if (saved === 'light') {
         document.documentElement.setAttribute('data-theme', 'light');
     } else if (saved === 'dark') {
-        document.documentElement.setAttribute('data-theme', '');
+        document.documentElement.setAttribute('data-theme', 'dark');
     } else {
         // Match System Theme or Time of Day fallback
         const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         if (systemDark) {
-            document.documentElement.setAttribute('data-theme', '');
+            document.documentElement.setAttribute('data-theme', 'dark');
         } else {
             const hour = new Date().getHours();
             if (hour >= 7 && hour < 19) document.documentElement.setAttribute('data-theme', 'light');
-            else document.documentElement.setAttribute('data-theme', '');
+            else document.documentElement.setAttribute('data-theme', 'dark');
         }
     }
 

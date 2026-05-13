@@ -130,6 +130,7 @@ function importBracket(data) {
         }
         return { ...c, target, replies: Array.isArray(c.replies) ? c.replies.map((r) => ({ ...r })) : [] };
     }) : [],
+    indentation: Array.isArray(data.indentation) ? data.indentation.slice() : [],
     undoStack: [],
     bracketSelectStep: 0,
     firstBracketPoint: null,
@@ -363,7 +364,7 @@ function initDraftRecovery() {
 }
 
 // Auto-save every 30 seconds
-setInterval(saveDraft, 30000);
+const _autosaveIntervalId = setInterval(saveDraft, 30000);
 window.addEventListener('beforeunload', saveDraft);
 
 async function injectPngMetadata(blob, jsonString) {
@@ -424,9 +425,10 @@ async function extractPngMetadata(file) {
         const chunkData = data.subarray(offset + 8, offset + 8 + length);
         let sep = chunkData.indexOf(0);
         if (sep === -1) { offset += 12 + length; continue; }
-        const key = String.fromCharCode(...chunkData.subarray(0, sep));
+        const decoder = new TextDecoder('latin1');
+        const key = decoder.decode(chunkData.subarray(0, sep));
         if (key === 'BibleBracket') {
-          const val = String.fromCharCode(...chunkData.subarray(sep + 1));
+          const val = decoder.decode(chunkData.subarray(sep + 1));
           return JSON.parse(decodeURIComponent(val));
         }
       }
