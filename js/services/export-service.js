@@ -25,6 +25,7 @@ const DA_EXPORT = {
       pageAuthor: (document.getElementById('pageAuthor')?.value || '').trim(),
       activeProjectId: DA_STATE.activeProjectId || null,
       customLabels: (DA_STATE.customLabels || []).map(cl => ({ ...cl })),
+      indentation: DA_STATE.indentation.slice(),
       exportedAt: new Date().toISOString(),
     };
   },
@@ -90,8 +91,8 @@ const DA_EXPORT = {
     let found = false;
 
     const workspaceRect = workspace.getBoundingClientRect();
-    const scrollX = workspace.scrollLeft || document.getElementById('workspace')?.scrollLeft || 0;
-    const scrollY = workspace.scrollTop || document.getElementById('workspace')?.scrollTop || 0;
+    const scrollX = workspace.scrollLeft || 0;
+    const scrollY = workspace.scrollTop || 0;
 
     coreElements.forEach((el) => {
       const r = el.getBoundingClientRect();
@@ -212,12 +213,17 @@ const DA_EXPORT = {
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
       if (window.renderAll) window.renderAll();
 
+      const bracketData = this.buildBracketData();
+      const rawBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      const annotatedBlob = await DA_PERSISTENCE.injectPngMetadata(rawBlob, JSON.stringify(bracketData));
+      const url = URL.createObjectURL(annotatedBlob);
       const link = document.createElement('a');
       const filename = (DA_STATE.passageRef || 'discourse').replace(/\s+/g, '_');
       link.download = `${filename}_${new Date().toISOString().slice(0,10)}.png`;
-      link.href = canvas.toDataURL('image/png');
+      link.href = url;
       link.click();
-      
+      URL.revokeObjectURL(url);
+
       DA_UI.showStatus('Image saved.', 'success');
     } catch (err) {
       console.error(err);

@@ -1,3 +1,5 @@
+const PASSAGE_REF_REGEX = /^(\d?\s*[a-zA-Z\s]+?)\s*(\d+)(?::(\d+)(?:-(\d+))?)?$/;
+
 /**
  * Main entry point for fetching a passage.
  * @param {string} version - 'esv', 'nasb', or 'greek'
@@ -9,8 +11,8 @@ async function fetchPassageData(version, query, apiKey) {
   if (version === 'greek') {
     const ref = parsePassageReference(query);
     if (ref && ref.file) {
-      // New Testament -> SBLGNT
-      const result = await fetchSBLGNTPassage(query);
+      // New Testament -> SBLGNT (pass already-parsed ref to avoid re-parsing)
+      const result = await fetchSBLGNTPassage(query, ref);
       return { ...result, isGreek: true };
     } else {
       // Old Testament -> LXX via Bolls
@@ -79,8 +81,7 @@ async function fetchPassageData(version, query, apiKey) {
 }
 
 function parsePassageReference(query) {
-  const regex = /^(\d?\s*[a-zA-Z\s]+?)\s*(\d+)(?::(\d+)(?:-(\d+))?)?$/;
-  const match = query.match(regex);
+  const match = query.match(PASSAGE_REF_REGEX);
   if (!match) return null;
 
   const bookNameKey = match[1].trim().toLowerCase().replace(/\s+/g, '');
@@ -100,8 +101,8 @@ function parsePassageReference(query) {
   };
 }
 
-async function fetchSBLGNTPassage(query) {
-  const ref = parsePassageReference(query);
+async function fetchSBLGNTPassage(query, ref) {
+  if (!ref) ref = parsePassageReference(query);
   if (!ref || !ref.file) throw new Error('Book not found in SBLGNT (New Testament only).');
 
   const url = `${DA_CONSTANTS.SBLGNT_BASE}${ref.file}`;
@@ -153,8 +154,7 @@ async function fetchSBLGNTPassage(query) {
 }
 
 async function fetchFromBolls(translation, query) {
-  const regex = /^(\d?\s*[a-zA-Z\s]+?)\s*(\d+)(?::(\d+)(?:-(\d+))?)?$/;
-  const match = query.match(regex);
+  const match = query.match(PASSAGE_REF_REGEX);
   if (!match) throw new Error('Could not parse reference. Use format like "John 1:1-5"');
 
   const bookName = match[1].trim().toLowerCase().replace(/\s+/g, '');

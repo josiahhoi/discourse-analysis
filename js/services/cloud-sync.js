@@ -94,6 +94,7 @@ function handleCloudData(data) {
   DA_STATE.comments = data.comments || [];
   DA_STATE.passageRef = data.passageRef || '';
   DA_STATE.customLabels = data.customLabels || [];
+  DA_STATE.indentation = data.indentation || [];
 
   if (data.author) {
     const pageAuthorInput = document.getElementById('pageAuthor');

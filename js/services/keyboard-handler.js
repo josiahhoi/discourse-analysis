@@ -22,7 +22,7 @@ window.DA_KEYBOARD = {
           DA_UI.clearPropositionHighlights();
           document.getElementById('bracketCanvas')?.classList.remove('connect-mode');
           DA_UI.showStatus('Bracket selection cancelled.', 'info');
-          if (window.scheduleVisualUpdate) window.scheduleVisualUpdate();
+          if (window.renderAll) window.renderAll();
           return;
         }
         if (DA_STATE.arrowMode && window.pendingArrowStart) {
@@ -230,28 +230,16 @@ window.DA_KEYBOARD = {
             const preText = preRange.toString();
 
             const currentLine = preText.split('\n').pop();
-            if (currentLine.match(/^ +$/)) {
+            const trailingSpaces = (currentLine.match(/ +$/) || [''])[0].length;
+            if (trailingSpaces > 0) {
               e.preventDefault();
-              const lastBS = textSpan._lastTabBS || 0;
-              const now = Date.now();
-              
-              if (now - lastBS < 1000) {
-                const newRange = document.createRange();
-                newRange.setStart(range.startContainer, range.startOffset - currentLine.length);
-                newRange.setEnd(range.startContainer, range.startOffset);
-                newRange.deleteContents();
-                textSpan._lastTabBS = 0;
-              } else {
-                const toRemove = Math.min(8, currentLine.length);
-                const newRange = document.createRange();
-                newRange.setStart(range.startContainer, range.startOffset - toRemove);
-                newRange.setEnd(range.startContainer, range.startOffset);
-                newRange.deleteContents();
-                textSpan._lastTabBS = now;
-              }
+              const toRemove = Math.min(8, trailingSpaces);
+              const newRange = document.createRange();
+              newRange.setStart(range.startContainer, range.startOffset - toRemove);
+              newRange.setEnd(range.startContainer, range.startOffset);
+              newRange.deleteContents();
               return;
             }
-            textSpan._lastTabBS = 0;
 
             if (preText.length === 0 && i > 0) {
               e.preventDefault();

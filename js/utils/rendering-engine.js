@@ -568,8 +568,8 @@ function renderBrackets() {
         // Find any proposition in this range that isn't hidden
         for (let j = extent.from; j <= extent.to; j++) {
             const pos = dotPositions[j];
-            if (pos && pos.top > 0) {
-                topY = bottomY = pos.top + (pos.height / 2);
+            if (pos && pos.midY > 0) {
+                topY = bottomY = pos.midY;
                 topLeft = bottomLeft = pos.left;
                 break;
             }
@@ -1042,7 +1042,7 @@ function renderCommentPreviews() {
       const v2 = computeVerseDisplay(extent.to) || '?';
       const vsRange = v1 === v2 ? v1 : `${v1}-${v2}`;
       const fullRef = chapter ? `${chapter}:${vsRange}` : vsRange;
-      targetDesc = `Bracket (${fullRef}): ${b ? formatBracketType(b.type) : 'Unknown'}`;
+      targetDesc = `Bracket (${fullRef}): ${b ? DA_UI.formatBracketType(b.type) : 'Unknown'}`;
     }
 
     const newHtml = `
