@@ -133,17 +133,19 @@ function renderPropositions() {
     existingBlocks.pop().remove();
   }
 
+  const _verseSuffixMap = precomputeVerseSuffixes(DA_STATE.verseRefs);
+
   // Update existing or create new blocks
   DA_STATE.propositions.forEach((text, i) => {
     let block = existingBlocks[i];
     if (!block) {
-      block = createPropositionBlock(text, i);
+      block = createPropositionBlock(text, i, _verseSuffixMap[i]);
       container.appendChild(block);
     }
-    
+
     // Toggle visibility based on folding
     block.classList.toggle('folded-hidden', hiddenIndices.has(i));
-    updatePropositionBlock(block, text, i);
+    updatePropositionBlock(block, text, i, _verseSuffixMap[i]);
   });
 
   isRenderingPropositions = false;
@@ -193,14 +195,14 @@ function attachPropositionDelegatedListeners(container) {
     }
 
     if (block._textBeforeEdit !== undefined && block._textBeforeEdit !== null && currentText !== block._textBeforeEdit) {
-      DA_STATE.pushUndo('text edit');
+      DA_STATE.pushUndo('text edit', String(i));
     }
     DA_STATE.propositions[i] = currentText;
     DA_STATE.formatTags = DA_STATE.formatTags.filter(f => f.propIndex !== i).concat(newFormatTags);
   });
 }
 
-function createPropositionBlock(text, i) {
+function createPropositionBlock(text, i, verseDisplay) {
   const block = document.createElement('div');
   block.className = 'proposition-block';
   block.dataset.index = i;
@@ -221,11 +223,11 @@ function createPropositionBlock(text, i) {
   textSpan.spellcheck = false;
   block.appendChild(textSpan);
 
-  updatePropositionBlock(block, text, i);
+  updatePropositionBlock(block, text, i, verseDisplay);
   return block;
 }
 
-function updatePropositionBlock(block, text, i) {
+function updatePropositionBlock(block, text, i, verseDisplay) {
   block.dataset.index = i;
   const dot = block.querySelector('.prop-dot');
   if (dot) dot.dataset.index = i;
@@ -250,7 +252,7 @@ function updatePropositionBlock(block, text, i) {
   // Update verse ref
   const refSpan = block.querySelector('.verse-ref');
   if (refSpan) {
-    const vd = computeVerseDisplay(i);
+    const vd = verseDisplay !== undefined ? verseDisplay : computeVerseDisplay(i);
     const refText = vd ? `${vd} ` : '';
     if (refSpan.textContent !== refText) refSpan.textContent = refText;
   }
@@ -269,6 +271,30 @@ function updatePropositionBlock(block, text, i) {
       renderInlineContent(textSpan, text, i);
     }
   }
+}
+
+function precomputeVerseSuffixes(verseRefs) {
+  const verseGroups = new Map();
+  verseRefs.forEach((ref, idx) => {
+    if (!ref) return;
+    ref.split('-').forEach(v => {
+      if (!verseGroups.has(v)) verseGroups.set(v, []);
+      const arr = verseGroups.get(v);
+      if (!arr.includes(idx)) arr.push(idx);
+    });
+  });
+  return verseRefs.map((ref, idx) => {
+    if (!ref) return '';
+    const getVerseDisplay = (verse) => {
+      const group = verseGroups.get(verse);
+      if (!group || group.length <= 1) return verse;
+      const pos = group.indexOf(idx);
+      return pos < 0 ? verse : verse + String.fromCharCode(97 + pos);
+    };
+    if (!ref.includes('-')) return getVerseDisplay(ref);
+    const parts = ref.split('-');
+    return `${getVerseDisplay(parts[0])}-${getVerseDisplay(parts[parts.length - 1])}`;
+  });
 }
 
 function computeVerseDisplay(i) {
@@ -717,7 +743,7 @@ function renderBrackets() {
   });
 }
 
-function getExtent(id) {
+function getExtent(id, _seen) {
   if (typeof id === 'number') return { from: id, to: id };
   if (id === null || id === undefined) return { from: 0, to: 0 };
   if (id.startsWith('p')) {
@@ -725,11 +751,14 @@ function getExtent(id) {
     return { from: idx, to: idx };
   }
   if (id.startsWith('b')) {
+    if (!_seen) _seen = new Set();
+    if (_seen.has(id)) return { from: 0, to: 0 };
+    _seen.add(id);
     const bIdx = parseInt(id.slice(1), 10);
     const b = DA_STATE.brackets[bIdx];
-    if (!b) return { from: 0, to: 0 }; 
-    const eFrom = getExtent(b.from);
-    const eTo = getExtent(b.to);
+    if (!b) return { from: 0, to: 0 };
+    const eFrom = getExtent(b.from, _seen);
+    const eTo = getExtent(b.to, _seen);
     return { from: Math.min(eFrom.from, eTo.from), to: Math.max(eFrom.to, eTo.to) };
   }
   return { from: 0, to: 0 };

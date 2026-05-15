@@ -295,8 +295,9 @@ window.DA_MOUSE = {
     const offset = range.startOffset;
 
     let start = offset, end = offset;
-    while (start > 0 && /\w/.test(text[start - 1])) start--;
-    while (end < text.length && /\w/.test(text[end])) end++;
+    const isWordChar = (ch) => /[\p{L}\p{N}]/u.test(ch);
+    while (start > 0 && isWordChar(text[start - 1])) start--;
+    while (end < text.length && isWordChar(text[end])) end++;
 
     if (start === end) return null;
 

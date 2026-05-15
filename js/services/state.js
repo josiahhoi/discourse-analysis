@@ -49,43 +49,45 @@ window.DA_STATE = {
   
   lastUndoTime: 0,
   
-  pushUndo: function(action) {
+  pushUndo: function(action, debounceKey = '') {
     const s = window.DA_STATE;
     const now = Date.now();
-    
-    // Debounce rapid identical actions (e.g. continuous text shifting or typing)
+
+    // Debounce rapid identical actions keyed on both action name and affected index
     if (s.undoStack.length > 0) {
       const lastSnapshot = s.undoStack[s.undoStack.length - 1];
-      if (lastSnapshot.action === action && now - s.lastUndoTime < 1000) {
-        // Just update the timestamp, don't create a new snapshot
+      if (lastSnapshot.action === action && lastSnapshot._debounceKey === debounceKey && now - s.lastUndoTime < 1000) {
         s.lastUndoTime = now;
         return;
       }
     }
-    
+
     s.undoStack.push({
       action,
+      _debounceKey: debounceKey,
       propositions: s.propositions.slice(),
       verseRefs: s.verseRefs.slice(),
       brackets: s.brackets.map(a => ({ ...a })),
       formatTags: s.formatTags.map(t => ({ ...t })),
       wordArrows: s.wordArrows.map(w => ({ ...w })),
-      comments: s.comments.map(c => ({ 
-        ...c, 
-        target: c.target ? { ...c.target } : c.target, 
-        replies: c.replies ? c.replies.map(r => ({ ...r })) : [] 
+      comments: s.comments.map(c => ({
+        ...c,
+        target: c.target ? { ...c.target } : c.target,
+        replies: c.replies ? c.replies.map(r => ({ ...r })) : []
       })),
-      indentation: s.indentation.slice()
+      indentation: s.indentation.slice(),
+      bracketSelectStep: s.bracketSelectStep,
+      firstBracketPoint: s.firstBracketPoint
     });
     if (s.undoStack.length > 50) s.undoStack.shift();
     s.lastUndoTime = now;
   },
-  
+
   undo: function() {
     const s = window.DA_STATE;
     if (s.undoStack.length === 0) return null;
     const snapshot = s.undoStack.pop();
-    
+
     // Restore state
     s.propositions = snapshot.propositions;
     s.verseRefs = snapshot.verseRefs;
@@ -94,7 +96,9 @@ window.DA_STATE = {
     s.wordArrows = snapshot.wordArrows;
     s.comments = snapshot.comments;
     s.indentation = snapshot.indentation || [];
-    
+    s.bracketSelectStep = snapshot.bracketSelectStep ?? 0;
+    s.firstBracketPoint = snapshot.firstBracketPoint ?? null;
+
     return snapshot.action;
   }
 };

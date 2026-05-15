@@ -143,7 +143,7 @@ window.DA_KEYBOARD = {
 
             if (lineIdx === -1) return;
 
-            DA_STATE.pushUndo('shift text');
+            DA_STATE.pushUndo('shift text', String(i));
 
             const lineLeading = lines[lineIdx].match(/^ +/)?.[0] || "";
             const lineContent = lines[lineIdx].substring(lineLeading.length);

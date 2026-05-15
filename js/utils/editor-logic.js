@@ -28,9 +28,9 @@ function extractFormatTags(textSpan, propIndex) {
 
 function splitPropositionAtOffset(i, offset) {
   const text = DA_STATE.propositions[i];
-  if (!text || offset >= text.length || text.slice(offset).trim().length === 0) return;
+  if (!text || offset <= 0 || offset >= text.length || text.slice(offset).trim().length === 0) return;
 
-  DA_STATE.pushUndo('split');
+  DA_STATE.pushUndo('split', String(i));
   const partsRef = (DA_STATE.verseRefs[i] || '').split('-');
   const startRef = partsRef[0];
   const endRef = partsRef[partsRef.length - 1];
@@ -83,7 +83,7 @@ function splitPropositionAtOffset(i, offset) {
   DA_STATE.verseRefs[i] = firstPartRef;
   DA_STATE.verseRefs.splice(i + 1, 0, secondPartRef);
   DA_STATE.indentation.splice(i + 1, 0, DA_STATE.indentation[i] || 0);
-  
+
   // Adjust brackets — references are strings like "p0", "b2"
   const shiftRef = (ref, splitIdx) => {
     if (typeof ref === 'string' && ref.startsWith('p')) {
@@ -187,7 +187,7 @@ function splitPropositionAtOffset(i, offset) {
 
 function mergePropositions(i) {
   if (i <= 0) return;
-  DA_STATE.pushUndo('merge');
+  DA_STATE.pushUndo('merge', String(i));
   
   const prevText = DA_STATE.propositions[i - 1];
   const currText = DA_STATE.propositions[i];
@@ -219,7 +219,7 @@ function mergePropositions(i) {
   DA_STATE.propositions.splice(i, 1);
   DA_STATE.verseRefs.splice(i, 1);
   DA_STATE.indentation.splice(i, 1);
-  
+
   // Adjust brackets — shift pN references down for indices >= i
   const unshiftRef = (ref, mergeIdx) => {
     if (typeof ref === 'string' && ref.startsWith('p')) {
@@ -352,6 +352,11 @@ function setSelectionByGlobalOffset(el, start, end) {
     range.setEnd(endNode, endOffset);
     sel.removeAllRanges();
     sel.addRange(range);
+  } else if (el.firstChild) {
+    range.selectNodeContents(el);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
   }
 }
 
@@ -418,6 +423,13 @@ function findBestAttachment(pId, proposedMin, proposedMax) {
     return bestB || pId;
 }
 
+function resetBracketSelection() {
+  DA_STATE.bracketSelectStep = 0;
+  DA_STATE.firstBracketPoint = null;
+  document.getElementById('bracketCanvas')?.classList.remove('connect-mode');
+  if (window.DA_RENDERER) DA_RENDERER.renderAll();
+}
+
 function handleDotClick(pointId, x, y) {
   const bracketCanvas = document.getElementById('bracketCanvas');
   if (DA_STATE.bracketSelectStep === 0) {
@@ -435,14 +447,9 @@ function handleDotClick(pointId, x, y) {
     
     // If they clicked the same node twice, cancel
     if (p1 === p2) {
-      DA_STATE.bracketSelectStep = 0;
-      DA_STATE.firstBracketPoint = null;
-      bracketCanvas?.classList.remove('connect-mode');
-      if (window.DA_RENDERER) DA_RENDERER.renderAll();
+      resetBracketSelection();
       return;
     }
-
-    DA_STATE.pushUndo('add bracket');
     
     // Determine the proposed range to decide on auto-attachment direction
     const range1 = DA_RENDERER.getPointExtent(p1);
@@ -462,20 +469,14 @@ function handleDotClick(pointId, x, y) {
 
     if (firstEnd + 1 !== secondStart) {
         DA_UI.showStatus('Brackets must connect adjacent items. No "jumping over" allowed.', 'error');
-        DA_STATE.bracketSelectStep = 0;
-        DA_STATE.firstBracketPoint = null;
-        bracketCanvas?.classList.remove('connect-mode');
-        if (window.DA_RENDERER) DA_RENDERER.renderAll();
+        resetBracketSelection();
         return;
     }
 
     // If both resolve to the same target, block creation
     if (finalP1 === finalP2) {
       DA_UI.showStatus('Bracket already exists for this exact range', 'warning');
-      DA_STATE.bracketSelectStep = 0;
-      DA_STATE.firstBracketPoint = null;
-      bracketCanvas?.classList.remove('connect-mode');
-      if (window.DA_RENDERER) DA_RENDERER.renderAll();
+      resetBracketSelection();
       return;
     }
 
@@ -504,10 +505,7 @@ function handleDotClick(pointId, x, y) {
 
     if (crosses) {
         DA_UI.showStatus('Brackets cannot cross each other', 'error');
-        DA_STATE.bracketSelectStep = 0;
-        DA_STATE.firstBracketPoint = null;
-        bracketCanvas?.classList.remove('connect-mode');
-        if (window.DA_RENDERER) DA_RENDERER.renderAll();
+        resetBracketSelection();
         return;
     }
 
@@ -518,25 +516,21 @@ function handleDotClick(pointId, x, y) {
 
     if (finalP1IsNode && finalP2IsNode && p1AlreadyBusy && p2AlreadyBusy) {
         DA_UI.showStatus('Cannot connect two nodes that are already bracketed. Connect their dots instead.', 'error');
-        DA_STATE.bracketSelectStep = 0;
-        DA_STATE.firstBracketPoint = null;
-        bracketCanvas?.classList.remove('connect-mode');
-        if (window.DA_RENDERER) DA_RENDERER.renderAll();
+        resetBracketSelection();
         return;
     }
 
-    const exists = DA_STATE.brackets.some(b => 
-      (b.from === finalP1 && b.to === finalP2) || 
+    const exists = DA_STATE.brackets.some(b =>
+      (b.from === finalP1 && b.to === finalP2) ||
       (b.from === finalP2 && b.to === finalP1)
     );
     if (exists) {
       DA_UI.showStatus('Bracket already exists between these nodes', 'warning');
-      DA_STATE.bracketSelectStep = 0;
-      DA_STATE.firstBracketPoint = null;
-      bracketCanvas?.classList.remove('connect-mode');
-      if (window.DA_RENDERER) DA_RENDERER.renderAll();
+      resetBracketSelection();
       return;
     }
+
+    DA_STATE.pushUndo('add bracket');
 
     const newBracket = {
       id: Date.now().toString(),
@@ -565,12 +559,8 @@ function handleDotClick(pointId, x, y) {
     });
 
     DA_UI.showStatus('Bracket created', 'success');
-    DA_STATE.bracketSelectStep = 0;
-    DA_STATE.firstBracketPoint = null;
-    bracketCanvas?.classList.remove('connect-mode');
-    
-    if (window.DA_RENDERER) DA_RENDERER.renderAll();
-    
+    resetBracketSelection();
+
     if (x !== undefined && y !== undefined && window.showLabelPicker) {
       window.showLabelPicker(DA_STATE.brackets.length - 1, y, x);
     }

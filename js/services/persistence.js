@@ -5,7 +5,7 @@
 
 const DRAFT_KEY = 'biblebracket_draft';
 const RECENT_KEY = 'biblebracket_recent';
-const RECENT_MAX = 10;
+const RECENT_MAX = 5;
 
 function saveDraft() {
   try {
@@ -13,11 +13,11 @@ function saveDraft() {
       const data = DA_EXPORT.buildBracketData();
       localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
     }
-  } catch (_) {}
+  } catch (e) { console.warn('Auto-save failed:', e); }
 }
 
 function clearDraft() {
-  try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
+  try { localStorage.removeItem(DRAFT_KEY); } catch (e) { console.warn('Could not clear draft:', e); }
 }
 
 function normalizeBracketData(data) {
@@ -99,7 +99,8 @@ function getDraft() {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
     return raw ? JSON.parse(raw) : null;
-  } catch (_) {
+  } catch (e) {
+    console.warn('Could not read draft:', e);
     return null;
   }
 }
@@ -183,15 +184,25 @@ function addToRecent(data) {
 function getRecentBrackets() {
   try {
     const raw = localStorage.getItem(RECENT_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
+    if (!raw) return [];
+    if (typeof LZString !== 'undefined') {
+      try {
+        const decompressed = LZString.decompress(raw);
+        if (decompressed) return JSON.parse(decompressed);
+      } catch (_) {}
+    }
+    return JSON.parse(raw);
+  } catch (e) {
+    console.warn('Could not read recent brackets:', e);
     return [];
   }
 }
 
 function saveRecentBrackets(items) {
   try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(items.slice(0, RECENT_MAX)));
+    const json = JSON.stringify(items.slice(0, RECENT_MAX));
+    const payload = (typeof LZString !== 'undefined') ? LZString.compress(json) : json;
+    localStorage.setItem(RECENT_KEY, payload);
   } catch (e) {
     console.warn('Could not save recent brackets:', e);
   }
@@ -435,7 +446,7 @@ async function extractPngMetadata(file) {
       if (type === 'IEND') break;
       offset += 12 + length;
     }
-  } catch (_) {}
+  } catch (e) { console.warn('Could not parse PNG metadata:', e); }
   return null;
 }
 
@@ -468,7 +479,7 @@ async function extractPdfMetadata(file) {
       } catch (_) {}
       searchFrom = endIdx + endMarker.length;
     }
-  } catch (_) {}
+  } catch (e) { console.warn('Could not parse PDF metadata:', e); }
   return null;
 }
 

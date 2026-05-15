@@ -48,11 +48,11 @@ function clearAllFormatting() {
     wordArrows: [],
     comments: [],
     formatTags: [],
-    undoStack: [],
     indentation: [],
     bracketSelectStep: 0,
     firstBracketPoint: null
   });
+  document.getElementById('bracketCanvas')?.classList.remove('connect-mode');
 }
 
 // Service Initializations
@@ -155,13 +155,7 @@ if (exportMenuBtn) exportMenuBtn.addEventListener('click', DA_UI.showExportMenu)
 if (clearBracketsBtn) clearBracketsBtn.addEventListener('click', () => {
   if (confirm('Clear all brackets and formatting?')) {
     DA_STATE.pushUndo('clear-all');
-    DA_STATE.brackets = [];
-    DA_STATE.wordArrows = [];
-    DA_STATE.comments = [];
-    DA_STATE.formatTags = [];
-    DA_STATE.bracketSelectStep = 0;
-    DA_STATE.firstBracketPoint = null;
-    document.getElementById('bracketCanvas')?.classList.remove('connect-mode');
+    clearAllFormatting();
     renderAll();
     DA_UI.showStatus('All brackets cleared.', 'success');
   }
@@ -224,6 +218,7 @@ async function fetchPassage() {
     if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
 
     clearAllFormatting();
+    DA_STATE.undoStack = [];
     renderAll();
     DA_UI.showStatus('Passage loaded.', 'success');
   } catch (err) {
@@ -296,6 +291,7 @@ if (importBtn) importBtn.addEventListener('click', () => {
   if (propositionsContainer) propositionsContainer.classList.remove('greek-text');
   
   clearAllFormatting();
+  DA_STATE.undoStack = [];
   renderAll();
   DA_UI.showStatus('Imported. Double-click to split a line, single-click to edit. Click the dots to create brackets.', 'success');
 });
