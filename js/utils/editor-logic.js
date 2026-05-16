@@ -262,6 +262,14 @@ function mergePropositions(i) {
       DA_STATE.comments.forEach(c => {
         if (c.type === 'bracket' && c.target?.bracketIdx > j) c.target.bracketIdx--;
       });
+      // Fix bracketHighlights references
+      const _mh = {};
+      Object.entries(DA_STATE.bracketHighlights).forEach(([k, v]) => {
+        const idx = parseInt(k, 10);
+        if (idx < j) _mh[idx] = v;
+        else if (idx > j) _mh[idx - 1] = v;
+      });
+      DA_STATE.bracketHighlights = _mh;
     }
   }
   
@@ -396,6 +404,15 @@ function deleteBracket(bracketIdx) {
   DA_STATE.comments.forEach((c) => {
     if (c.type === 'bracket' && c.target?.bracketIdx > bracketIdx) c.target.bracketIdx--;
   });
+
+  // 5. Update bracketHighlights references
+  const _dh = {};
+  Object.entries(DA_STATE.bracketHighlights).forEach(([k, v]) => {
+    const idx = parseInt(k, 10);
+    if (idx < bracketIdx) _dh[idx] = v;
+    else if (idx > bracketIdx) _dh[idx - 1] = v;
+  });
+  DA_STATE.bracketHighlights = _dh;
 
   if (window.DA_RENDERER) DA_RENDERER.renderAll();
 }

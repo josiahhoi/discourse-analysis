@@ -95,6 +95,7 @@ function handleCloudData(data) {
   DA_STATE.passageRef = data.passageRef || '';
   DA_STATE.customLabels = data.customLabels || [];
   DA_STATE.indentation = data.indentation || [];
+  DA_STATE.bracketHighlights = (data.bracketHighlights && typeof data.bracketHighlights === 'object') ? data.bracketHighlights : {};
 
   if (data.author) {
     const pageAuthorInput = document.getElementById('pageAuthor');

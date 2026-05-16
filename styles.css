@@ -1681,6 +1681,19 @@ body {
   font-weight: bold;
 }
 
+.bracket-group.bracket-highlight-active .bracket-line,
+.bracket-group.bracket-highlight-active .bracket-arm {
+  stroke-width: 3.5;
+}
+
+.bracket-group.bracket-highlight-active .bracket-label {
+  font-weight: bold;
+}
+
+.bracket-group.bracket-highlight-active {
+  filter: drop-shadow(0 0 5px var(--glow-color, rgba(200, 180, 100, 0.8)));
+}
+
 .bracket-canvas .bracket-label {
   pointer-events: all;
   font-family: var(--font-sans);

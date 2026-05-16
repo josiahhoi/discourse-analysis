@@ -26,6 +26,7 @@ window.DA_STATE = {
   showCommentsEnabled: false,
   indentation: [],
   activeCommentTarget: null,
+  bracketHighlights: {},
   customLabels: [], // Session/Project-specific labels
   savedCustomLabels: JSON.parse(localStorage.getItem('da_custom_labels') || '[]'), // User's personal bank
 
@@ -76,6 +77,7 @@ window.DA_STATE = {
         replies: c.replies ? c.replies.map(r => ({ ...r })) : []
       })),
       indentation: s.indentation.slice(),
+      bracketHighlights: Object.assign({}, s.bracketHighlights),
       bracketSelectStep: s.bracketSelectStep,
       firstBracketPoint: s.firstBracketPoint
     });
@@ -96,6 +98,7 @@ window.DA_STATE = {
     s.wordArrows = snapshot.wordArrows;
     s.comments = snapshot.comments;
     s.indentation = snapshot.indentation || [];
+    s.bracketHighlights = snapshot.bracketHighlights || {};
     s.bracketSelectStep = snapshot.bracketSelectStep ?? 0;
     s.firstBracketPoint = snapshot.firstBracketPoint ?? null;
 

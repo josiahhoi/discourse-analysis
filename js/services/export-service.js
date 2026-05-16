@@ -26,6 +26,7 @@ const DA_EXPORT = {
       activeProjectId: DA_STATE.activeProjectId || null,
       customLabels: (DA_STATE.customLabels || []).map(cl => ({ ...cl })),
       indentation: DA_STATE.indentation.slice(),
+      bracketHighlights: Object.assign({}, DA_STATE.bracketHighlights),
       exportedAt: new Date().toISOString(),
     };
   },

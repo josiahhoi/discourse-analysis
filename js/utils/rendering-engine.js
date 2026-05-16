@@ -1,3 +1,10 @@
+function _hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 /**
  * Creates an SVG element with specified attributes.
  * @param {string} tag - The SVG tag name (e.g., 'path', 'g', 'polygon').
@@ -200,6 +207,40 @@ function attachPropositionDelegatedListeners(container) {
     DA_STATE.propositions[i] = currentText;
     DA_STATE.formatTags = DA_STATE.formatTags.filter(f => f.propIndex !== i).concat(newFormatTags);
   });
+
+  let _glowPropIdx = null;
+
+  const _clearBracketGlow = () => {
+    document.querySelectorAll('.bracket-group.bracket-highlight-active').forEach(el => {
+      el.classList.remove('bracket-highlight-active');
+      el.style.removeProperty('--glow-color');
+    });
+  };
+
+  container.addEventListener('mouseover', (e) => {
+    const block = e.target.closest('.proposition-block');
+    const i = block ? parseInt(block.dataset.index, 10) : null;
+    if (i === _glowPropIdx) return;
+    _glowPropIdx = i;
+    _clearBracketGlow();
+    if (i === null || isNaN(i) || !Object.keys(DA_STATE.bracketHighlights).length) return;
+    Object.entries(DA_STATE.bracketHighlights).forEach(([bIdxStr, color]) => {
+      const bIdx = parseInt(bIdxStr, 10);
+      const extent = getBracketExtent(bIdx);
+      if (i >= extent.from && i <= extent.to) {
+        const group = document.querySelector(`.bracket-group[data-index="${bIdx}"]`);
+        if (group) {
+          group.style.setProperty('--glow-color', color);
+          group.classList.add('bracket-highlight-active');
+        }
+      }
+    });
+  });
+
+  container.addEventListener('mouseleave', () => {
+    _glowPropIdx = null;
+    _clearBracketGlow();
+  });
 }
 
 function createPropositionBlock(text, i, verseDisplay) {
@@ -248,6 +289,27 @@ function updatePropositionBlock(block, text, i, verseDisplay) {
   if (dot) dot.classList.toggle('active-node', isDirectPropSelection);
 
   block.style.marginLeft = `${(DA_STATE.indentation[i] || 0) * 20}px`;
+
+  // Collect highlight colors from all brackets that cover this proposition
+  const _highlightColors = [];
+  Object.entries(DA_STATE.bracketHighlights).forEach(([bIdxStr, color]) => {
+    const bIdx = parseInt(bIdxStr, 10);
+    const extent = getBracketExtent(bIdx);
+    if (i >= extent.from && i <= extent.to) _highlightColors.push(color);
+  });
+  if (_highlightColors.length === 0) {
+    block.style.background = '';
+  } else if (_highlightColors.length === 1) {
+    block.style.background = _hexToRgba(_highlightColors[0], 0.4);
+  } else {
+    const size = 14;
+    const stops = [];
+    _highlightColors.forEach((c, idx) => {
+      const rgba = _hexToRgba(c, 0.45);
+      stops.push(`${rgba} ${idx * size}px`, `${rgba} ${(idx + 1) * size}px`);
+    });
+    block.style.background = `repeating-linear-gradient(-45deg, ${stops.join(', ')})`;
+  }
 
   // Update verse ref
   const refSpan = block.querySelector('.verse-ref');
