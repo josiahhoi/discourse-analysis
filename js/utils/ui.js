@@ -322,21 +322,32 @@ function showBracketActions(bracketIdx, centerY, centerX) {
 
   const popover = document.createElement('div');
   popover.id = 'bracketActions';
-  popover.className = 'context-menu'; // Use standard context menu styling
+  popover.className = 'context-menu';
   const bracket = DA_STATE.brackets[bracketIdx];
   const hasTwoLabels = !DA_CONSTANTS.SINGLE_LABEL_TYPES.has(bracket.type);
   const hasComment = !!getCommentForBracket(bracketIdx);
-  
+
+  const pastels = [
+    { val: '#FFF9C4', name: 'Yellow' },
+    { val: '#BBDEFB', name: 'Blue' },
+    { val: '#C8E6C9', name: 'Green' },
+    { val: '#F8BBD0', name: 'Pink' },
+    { val: '#E1BEE7', name: 'Lavender' }
+  ];
+
   popover.innerHTML = `
     <div class="menu-item" data-action="fold">${bracket.isCollapsed ? 'Expand Section' : 'Collapse Section'}</div>
     <div class="menu-item" data-action="comment">${hasComment ? 'View Comment' : 'Add Comment'}</div>
     <div class="menu-item" data-action="select">Connect to...</div>
-    <hr>
+    <div class="menu-divider"></div>
+    <div class="color-palette-title">Highlight Rows</div>
+    <div class="color-palette">
+      ${pastels.map(c => `<button class="color-swatch" data-color="${c.val}" title="${c.name}" style="background-color: ${c.val}"></button>`).join('')}
+      <button class="color-swatch clear-color" data-color="clear" title="Clear Highlight">✕</button>
+    </div>
+    <div class="menu-divider"></div>
     <div class="menu-item danger" data-action="delete">Delete Bracket</div>
   `;
-
-  const propositionsContainer = document.getElementById('propositionsContainer');
-  const wrapper = propositionsContainer?.parentElement || document.body;
 
   popover.style.left = `${centerX}px`;
   popover.style.top = `${centerY}px`;
@@ -350,7 +361,6 @@ function showBracketActions(bracketIdx, centerY, centerX) {
     clearAndDismiss();
     showStatus('Bracket removed.', 'success');
   });
-
 
   popover.querySelector('[data-action="fold"]').addEventListener('click', (e) => {
     e.stopPropagation();
@@ -371,6 +381,21 @@ function showBracketActions(bracketIdx, centerY, centerX) {
     e.stopPropagation();
     showCommentPopoverForBracket(bracketIdx, centerY, centerX);
     clearAndDismiss();
+  });
+
+  popover.querySelectorAll('.color-swatch').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const color = btn.dataset.color;
+      DA_STATE.pushUndo('highlight rows');
+      if (color === 'clear') {
+        delete DA_STATE.bracketHighlights[bracketIdx];
+      } else {
+        DA_STATE.bracketHighlights[bracketIdx] = color;
+      }
+      clearAndDismiss();
+      if (window.renderAll) window.renderAll();
+    });
   });
 
   setupClickOutside(popover, () => popover.remove());

@@ -1,3 +1,10 @@
+function _hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 /**
  * Creates an SVG element with specified attributes.
  * @param {string} tag - The SVG tag name (e.g., 'path', 'g', 'polygon').
@@ -200,6 +207,40 @@ function attachPropositionDelegatedListeners(container) {
     DA_STATE.propositions[i] = currentText;
     DA_STATE.formatTags = DA_STATE.formatTags.filter(f => f.propIndex !== i).concat(newFormatTags);
   });
+
+  let _glowPropIdx = null;
+
+  const _clearBracketGlow = () => {
+    document.querySelectorAll('.bracket-group.bracket-highlight-active').forEach(el => {
+      el.classList.remove('bracket-highlight-active');
+      el.style.removeProperty('--glow-color');
+    });
+  };
+
+  container.addEventListener('mouseover', (e) => {
+    const block = e.target.closest('.proposition-block');
+    const i = block ? parseInt(block.dataset.index, 10) : null;
+    if (i === _glowPropIdx) return;
+    _glowPropIdx = i;
+    _clearBracketGlow();
+    if (i === null || isNaN(i) || !Object.keys(DA_STATE.bracketHighlights).length) return;
+    Object.entries(DA_STATE.bracketHighlights).forEach(([bIdxStr, color]) => {
+      const bIdx = parseInt(bIdxStr, 10);
+      const extent = getBracketExtent(bIdx);
+      if (i >= extent.from && i <= extent.to) {
+        const group = document.querySelector(`.bracket-group[data-index="${bIdx}"]`);
+        if (group) {
+          group.style.setProperty('--glow-color', color);
+          group.classList.add('bracket-highlight-active');
+        }
+      }
+    });
+  });
+
+  container.addEventListener('mouseleave', () => {
+    _glowPropIdx = null;
+    _clearBracketGlow();
+  });
 }
 
 function createPropositionBlock(text, i, verseDisplay) {
@@ -248,6 +289,44 @@ function updatePropositionBlock(block, text, i, verseDisplay) {
   if (dot) dot.classList.toggle('active-node', isDirectPropSelection);
 
   block.style.marginLeft = `${(DA_STATE.indentation[i] || 0) * 20}px`;
+
+  // Collect highlight colors and bracket indices covering this proposition
+  const _highlightEntries = [];
+  Object.entries(DA_STATE.bracketHighlights).forEach(([bIdxStr, color]) => {
+    const bIdx = parseInt(bIdxStr, 10);
+    const extent = getBracketExtent(bIdx);
+    if (i >= extent.from && i <= extent.to) _highlightEntries.push({ bIdx, color, extent });
+  });
+  const _highlightColors = _highlightEntries.map(e => e.color);
+
+  // --- Left accent bar ---
+  let _bar = block.querySelector('.section-highlight-bar');
+  if (_highlightColors.length === 0) {
+    if (_bar) _bar.remove();
+    block.style.background = '';
+  } else {
+    if (!_bar) {
+      _bar = document.createElement('div');
+      _bar.className = 'section-highlight-bar';
+      block.appendChild(_bar);
+    }
+    if (_highlightColors.length === 1) {
+      _bar.style.background = _hexToRgba(_highlightColors[0], 0.9);
+      block.style.background = _hexToRgba(_highlightColors[0], 0.2);
+    } else {
+      const seg = 100 / _highlightColors.length;
+      const barStops = _highlightColors.flatMap((c, idx) =>
+        [`${_hexToRgba(c, 0.9)} ${(idx * seg).toFixed(1)}%`, `${_hexToRgba(c, 0.9)} ${((idx + 1) * seg).toFixed(1)}%`]
+      );
+      _bar.style.background = `linear-gradient(to bottom, ${barStops.join(', ')})`;
+      const size = 14;
+      const bgStops = _highlightColors.flatMap((c, idx) =>
+        [`${_hexToRgba(c, 0.2)} ${idx * size}px`, `${_hexToRgba(c, 0.2)} ${(idx + 1) * size}px`]
+      );
+      block.style.background = `repeating-linear-gradient(-45deg, ${bgStops.join(', ')})`;
+    }
+  }
+
 
   // Update verse ref
   const refSpan = block.querySelector('.verse-ref');

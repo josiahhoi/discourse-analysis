@@ -1681,6 +1681,19 @@ body {
   font-weight: bold;
 }
 
+.bracket-group.bracket-highlight-active .bracket-line,
+.bracket-group.bracket-highlight-active .bracket-arm {
+  stroke-width: 3.5;
+}
+
+.bracket-group.bracket-highlight-active .bracket-label {
+  font-weight: bold;
+}
+
+.bracket-group.bracket-highlight-active {
+  filter: drop-shadow(0 0 5px var(--glow-color, rgba(200, 180, 100, 0.8)));
+}
+
 .bracket-canvas .bracket-label {
   pointer-events: all;
   font-family: var(--font-sans);
@@ -1891,6 +1904,17 @@ body.text-edit-mode-active .verse-ref {
   background: rgba(201, 168, 108, 0.15);
   box-shadow: 0 0 0 1px var(--accent);
 }
+
+.section-highlight-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 5px 0 0 5px;
+  pointer-events: none;
+}
+
 
 .bracket-canvas .bracket-group.bracket-hover path:not(.bracket-hit) {
   stroke-width: 4;

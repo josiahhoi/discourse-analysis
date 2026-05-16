@@ -132,6 +132,7 @@ function importBracket(data) {
         return { ...c, target, replies: Array.isArray(c.replies) ? c.replies.map((r) => ({ ...r })) : [] };
     }) : [],
     indentation: Array.isArray(data.indentation) ? data.indentation.slice() : [],
+    bracketHighlights: (data.bracketHighlights && typeof data.bracketHighlights === 'object') ? Object.assign({}, data.bracketHighlights) : {},
     undoStack: [],
     bracketSelectStep: 0,
     firstBracketPoint: null,

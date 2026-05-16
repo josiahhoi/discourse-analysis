@@ -49,6 +49,7 @@ function clearAllFormatting() {
     comments: [],
     formatTags: [],
     indentation: [],
+    bracketHighlights: {},
     bracketSelectStep: 0,
     firstBracketPoint: null
   });
