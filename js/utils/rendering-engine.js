@@ -290,26 +290,43 @@ function updatePropositionBlock(block, text, i, verseDisplay) {
 
   block.style.marginLeft = `${(DA_STATE.indentation[i] || 0) * 20}px`;
 
-  // Collect highlight colors from all brackets that cover this proposition
-  const _highlightColors = [];
+  // Collect highlight colors and bracket indices covering this proposition
+  const _highlightEntries = [];
   Object.entries(DA_STATE.bracketHighlights).forEach(([bIdxStr, color]) => {
     const bIdx = parseInt(bIdxStr, 10);
     const extent = getBracketExtent(bIdx);
-    if (i >= extent.from && i <= extent.to) _highlightColors.push(color);
+    if (i >= extent.from && i <= extent.to) _highlightEntries.push({ bIdx, color, extent });
   });
+  const _highlightColors = _highlightEntries.map(e => e.color);
+
+  // --- Left accent bar ---
+  let _bar = block.querySelector('.section-highlight-bar');
   if (_highlightColors.length === 0) {
+    if (_bar) _bar.remove();
     block.style.background = '';
-  } else if (_highlightColors.length === 1) {
-    block.style.background = _hexToRgba(_highlightColors[0], 0.4);
   } else {
-    const size = 14;
-    const stops = [];
-    _highlightColors.forEach((c, idx) => {
-      const rgba = _hexToRgba(c, 0.45);
-      stops.push(`${rgba} ${idx * size}px`, `${rgba} ${(idx + 1) * size}px`);
-    });
-    block.style.background = `repeating-linear-gradient(-45deg, ${stops.join(', ')})`;
+    if (!_bar) {
+      _bar = document.createElement('div');
+      _bar.className = 'section-highlight-bar';
+      block.appendChild(_bar);
+    }
+    if (_highlightColors.length === 1) {
+      _bar.style.background = _hexToRgba(_highlightColors[0], 0.9);
+      block.style.background = _hexToRgba(_highlightColors[0], 0.2);
+    } else {
+      const seg = 100 / _highlightColors.length;
+      const barStops = _highlightColors.flatMap((c, idx) =>
+        [`${_hexToRgba(c, 0.9)} ${(idx * seg).toFixed(1)}%`, `${_hexToRgba(c, 0.9)} ${((idx + 1) * seg).toFixed(1)}%`]
+      );
+      _bar.style.background = `linear-gradient(to bottom, ${barStops.join(', ')})`;
+      const size = 14;
+      const bgStops = _highlightColors.flatMap((c, idx) =>
+        [`${_hexToRgba(c, 0.2)} ${idx * size}px`, `${_hexToRgba(c, 0.2)} ${(idx + 1) * size}px`]
+      );
+      block.style.background = `repeating-linear-gradient(-45deg, ${bgStops.join(', ')})`;
+    }
   }
+
 
   // Update verse ref
   const refSpan = block.querySelector('.verse-ref');

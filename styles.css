@@ -1905,6 +1905,17 @@ body.text-edit-mode-active .verse-ref {
   box-shadow: 0 0 0 1px var(--accent);
 }
 
+.section-highlight-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 5px 0 0 5px;
+  pointer-events: none;
+}
+
+
 .bracket-canvas .bracket-group.bracket-hover path:not(.bracket-hit) {
   stroke-width: 4;
 }
