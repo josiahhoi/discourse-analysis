@@ -104,28 +104,30 @@ function renderPropositions() {
 
   // Calculate hidden indices from collapsed brackets
   const hiddenIndices = new Set();
+  const _coordinateTypes = new Set(DA_CONSTANTS.RELATIONSHIP_GROUPS_HIERARCHY[0].types);
   DA_STATE.brackets.forEach((b, idx) => {
     if (b.isCollapsed) {
       const labels = getBracketLabels(b.type, b.labelsSwapped, b.dominanceFlipped);
-      const rangeFrom = getExtent(b.from);
-      const rangeTo = getExtent(b.to);
+      const rangeFrom = getRepresentativeRange(b.from);
+      const rangeTo = getRepresentativeRange(b.to);
       const fullRange = getBracketExtent(idx);
-      
+
+      const isCoordinate = _coordinateTypes.has(b.type.toLowerCase());
       const hasStarTop = (labels.top && labels.top.includes('*')) || labels.single === '*';
       const hasStarBottom = (labels.bottom && labels.bottom.includes('*'));
 
-      if (hasStarTop && !hasStarBottom) {
+      if (!isCoordinate && hasStarTop && !hasStarBottom) {
         // Show Dominant TOP (from), hide the rest
         for (let k = fullRange.from; k <= fullRange.to; k++) {
           if (k < rangeFrom.from || k > rangeFrom.to) hiddenIndices.add(k);
         }
-      } else if (hasStarBottom && !hasStarTop) {
+      } else if (!isCoordinate && hasStarBottom && !hasStarTop) {
         // Show Dominant BOTTOM (to), hide the rest
         for (let k = fullRange.from; k <= fullRange.to; k++) {
           if (k < rangeTo.from || k > rangeTo.to) hiddenIndices.add(k);
         }
       } else {
-        // Coordinate: Show both ends, hide the "middle" (if any)
+        // Coordinate (or ambiguous): show both ends, hide the middle
         for (let k = fullRange.from; k <= fullRange.to; k++) {
           const isAtFrom = k >= rangeFrom.from && k <= rangeFrom.to;
           const isAtTo = k >= rangeTo.from && k <= rangeTo.to;
@@ -154,6 +156,33 @@ function renderPropositions() {
     block.classList.toggle('folded-hidden', hiddenIndices.has(i));
     updatePropositionBlock(block, text, i, _verseSuffixMap[i]);
   });
+
+  // Remove stale gap indicators then re-insert for current hidden runs
+  container.querySelectorAll('.fold-gap').forEach(el => el.remove());
+
+  if (hiddenIndices.size > 0) {
+    const sorted = [...hiddenIndices].sort((a, b) => a - b);
+    const runs = [];
+    let runStart = sorted[0], runEnd = sorted[0];
+    for (let k = 1; k < sorted.length; k++) {
+      if (sorted[k] === runEnd + 1) { runEnd = sorted[k]; }
+      else { runs.push({ start: runStart, end: runEnd }); runStart = runEnd = sorted[k]; }
+    }
+    runs.push({ start: runStart, end: runEnd });
+
+    runs.forEach(({ start, end }) => {
+      const count = end - start + 1;
+      const gap = document.createElement('div');
+      gap.className = 'fold-gap';
+      gap.textContent = `··· ${count} row${count !== 1 ? 's' : ''} collapsed ···`;
+      if (start === 0) {
+        container.insertBefore(gap, container.querySelector('.proposition-block'));
+      } else {
+        const anchor = container.querySelector(`.proposition-block[data-index="${start - 1}"]`);
+        if (anchor) anchor.after(gap);
+      }
+    });
+  }
 
   isRenderingPropositions = false;
 }
@@ -209,6 +238,7 @@ function attachPropositionDelegatedListeners(container) {
   });
 
   let _glowPropIdx = null;
+  let _currentMarkId = null;
 
   const _clearBracketGlow = () => {
     document.querySelectorAll('.bracket-group.bracket-highlight-active').forEach(el => {
@@ -217,29 +247,55 @@ function attachPropositionDelegatedListeners(container) {
     });
   };
 
+  const _clearCommentCardActive = () => {
+    document.querySelectorAll('.comments-preview-card.comment-hover-active')
+      .forEach(el => el.classList.remove('comment-hover-active'));
+  };
+
+  const _activateCommentCard = (commentId) => {
+    const card = document.querySelector(`.comments-preview-card[data-comment-id="${commentId}"]`);
+    if (!card) return;
+    card.classList.add('comment-hover-active');
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+
   container.addEventListener('mouseover', (e) => {
+    // Bracket highlight glow: update only when entering a new proposition block
     const block = e.target.closest('.proposition-block');
     const i = block ? parseInt(block.dataset.index, 10) : null;
-    if (i === _glowPropIdx) return;
-    _glowPropIdx = i;
-    _clearBracketGlow();
-    if (i === null || isNaN(i) || !Object.keys(DA_STATE.bracketHighlights).length) return;
-    Object.entries(DA_STATE.bracketHighlights).forEach(([bIdxStr, color]) => {
-      const bIdx = parseInt(bIdxStr, 10);
-      const extent = getBracketExtent(bIdx);
-      if (i >= extent.from && i <= extent.to) {
-        const group = document.querySelector(`.bracket-group[data-index="${bIdx}"]`);
-        if (group) {
-          group.style.setProperty('--glow-color', color);
-          group.classList.add('bracket-highlight-active');
-        }
+    if (i !== _glowPropIdx) {
+      _glowPropIdx = i;
+      _clearBracketGlow();
+      if (i !== null && !isNaN(i) && Object.keys(DA_STATE.bracketHighlights).length) {
+        Object.entries(DA_STATE.bracketHighlights).forEach(([bIdxStr, color]) => {
+          const bIdx = parseInt(bIdxStr, 10);
+          const extent = getBracketExtent(bIdx);
+          if (i >= extent.from && i <= extent.to) {
+            const group = document.querySelector(`.bracket-group[data-index="${bIdx}"]`);
+            if (group) {
+              group.style.setProperty('--glow-color', color);
+              group.classList.add('bracket-highlight-active');
+            }
+          }
+        });
       }
-    });
+    }
+
+    // Text mark → comment card: activate on mark entry/exit
+    const mark = e.target.closest('mark.comment-highlight');
+    const markId = mark?.dataset.commentId ?? null;
+    if (markId !== _currentMarkId) {
+      _currentMarkId = markId;
+      _clearCommentCardActive();
+      if (markId) _activateCommentCard(markId);
+    }
   });
 
   container.addEventListener('mouseleave', () => {
     _glowPropIdx = null;
     _clearBracketGlow();
+    _currentMarkId = null;
+    _clearCommentCardActive();
   });
 }
 
@@ -636,6 +692,39 @@ function renderBrackets() {
   
   if (dotPositions.length === 0) return;
 
+  // Bracket group hover → comment card activation (set up once on the SVG element)
+  if (!svg._commentHoverListenerAttached) {
+    svg._commentHoverListenerAttached = true;
+    let _hoveredBracketIdx = null;
+    const _clearCardActive = () => {
+      document.querySelectorAll('.comments-preview-card.comment-hover-active')
+        .forEach(el => el.classList.remove('comment-hover-active'));
+    };
+    svg.addEventListener('mouseover', (e) => {
+      const group = e.target.closest('.bracket-group.has-comment');
+      const newIdx = group ? parseInt(group.dataset.index, 10) : null;
+      if (newIdx === _hoveredBracketIdx) return;
+      _hoveredBracketIdx = newIdx;
+      _clearCardActive();
+      if (newIdx === null || isNaN(newIdx)) return;
+      DA_STATE.comments.forEach(c => {
+        if (c.type === 'bracket' && c.target?.bracketIdx === newIdx) {
+          const card = document.querySelector(`.comments-preview-card[data-comment-id="${c.id}"]`);
+          if (card) {
+            card.classList.add('comment-hover-active');
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }
+      });
+    });
+    svg.addEventListener('mouseleave', () => {
+      _hoveredBracketIdx = null;
+      _clearCardActive();
+    });
+  }
+
+  const _coordTypes = new Set(DA_CONSTANTS.RELATIONSHIP_GROUPS_HIERARCHY[0].types);
+
   DA_STATE.brackets.forEach((bracket, i) => {
     // 1. Hide brackets that are inside a collapsed parent
     const isInsideCollapsed = DA_STATE.brackets.some((otherB, otherIdx) => {
@@ -649,60 +738,71 @@ function renderBrackets() {
     let { topY, topLeft, bottomY, bottomLeft } = getConnectionPoints(bracket.from, bracket.to, dotPositions, i);
     const x = getBracketX(i);
 
-    if (bracket.isCollapsed) {
-      // For subordinate relationships, snap everything to the starred (visible) proposition
-      const labels = getBracketLabels(bracket.type, bracket.labelsSwapped, bracket.dominanceFlipped);
-      const isTopStar = labels.top.includes('*');
-      const isBottomStar = labels.bottom.includes('*');
+    const isCollapsedCoord = bracket.isCollapsed && _coordTypes.has(bracket.type.toLowerCase());
 
-      if (isTopStar && !isBottomStar) {
-        bottomY = topY;
-        bottomLeft = topLeft;
-      } else if (isBottomStar && !isTopStar) {
-        topY = bottomY;
-        topLeft = bottomLeft;
-      } else {
-        // Fallback for coordinate or no star: just use the mid-point or top
-        bottomY = topY;
-        bottomLeft = topLeft;
-      }
-      
-      // If the resulting coordinate is 0 (source is hidden), find the nearest visible extent
-      if (topY === 0 || bottomY === 0) {
-        const extent = getBracketExtent(i);
-        // Find any proposition in this range that isn't hidden
-        for (let j = extent.from; j <= extent.to; j++) {
+    if (bracket.isCollapsed) {
+      if (isCollapsedCoord) {
+        // Coordinate collapsed: resolve both visible endpoints and span the full distance
+        const repFrom = getRepresentativeRange(bracket.from);
+        const repTo = getRepresentativeRange(bracket.to);
+        const fromPos = dotPositions[repFrom.from];
+        const toPos = dotPositions[repTo.from];
+        if (fromPos && fromPos.midY > 0 && toPos && toPos.midY > 0) {
+          topY = fromPos.midY;
+          topLeft = fromPos.left;
+          bottomY = toPos.midY;
+          bottomLeft = toPos.left;
+        } else {
+          const extent = getBracketExtent(i);
+          for (let j = extent.from; j <= extent.to; j++) {
             const pos = dotPositions[j];
-            if (pos && pos.midY > 0) {
-                topY = bottomY = pos.midY;
-                topLeft = bottomLeft = pos.left;
-                break;
-            }
+            if (pos && pos.midY > 0) { topY = bottomY = pos.midY; topLeft = bottomLeft = pos.left; break; }
+          }
+        }
+      } else {
+        // Subordinate collapsed: snap to the representative dot of the dominant endpoint.
+        // Use getRepresentativeRange so that bN refs resolve to the actual proposition dot
+        // rather than the bracket node x position (which may be hidden/unrendered).
+        const labelsC = getBracketLabels(bracket.type, bracket.labelsSwapped, bracket.dominanceFlipped);
+        const isTopStar = labelsC.top && labelsC.top.includes('*');
+        const isBottomStar = labelsC.bottom && labelsC.bottom.includes('*');
+        const dominantId = (isBottomStar && !isTopStar) ? bracket.to : bracket.from;
+        const repDominant = getRepresentativeRange(dominantId);
+        const dominantPos = dotPositions[repDominant.from];
+        if (dominantPos && dominantPos.midY > 0) {
+          topY = bottomY = dominantPos.midY;
+          topLeft = bottomLeft = dominantPos.left;
+        } else {
+          // Fallback: find first visible prop in the bracket's full extent
+          const extent = getBracketExtent(i);
+          for (let j = extent.from; j <= extent.to; j++) {
+            const pos = dotPositions[j];
+            if (pos && pos.midY > 0) { topY = bottomY = pos.midY; topLeft = bottomLeft = pos.left; break; }
+          }
         }
       }
     }
-    
+
     // Create Group for Hovering and Selection
     const isBracketSelected = DA_STATE.firstBracketPoint === `b${i}`;
     const isActiveTarget = DA_STATE.activeCommentTarget && DA_STATE.activeCommentTarget.type === 'bracket' && DA_STATE.activeCommentTarget.bracketIdx === i;
     const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     const color = DA_CONSTANTS.RELATIONSHIP_COLORS[bracket.type] || DA_CONSTANTS.RELATIONSHIP_COLORS.unspecified;
     group.setAttribute('style', `--bracket-color: ${color};`);
-    group.setAttribute('class', `bracket-group ${bracket.type} ${bracket.isCollapsed ? 'is-collapsed' : ''} ${isBracketSelected ? 'is-selected' : ''} ${isActiveTarget ? 'is-active-target' : ''}`);
+    group.setAttribute('class', `bracket-group ${bracket.type} ${bracket.isCollapsed ? 'is-collapsed' : ''} ${isCollapsedCoord ? 'is-collapsed-coord' : ''} ${isBracketSelected ? 'is-selected' : ''} ${isActiveTarget ? 'is-active-target' : ''}`);
     group.dataset.index = i;
     svg.appendChild(group);
 
     const labels = getBracketLabels(bracket.type, bracket.labelsSwapped, bracket.dominanceFlipped);
-    
+
     // Background highlight path for comments
     if (DA_STATE.showCommentsEnabled) {
       const bComments = DA_STATE.comments.filter(c => c.type === 'bracket' && c.target && c.target.bracketIdx === i);
       if (bComments.length > 0) {
           group.classList.add('has-comment');
-          // Draw a path that traces the bracket (arms + vertical)
           let d;
-          if (bracket.isCollapsed) {
-            d = `M ${x} ${topY} V ${topY}`; // vertical point
+          if (bracket.isCollapsed && !isCollapsedCoord) {
+            d = `M ${x} ${topY} V ${topY}`;
           } else {
             d = `M ${topLeft} ${topY} H ${x} V ${bottomY} H ${bottomLeft}`;
           }
@@ -716,67 +816,54 @@ function renderBrackets() {
       }
     }
 
-    // Main Vertical Line or Collapsed Indicator
+    // Main Vertical Line
     group.appendChild(createSVG('line', {
-      x1: x, y1: topY, 
-      x2: x, y2: (bracket.isCollapsed ? topY : bottomY),
+      x1: x, y1: topY,
+      x2: x, y2: ((bracket.isCollapsed && !isCollapsedCoord) ? topY : bottomY),
       class: 'bracket-line'
     }));
 
-    if (bracket.isCollapsed) {
-      // Single L-shaped path to connect node to summary label
-      group.appendChild(createSVG('path', {
-        d: `M ${x - 15} ${topY} L ${x - 15} ${topY - 14} L ${x + 5} ${topY - 14}`,
-        class: 'bracket-line collapsed-indicator',
-        fill: 'none'
-      }));
-    }
-
     // Hitbox
     group.appendChild(createSVG('line', {
-      x1: x, y1: topY, 
-      x2: x, y2: (bracket.isCollapsed ? topY : bottomY),
+      x1: x, y1: topY,
+      x2: x, y2: ((bracket.isCollapsed && !isCollapsedCoord) ? topY : bottomY),
       class: 'bracket-hitbox',
       dataset: { index: i }
     }));
-    
-    // Top Arm
-    if (!bracket.isCollapsed) {
-      group.appendChild(createSVG('line', {
-        x1: x, y1: topY, x2: topLeft, y2: topY,
-        class: 'bracket-hitbox',
-        dataset: { index: i }
-      }));
 
-      group.appendChild(createSVG('line', {
-        x1: x, y1: topY, x2: topLeft, y2: topY,
-        class: `bracket-arm ${bracket.type}`,
-        dataset: { index: i }
-      }));
-    }
-    
-    // Bottom Arm
-    if (!bracket.isCollapsed) {
+    // Top Arm (always drawn — for subordinate collapsed this is the single arm to the dominant row)
+    group.appendChild(createSVG('line', {
+      x1: x, y1: topY, x2: topLeft, y2: topY,
+      class: 'bracket-hitbox',
+      dataset: { index: i }
+    }));
+    group.appendChild(createSVG('line', {
+      x1: x, y1: topY, x2: topLeft, y2: topY,
+      class: `bracket-arm ${bracket.type}`,
+      dataset: { index: i }
+    }));
+
+    // Bottom Arm (skipped for subordinate collapsed — topY == bottomY there, so it would duplicate the top arm)
+    if (!bracket.isCollapsed || isCollapsedCoord) {
       group.appendChild(createSVG('line', {
         x1: x, y1: bottomY, x2: bottomLeft, y2: bottomY,
         class: 'bracket-hitbox',
         dataset: { index: i }
       }));
-
       group.appendChild(createSVG('line', {
         x1: x, y1: bottomY, x2: bottomLeft, y2: bottomY,
         class: `bracket-arm ${bracket.type}`,
         dataset: { index: i }
       }));
     }
-    
+
     // Connection Node (Recursive Dot)
     let nodeY = (topY + bottomY) / 2;
     if (!labels.single) {
       if (labels.top && labels.top.includes('*')) nodeY = topY;
       else if (labels.bottom && labels.bottom.includes('*')) nodeY = bottomY;
     }
-    
+
     group.appendChild(createSVG('circle', {
       cx: x - 15,
       cy: nodeY,
@@ -784,15 +871,16 @@ function renderBrackets() {
       class: `${(DA_STATE.bracketSelectStep === 1 && DA_STATE.firstBracketPoint === `b${i}`) ? 'connection-node active-node' : 'connection-node'} ${bracket.isCollapsed ? 'collapsed' : ''}`,
       dataset: { bracketIdx: i }
     }));
-    
-    if (bracket.isCollapsed) {
+
+    if (bracket.isCollapsed && !isCollapsedCoord) {
+      // Subordinate collapsed: summary label at the dominant row arm, same position as normal top label
       group.appendChild(createSVG('text', {
-        x: x + 8,
-        y: topY - 14,
-        'dominant-baseline': 'middle',
-        class: 'bracket-label collapsed-summary',
+        x: x + 5,
+        y: topY - 5,
+        'text-anchor': 'start',
+        class: 'bracket-label',
         dataset: { index: i }
-      })).textContent = `${labels.summary} [...]`;
+      })).textContent = labels.summary;
     } else if (labels.single) {
       group.appendChild(createSVG('text', {
         x: x + 5,
@@ -810,7 +898,7 @@ function renderBrackets() {
         class: 'bracket-label',
         dataset: { index: i, pos: 'top' }
       })).textContent = labels.top;
-      
+
       group.appendChild(createSVG('text', {
         x: x + 5,
         y: bottomY - 5,
@@ -849,6 +937,34 @@ function getBracketExtent(bracketIdx) {
   const eFrom = getExtent(b.from);
   const eTo = getExtent(b.to);
   return { from: Math.min(eFrom.from, eTo.from), to: Math.max(eFrom.to, eTo.to) };
+}
+
+// Like getExtent but follows only the dominant (starred) side of nested brackets,
+// so collapsing a bracket shows only the representative proposition(s), not the
+// full extent of a sub-bracket endpoint.
+function getRepresentativeRange(id, _seen) {
+  if (id === null || id === undefined) return { from: 0, to: 0 };
+  if (typeof id === 'number' || id.startsWith('p')) {
+    const idx = typeof id === 'number' ? id : parseInt(id.slice(1), 10);
+    return { from: idx, to: idx };
+  }
+  const bIdx = parseInt(id.slice(1), 10);
+  if (!_seen) _seen = new Set();
+  if (_seen.has(bIdx)) return { from: 0, to: 0 };
+  _seen.add(bIdx);
+  const b = DA_STATE.brackets[bIdx];
+  if (!b) return { from: 0, to: 0 };
+  const labels = getBracketLabels(b.type, b.labelsSwapped, b.dominanceFlipped);
+  const hasStarTop = (labels.top && labels.top.includes('*')) || labels.single === '*';
+  const hasStarBottom = labels.bottom && labels.bottom.includes('*');
+  if (hasStarTop && !hasStarBottom) {
+    return getRepresentativeRange(b.from, _seen);
+  } else if (hasStarBottom && !hasStarTop) {
+    return getRepresentativeRange(b.to, _seen);
+  } else {
+    // Coordinate or ambiguous — expose the full extent of this sub-bracket
+    return getBracketExtent(bIdx);
+  }
 }
 
 function getConnectionPoints(fromId, toId, dotPositions, excludeBracketIdx = -1) {
@@ -1178,6 +1294,45 @@ function renderCommentPreviews() {
       card._lastHtml = newHtml;
     }
   });
+
+  // Card hover → corresponding highlight glow (set up once on the list container)
+  if (!list._commentCardHoverListenersAttached) {
+    list._commentCardHoverListenersAttached = true;
+    let _hoveredCardId = null;
+
+    const _clearHighlightHover = () => {
+      document.querySelectorAll('mark.comment-highlight.comment-highlight-card-hover')
+        .forEach(el => el.classList.remove('comment-highlight-card-hover'));
+      document.querySelectorAll('.bracket-group.comment-card-hover')
+        .forEach(el => el.classList.remove('comment-card-hover'));
+    };
+
+    list.addEventListener('mouseover', (e) => {
+      const card = e.target.closest('.comments-preview-card');
+      const newId = card?.dataset.commentId ?? null;
+      if (newId === _hoveredCardId) return;
+      _hoveredCardId = newId;
+      _clearHighlightHover();
+      if (!newId) return;
+      const comment = DA_STATE.comments.find(c => c.id === newId);
+      if (!comment) return;
+      if (comment.type === 'text') {
+        document.querySelectorAll(`mark.comment-highlight[data-comment-id="${newId}"]`)
+          .forEach(el => el.classList.add('comment-highlight-card-hover'));
+      } else {
+        const bracketIdx = comment.target?.bracketIdx;
+        if (bracketIdx !== undefined) {
+          const group = document.querySelector(`.bracket-group[data-index="${bracketIdx}"]`);
+          if (group) group.classList.add('comment-card-hover');
+        }
+      }
+    });
+
+    list.addEventListener('mouseleave', () => {
+      _hoveredCardId = null;
+      _clearHighlightHover();
+    });
+  }
 }
 
 function getPointExtent(id) {
