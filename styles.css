@@ -955,7 +955,7 @@ body {
   border-radius: 10px;
   border-left: 4px solid var(--accent);
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.1);
-  transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, border-left-color 0.18s ease;
   cursor: default;
 }
 
@@ -964,10 +964,12 @@ body {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
+/* Activated by hovering the corresponding highlight: slide left + gold border */
 .comments-preview-card.comment-hover-active {
-  background: rgba(201, 168, 108, 0.1);
-  box-shadow: 0 0 0 1px var(--accent);
-  border-left-color: var(--accent);
+  transform: translateX(-5px);
+  border-left-color: var(--comment-note);
+  background: var(--comment-note-40);
+  box-shadow: 0 0 0 1px var(--comment-note-40), 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .comment-card-header {
@@ -1649,9 +1651,16 @@ body {
 }
 
 /* Bracket with comment: stronger highlight and glow on hover */
-.bracket-canvas .bracket-group.has-comment:hover .bracket-comment-highlight {
+.bracket-canvas .bracket-group.has-comment:hover .bracket-comment-highlight,
+.bracket-canvas .bracket-group.comment-card-hover .bracket-comment-highlight {
   stroke-opacity: 0.9;
-  filter: drop-shadow(0 0 5px var(--comment-note));
+  filter: drop-shadow(0 0 8px var(--comment-note));
+}
+
+/* Text mark glow when hovering the corresponding comment card */
+mark.comment-highlight.comment-highlight-card-hover {
+  background: var(--comment-note-55);
+  box-shadow: 0 0 10px var(--comment-note);
 }
 
 /* Connection nodes: clickable dots for propositions and brackets */
@@ -1991,51 +2000,43 @@ body.text-edit-mode-active .verse-ref {
   display: none !important;
 }
 
+.fold-gap {
+  text-align: center;
+  color: var(--text-muted, #aaa);
+  font-size: 11px;
+  padding: 2px 0;
+  letter-spacing: 3px;
+  pointer-events: none;
+  user-select: none;
+}
+
 .connection-node.collapsed {
-  fill: #16a34a;
+  fill: var(--bracket-color);
+  opacity: 0.75;
   stroke: #fff;
   stroke-width: 1.5px;
   cursor: zoom-in;
 }
 
+/* All collapsed brackets: bracket's own color, dashed */
 .bracket-group.is-collapsed .bracket-line,
 .bracket-group.is-collapsed .bracket-arm {
-  stroke: #16a34a;
-  stroke-width: 2.5px;
-  stroke-dasharray: 4 2;
+  stroke: var(--bracket-color);
+  stroke-width: 2px;
+  stroke-dasharray: 5 3;
+  opacity: 0.75;
 }
 
-.bracket-group.is-collapsed:hover .bracket-line {
-  stroke-width: 4px;
-}
-
-.collapsed-summary {
-  font-weight: 700 !important;
-  fill: #16a34a !important;
-  font-size: 11px;
-  cursor: pointer;
-  paint-order: stroke;
-  stroke: #fcfcfc;
+.bracket-group.is-collapsed:hover .bracket-line,
+.bracket-group.is-collapsed:hover .bracket-arm {
   stroke-width: 3px;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.bracket-group.is-collapsed:hover .collapsed-summary {
-  text-decoration: underline;
-  fill: #15803d !important;
+  opacity: 1;
 }
 
 .bracket-group.is-selected .bracket-line,
 .bracket-group.is-selected .bracket-arm {
   stroke: #b45309 !important; /* Amber-700 */
   stroke-width: 3.5px;
-}
-
-.collapsed-indicator {
-  stroke: #16a34a !important; /* Green-600 */
-  stroke-dasharray: 4, 3;
-  stroke-width: 3px;
 }
 
 @keyframes pulse-soft {

@@ -44,21 +44,31 @@ function escapeHtml(str) {
 
 
 function setupClickOutside(el, onDismiss) {
+  let _mouseDownWasInside = false;
+
+  const onMouseDown = (e) => {
+    _mouseDownWasInside = el.contains(e.target);
+  };
+
   const dismiss = (e) => {
-    // If the element has been removed from the DOM already, stop
     if (!el.parentNode) {
       document.removeEventListener('click', dismiss);
+      document.removeEventListener('mousedown', onMouseDown);
       return;
     }
-    // Check if click was outside
+    // Ignore clicks that result from a drag starting inside (e.g. text selection)
+    if (_mouseDownWasInside) return;
     if (!el.contains(e.target)) {
       onDismiss();
       document.removeEventListener('click', dismiss);
+      document.removeEventListener('mousedown', onMouseDown);
     }
   };
+
+  document.addEventListener('mousedown', onMouseDown);
   // Timeout ensures the trigger click doesn't immediately close it
   setTimeout(() => document.addEventListener('click', dismiss), 10);
-  return dismiss; // Return the function so it can be manually removed if needed
+  return dismiss;
 }
 
 function clearPropositionHighlights() {
