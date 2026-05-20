@@ -42,6 +42,26 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+function renderCommentText(text) {
+    let s = escapeHtml(text);
+    s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+    s = s.replace(/__([^_\n]+)__/g, '<u>$1</u>');
+    s = s.replace(/\n/g, '<br>');
+    return s;
+}
+
+function applyFormatting(textarea, syntax) {
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const val = textarea.value;
+    const selected = val.substring(start, end);
+    const replacement = syntax + selected + syntax;
+    textarea.value = val.substring(0, start) + replacement + val.substring(end);
+    textarea.selectionStart = selected ? start : start + syntax.length;
+    textarea.selectionEnd = selected ? start + replacement.length : start + syntax.length;
+    textarea.focus();
+}
 
 function setupClickOutside(el, onDismiss) {
   let _mouseDownWasInside = false;
@@ -147,7 +167,7 @@ function showCommentPopover(config) {
 
       popover.querySelector('.comment-author').textContent = comment.author || 'Anonymous';
       popover.querySelector('.comment-time').textContent = formatDate(comment.timestamp || comment.createdAt);
-      popover.querySelector('.comment-text').textContent = comment.text;
+      popover.querySelector('.comment-text').innerHTML = renderCommentText(comment.text);
       popover.querySelector('.comment-edit-area textarea').value = comment.text;
 
       const repliesList = popover.querySelector('.replies-list');
@@ -159,11 +179,13 @@ function showCommentPopover(config) {
         replyEl.dataset.idx = rIdx;
         replyEl.querySelector('.comment-author').textContent = r.author || 'Anonymous';
         replyEl.querySelector('.comment-time').textContent = formatDate(r.timestamp || r.createdAt);
-        replyEl.querySelector('.comment-text').textContent = r.text;
+        replyEl.querySelector('.comment-text').innerHTML = renderCommentText(r.text);
         replyEl.querySelector('textarea').value = r.text;
 
         const rDisplay = replyEl.querySelector('.comment-text');
         const rEditArea = replyEl.querySelector('.reply-edit-area');
+        const rTextarea = rEditArea.querySelector('textarea');
+        attachFormatShortcuts(rTextarea);
 
         replyEl.querySelector('.edit-reply-btn').onclick = () => {
           rDisplay.style.display = 'none';
@@ -202,7 +224,19 @@ function showCommentPopover(config) {
     }
   };
 
+  const attachFormatShortcuts = (textarea) => {
+    textarea.addEventListener('keydown', (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (e.key === 'b') { e.preventDefault(); applyFormatting(textarea, '**'); }
+      else if (e.key === 'i') { e.preventDefault(); applyFormatting(textarea, '*'); }
+      else if (e.key === 'u') { e.preventDefault(); applyFormatting(textarea, '__'); }
+    });
+  };
+
   const attachListeners = () => {
+    attachFormatShortcuts(popover.querySelector('.new-comment-area textarea'));
+    attachFormatShortcuts(popover.querySelector('.comment-edit-area textarea'));
+
     popover.querySelector('.close-btn').onclick = () => {
       DA_STATE.activeCommentTarget = null;
       if (window.renderAll) window.renderAll();
@@ -362,6 +396,7 @@ function showBracketActions(bracketIdx, centerY, centerX) {
   popover.style.left = `${centerX}px`;
   popover.style.top = `${centerY}px`;
   document.body.appendChild(popover);
+  clampToViewport(popover);
 
   const clearAndDismiss = () => popover.remove();
 
@@ -439,6 +474,7 @@ function showTextContextMenu(propIndex, start, end, centerY, centerX, anchorRect
   menu.style.left = `${centerX}px`;
   menu.style.top = `${centerY}px`;
   document.body.appendChild(menu);
+  clampToViewport(menu);
 
   menu.querySelector('[data-action="add-comment"]').addEventListener('click', (e) => {
     e.stopPropagation();
@@ -660,12 +696,6 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
     showCustomLabelDialog(bracketIdx, centerY, centerX, picker);
   });
 
-  const propositionsContainer = document.getElementById('propositions');
-  const wrapper = propositionsContainer?.parentElement || document.body;
-  const rect = wrapper.getBoundingClientRect();
-  const relX = centerX - rect.left;
-  const relY = centerY - rect.top;
-
   if (hasTwoLabels) {
     picker.querySelector('[data-action="swap"]').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -690,11 +720,17 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
     showStatus('Bracket removed.', 'success');
   });
 
-  picker.style.left = `${Math.max(10, Math.min(relX - 220, wrapper.offsetWidth - 450))}px`;
-  picker.style.top = `${Math.max(10, relY - 150)}px`;
-  wrapper.appendChild(picker);
+  picker.classList.add('relationship-picker-fixed');
+  document.body.appendChild(picker);
 
-  makePopupDraggable(picker, '.picker-title');
+  const pw = picker.offsetWidth || 450;
+  const ph = picker.offsetHeight;
+  const left = Math.max(5, Math.min(centerX - pw / 2, window.innerWidth - pw - 5));
+  const top = Math.max(5, Math.min(centerY - 150, window.innerHeight - ph - 5));
+  picker.style.left = `${left}px`;
+  picker.style.top = `${top}px`;
+
+  makeFixedDraggable(picker, '.picker-title');
 
   setupClickOutside(picker, () => picker.remove());
 }
@@ -1204,6 +1240,50 @@ function formatBracketType(type) {
   return DA_CONSTANTS.RELATIONSHIP_LABELS[type] || type.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-');
 }
 
+function clampToViewport(el) {
+  const r = el.getBoundingClientRect();
+  const maxLeft = window.innerWidth - r.width - 5;
+  const maxTop = window.innerHeight - r.height - 5;
+  if (r.right > window.innerWidth - 5) el.style.left = `${Math.max(5, maxLeft)}px`;
+  if (r.bottom > window.innerHeight - 5) el.style.top = `${Math.max(5, maxTop)}px`;
+  if (r.left < 5) el.style.left = '5px';
+  if (r.top < 5) el.style.top = '5px';
+}
+
+function makeFixedDraggable(popover, handleSelector) {
+  const handle = handleSelector ? popover.querySelector(handleSelector) : popover;
+  if (!handle) return;
+  handle.style.cursor = 'grab';
+  handle.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    if (e.target.tagName === 'BUTTON') return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const r = popover.getBoundingClientRect();
+    const startLeft = r.left;
+    const startTop = r.top;
+    popover.style.transform = 'none';
+    popover.style.left = startLeft + 'px';
+    popover.style.top = startTop + 'px';
+    handle.style.cursor = 'grabbing';
+    const onMove = (e2) => {
+      const pr = popover.getBoundingClientRect();
+      const left = Math.max(5, Math.min(startLeft + e2.clientX - startX, window.innerWidth - pr.width - 5));
+      const top = Math.max(5, Math.min(startTop + e2.clientY - startY, window.innerHeight - pr.height - 5));
+      popover.style.left = left + 'px';
+      popover.style.top = top + 'px';
+    };
+    const onUp = () => {
+      handle.style.cursor = 'grab';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
 function makePopupDraggable(popover, handleSelector) {
   const wrapper = popover.parentElement;
   if (!wrapper) return;
@@ -1353,7 +1433,7 @@ function showCustomLabelDialog(bracketIdx, centerY, centerX, mainPicker) {
 }
 
 window.DA_UI = {
-    showStatus, updateCloudUI, isGurtnerMode, escapeHtml, makePopupDraggable, setupClickOutside, clearPropositionHighlights,
+    showStatus, updateCloudUI, isGurtnerMode, escapeHtml, renderCommentText, clampToViewport, makePopupDraggable, makeFixedDraggable, setupClickOutside, clearPropositionHighlights,
     getCommentForBracket, showCommentPopover, showCommentPopoverForText, showCommentPopoverForBracket,
     showBracketActions, showTextContextMenu, showLabelPicker, showExportMenu, showOpenMenu, saveState, restoreState,
     showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings,

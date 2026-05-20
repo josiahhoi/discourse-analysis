@@ -1274,12 +1274,12 @@ function renderCommentPreviews() {
         <span class="comment-target">${DA_UI.escapeHtml(targetDesc)}</span>
       </div>
       <div class="comment-author">${DA_UI.escapeHtml(comment.author)}</div>
-      <div class="comment-text">${DA_UI.escapeHtml(comment.text)}</div>
+      <div class="comment-text">${DA_UI.renderCommentText(comment.text)}</div>
       <div class="comment-replies">
         ${(comment.replies || []).map(r => `
           <div class="reply">
-            <span class="reply-author">${DA_UI.escapeHtml(r.author)}:</span> 
-            <span class="reply-text">${DA_UI.escapeHtml(r.text)}</span>
+            <span class="reply-author">${DA_UI.escapeHtml(r.author)}:</span>
+            <span class="reply-text">${DA_UI.renderCommentText(r.text)}</span>
           </div>
         `).join('')}
       </div>

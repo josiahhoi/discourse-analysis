@@ -1179,7 +1179,6 @@ body {
   line-height: 1.45;
   color: var(--text);
   margin-bottom: 0.5rem;
-  white-space: pre-wrap;
   word-break: break-word;
 }
 
