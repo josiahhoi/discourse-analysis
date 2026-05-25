@@ -202,8 +202,7 @@ async function fetchPassage() {
   fetchBtn.textContent = 'Fetching…';
 
   try {
-    const key = apiKeyInput?.value?.trim() || '';
-    const result = await DA_BIBLE.fetchPassageData(version, query, key);
+    const result = await DA_BIBLE.fetchPassageData(version, query);
 
     DA_STATE.propositions = result.propositions;
     DA_STATE.verseRefs = result.verseRefs;

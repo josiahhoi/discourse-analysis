@@ -1,84 +1,101 @@
 const PASSAGE_REF_REGEX = /^(\d?\s*[a-zA-Z\s]+?)\s*(\d+)(?::(\d+)(?:-(\d+))?)?$/;
 
-/**
- * Main entry point for fetching a passage.
- * @param {string} version - 'esv', 'nasb', or 'greek'
- * @param {string} query - Reference string (e.g. "John 1:1")
- * @param {string} apiKey - Optional ESV API key
- * @returns {Promise<{propositions: string[], verseRefs: string[], passageRef: string, copyright: string, isGreek: boolean}>}
- */
-async function fetchPassageData(version, query, apiKey) {
-  if (version === 'greek') {
-    const ref = parsePassageReference(query);
-    if (ref && ref.file) {
-      // New Testament -> SBLGNT (pass already-parsed ref to avoid re-parsing)
-      const result = await fetchSBLGNTPassage(query, ref);
-      return { ...result, isGreek: true };
-    } else {
-      // Old Testament -> LXX via Bolls
-      const data = await fetchFromBolls('LXX', query);
-      const parsed = parseBollsText(data.text);
-      return { 
-        propositions: parsed.propositions, 
-        verseRefs: parsed.verseRefs, 
-        passageRef: data.passageRef, 
-        copyright: data.copyright, 
-        isGreek: true 
-      };
-    }
-  }
+// ── Logos Source ───────────────────────────────────────────────────────────────
 
-  // English versions
-  let data = null;
-  let error = null;
+// TODO: Implement once the Logos local API endpoint format is confirmed.
+// When Logos is running it exposes a local HTTP server. Consult the Logos
+// Platform developer docs for the correct base URL, resource IDs (ESV, NASB,
+// NA28), and response shape. Then wire up `transformLogosResponse` below.
+async function fetchFromLogos(_version, _query) {
+  return null;
+}
 
-  // 1. ESV API
-  if (version === 'esv' && apiKey) {
-    try {
-      const url = new URL(DA_CONSTANTS.ESV_API);
-      url.searchParams.set('q', query);
-      url.searchParams.set('include-passage-references', 'false');
-      url.searchParams.set('include-verse-numbers', 'true');
-      url.searchParams.set('include-footnotes', 'false');
-      url.searchParams.set('include-headings', 'false');
+// ── SBLGNT Source (NT Greek) ──────────────────────────────────────────────────
 
-      const res = await fetch(url.toString(), {
-        headers: { Authorization: `Token ${apiKey}` },
-      });
-      if (res.ok) {
-        const raw = await res.json();
-        data = {
-          text: (raw.passages?.[0] || '').replace(/\s*\(ESV\)\s*$/i, '').trim(),
-          passageRef: raw.canonical || query,
-          copyright: '(ESV)'
-        };
+async function fetchSBLGNTPassage(query, ref) {
+  if (!ref) ref = parsePassageReference(query);
+  if (!ref || !ref.file) throw new Error('Book not found in SBLGNT (New Testament only).');
+
+  const url = `${DA_CONSTANTS.SBLGNT_BASE}${ref.file}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`SBLGNT fetch error: ${res.status}`);
+
+  const text = await res.text();
+  const lines = text.split('\n');
+  const results = [];
+  const verseRefs = [];
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const parts = line.split('\t');
+    if (parts.length < 2) continue;
+
+    const loc = parts[0].trim();
+    const m = loc.match(/(\d+):(\d+)$/);
+    if (!m) continue;
+
+    const curChapter = parseInt(m[1]);
+    const curVerse = parseInt(m[2]);
+    const isInRange = ref.hasVerses
+      ? curVerse >= ref.startVerse && curVerse <= ref.endVerse
+      : true;
+
+    if (curChapter === ref.chapter && isInRange) {
+      const greek = parts[1].trim();
+      if (results.length > 0 && verseRefs[verseRefs.length - 1] === String(curVerse)) {
+        results[results.length - 1] += ' ' + greek;
       } else {
-        error = `ESV API Error: ${res.status}`;
+        results.push(greek);
+        verseRefs.push(String(curVerse));
       }
-    } catch (err) {
-      error = err.message;
     }
   }
 
-  // 2. Fallback to Bolls
-  if (!data) {
-    let bollsTranslation = version === 'nasb' ? 'NASB' : 'ESV';
-    try {
-      data = await fetchFromBolls(bollsTranslation, query);
-    } catch (err) {
-      throw new Error(error ? `${error} -> Fallback failed: ${err.message}` : err.message);
-    }
-  }
+  if (results.length === 0) throw new Error('No verses found in SBLGNT for this range.');
 
-  const parsed = parseBollsText(data.text);
   return {
-    propositions: parsed.propositions,
-    verseRefs: parsed.verseRefs,
-    passageRef: data.passageRef,
-    copyright: data.copyright,
-    isGreek: false
+    propositions: results,
+    verseRefs,
+    passageRef: `${ref.bookName} ${ref.chapter}${ref.hasVerses ? ':' + ref.startVerse + (ref.endVerse !== ref.startVerse ? '-' + ref.endVerse : '') : ''}`,
+    copyright: '(SBLGNT)'
   };
 }
+
+// ── Bolls Source ──────────────────────────────────────────────────────────────
+
+async function fetchFromBolls(translation, query) {
+  const match = query.match(PASSAGE_REF_REGEX);
+  if (!match) throw new Error('Could not parse reference. Use format like "John 1:1-5"');
+
+  const bookName = match[1].trim().toLowerCase().replace(/\s+/g, '');
+  const chapter = match[2];
+  const startVerse = match[3] ? parseInt(match[3]) : null;
+  const endVerse = match[4] ? parseInt(match[4]) : startVerse;
+
+  const bollsId = DA_CONSTANTS.BOLLS_BOOKS[bookName];
+  if (!bollsId) throw new Error(`Book "${match[1]}" not recognized.`);
+
+  const url = `https://bolls.life/get-text/${translation}/${bollsId}/${chapter}/`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Bolls API error: ${res.status}`);
+
+  const verses = await res.json();
+  if (!Array.isArray(verses) || verses.length === 0) throw new Error('No verses found.');
+
+  const filtered = startVerse !== null
+    ? verses.filter(v => v.verse >= startVerse && v.verse <= endVerse)
+    : verses;
+
+  if (filtered.length === 0) throw new Error('Verse range not found.');
+
+  const text = filtered.map(v => `[${v.verse}] ${v.text}`).join(' ');
+  const bookNameNormalized = DA_CONSTANTS.FULL_BOOK_NAMES[bookName] || match[1].trim();
+  const ref = `${bookNameNormalized} ${chapter}${startVerse ? ':' + startVerse + (endVerse !== startVerse ? '-' + endVerse : '') : ''}`;
+
+  return { text, passageRef: ref, copyright: `(${translation})` };
+}
+
+// ── Parse helpers ─────────────────────────────────────────────────────────────
 
 function parsePassageReference(query) {
   const match = query.match(PASSAGE_REF_REGEX);
@@ -101,95 +118,11 @@ function parsePassageReference(query) {
   };
 }
 
-async function fetchSBLGNTPassage(query, ref) {
-  if (!ref) ref = parsePassageReference(query);
-  if (!ref || !ref.file) throw new Error('Book not found in SBLGNT (New Testament only).');
-
-  const url = `${DA_CONSTANTS.SBLGNT_BASE}${ref.file}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`SBLGNT fetch error: ${res.status}`);
-
-  const text = await res.text();
-  const lines = text.split('\n');
-  const results = [];
-  const verseRefs = [];
-
-  const chapterStr = String(ref.chapter).padStart(2, '0');
-
-  for (let line of lines) {
-    if (!line.trim()) continue;
-    const parts = line.split('\t');
-    if (parts.length < 2) continue;
-
-    const loc = parts[0].trim(); // e.g. "Eph 1:1"
-    const m = loc.match(/(\d+):(\d+)$/);
-    if (!m) continue;
-
-    const curChapter = parseInt(m[1]);
-    const curVerse = parseInt(m[2]);
-
-    const isInRange = ref.hasVerses 
-      ? (curVerse >= ref.startVerse && curVerse <= ref.endVerse)
-      : true;
-
-    if (curChapter === ref.chapter && isInRange) {
-      const greek = parts[1].trim();
-      if (results.length > 0 && verseRefs[verseRefs.length - 1] === String(curVerse)) {
-        results[results.length - 1] += ' ' + greek;
-      } else {
-        results.push(greek);
-        verseRefs.push(String(curVerse));
-      }
-    }
-  }
-
-  if (results.length === 0) throw new Error('No verses found in SBLGNT for this range.');
-
-  return {
-    propositions: results,
-    verseRefs: verseRefs,
-    passageRef: `${ref.bookName} ${ref.chapter}${ref.hasVerses ? ':' + ref.startVerse + (ref.endVerse !== ref.startVerse ? '-' + ref.endVerse : '') : ''}`,
-    copyright: '(SBLGNT)'
-  };
-}
-
-async function fetchFromBolls(translation, query) {
-  const match = query.match(PASSAGE_REF_REGEX);
-  if (!match) throw new Error('Could not parse reference. Use format like "John 1:1-5"');
-
-  const bookName = match[1].trim().toLowerCase().replace(/\s+/g, '');
-  const chapter = match[2];
-  const startVerse = match[3] ? parseInt(match[3]) : null;
-  const endVerse = match[4] ? parseInt(match[4]) : startVerse;
-
-  const bollsId = DA_CONSTANTS.BOLLS_BOOKS[bookName];
-  if (!bollsId) throw new Error(`Book "${match[1]}" not recognized.`);
-
-  const url = `https://bolls.life/get-text/${translation}/${bollsId}/${chapter}/`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Bolls API error: ${res.status}`);
-
-  const verses = await res.json();
-  if (!Array.isArray(verses) || verses.length === 0) throw new Error('No verses found.');
-
-  const filtered = (startVerse !== null)
-    ? verses.filter(v => v.verse >= startVerse && v.verse <= endVerse)
-    : verses;
-
-  if (filtered.length === 0) throw new Error('Verse range not found.');
-
-  const text = filtered.map(v => `[${v.verse}] ${v.text}`).join(' ');
-  const bookNameNormalized = DA_CONSTANTS.FULL_BOOK_NAMES[bookName] || match[1].trim();
-  const ref = `${bookNameNormalized} ${chapter}${startVerse ? ':' + startVerse + (endVerse !== startVerse ? '-' + endVerse : '') : ''}`;
-
-  return { text, passageRef: ref, copyright: `(${translation})` };
-}
-
 function parseBollsText(rawText) {
   const verseParts = rawText.split(/(?=\[\d+\])/);
   const propositions = [];
   const verseRefs = [];
-  
+
   for (const part of verseParts) {
     const m = part.match(/^\[(\d+)\]\s*(.*)$/s);
     if (m) {
@@ -204,17 +137,58 @@ function parseBollsText(rawText) {
       verseRefs.push(verseRefs.length > 0 ? String(propositions.length) : '1');
     }
   }
-  
+
   if (propositions.length === 0 && rawText.trim()) {
     return {
       propositions: [rawText.replace(/\[\d+\]\s*/g, '').trim()],
       verseRefs: ['1']
     };
   }
-  
+
   return { propositions, verseRefs };
 }
 
+// ── Main entry point ──────────────────────────────────────────────────────────
+
+/**
+ * Fetch a Bible passage from the best available source.
+ *
+ * Source priority:
+ *   Greek NT  — Logos (NA28) → SBLGNT
+ *   Greek OT  — Bolls LXX
+ *   ESV       — Logos → Bolls ESV
+ *   NASB      — Logos → Bolls NASB
+ *
+ * @param {string} version - 'esv' | 'nasb' | 'greek'
+ * @param {string} query   - Passage reference e.g. "John 1:1-5"
+ */
+async function fetchPassageData(version, query) {
+  if (version === 'greek') {
+    const ref = parsePassageReference(query);
+    if (ref && ref.file) {
+      const logos = await fetchFromLogos('na28', query);
+      if (logos) return { ...logos, isGreek: true };
+      const result = await fetchSBLGNTPassage(query, ref);
+      return { ...result, isGreek: true };
+    } else {
+      const data = await fetchFromBolls('LXX', query);
+      const parsed = parseBollsText(data.text);
+      return { ...parsed, passageRef: data.passageRef, copyright: data.copyright, isGreek: true };
+    }
+  }
+
+  const logos = await fetchFromLogos(version, query);
+  if (logos) {
+    const parsed = parseBollsText(logos.text);
+    return { ...parsed, passageRef: logos.passageRef, copyright: logos.copyright, isGreek: false };
+  }
+
+  const translation = version === 'nasb' ? 'NASB' : 'ESV';
+  const data = await fetchFromBolls(translation, query);
+  const parsed = parseBollsText(data.text);
+  return { ...parsed, passageRef: data.passageRef, copyright: data.copyright, isGreek: false };
+}
+
 window.DA_BIBLE = {
-    fetchPassageData
+  fetchPassageData
 };
