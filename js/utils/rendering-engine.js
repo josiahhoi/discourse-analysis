@@ -1342,6 +1342,7 @@ function getPointExtent(id) {
 window.DA_RENDERER = {
     renderAll, renderPropositions, renderBrackets, renderWordArrows, renderCommentPreviews,
     computeSlotAssignments, getBracketX, getConnectionPoints, getBracketLabels,
-    getPointExtent, getBracketExtent, updateBracketPositions, scheduleVisualUpdate,
-    computeVerseDisplay
+    getPointExtent, getBracketExtent, getRepresentativeRange, updateBracketPositions,
+    scheduleVisualUpdate, computeVerseDisplay,
+    getBracketSlots: () => ({ ..._slotForIdx })
 };

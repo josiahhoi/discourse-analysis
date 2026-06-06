@@ -237,6 +237,8 @@ function renderAll() {
   const uiState = DA_UI.saveState();
   DA_RENDERER.renderAll();
   DA_UI.restoreState(uiState);
+  // Keep the block diagram in sync when it's the active view.
+  if (window.DA_BLOCK && DA_BLOCK.isActive()) DA_BLOCK.render();
 }
 // Override the global alias to use the wrapping version (preserves UI state)
 window.renderAll = renderAll;

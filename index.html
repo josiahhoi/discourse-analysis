@@ -129,6 +129,7 @@
           <div class="workspace-toolbar" id="workspaceToolbar">
             <button id="textEditModeBtn" type="button" class="toolbar-btn" title="Toggle text edit mode: edit text freely with newlines and indentation.">Text Edit</button>
             <button id="arrowModeBtn" type="button" class="toolbar-btn" title="Toggle arrow mode: draw word-to-word arrows.">Add Arrows</button>
+            <button id="blockDiagramBtn" type="button" class="toolbar-btn" title="Toggle block diagram view: show structure with indentation instead of brackets (read-only).">Block Diagram</button>
             <div class="toolbar-divider"></div>
             <button id="undoDivideBtn" type="button" class="toolbar-btn undo-action-btn" title="Undo last action">Undo</button>
           </div>
@@ -148,6 +149,7 @@
           <div class="propositions bracket-gutter" id="propositions">
             <textarea id="propositionEditor" placeholder="Fetch or import a passage to start. Click in the text and press Enter to split it into a new line. Click the dots to create brackets and logical relationships."></textarea>
           </div>
+          <div class="block-diagram" id="blockDiagram"></div>
         </div>
       </section>
 
@@ -159,7 +161,7 @@
 
     <footer class="footer">
       <p>ESV via <a href="https://api.esv.org" target="_blank" rel="noopener">api.esv.org</a>. Greek/Fallback: <a href="https://bolls.life" target="_blank" rel="noopener">bolls.life</a> & <a href="https://sblgnt.com" target="_blank" rel="noopener">SBLGNT</a>.</p>
-      <p class="footer-version">Version 2.8.0 · Made by Josiah Hoi and Bryce Bussert, based on the method taught by Dr. Daniel M. Gurtner.</p>
+      <p class="footer-version">Version 2.9.0 · Made by Josiah Hoi and Bryce Bussert, based on the method taught by Dr. Daniel M. Gurtner.</p>
     </footer>
   </div>
   <div id="settingsModal" class="modal-overlay" style="display: none;">
@@ -305,6 +307,7 @@
   <script src="js/services/cloud-sync.js"></script>
   <script src="js/utils/editor-logic.js"></script>
   <script src="js/utils/rendering-engine.js"></script>
+  <script src="js/utils/block-diagram.js"></script>
   <script src="js/services/export-service.js"></script>
   <script src="js/services/keyboard-handler.js"></script>
   <script src="js/services/mouse-handler.js"></script>

@@ -1496,6 +1496,67 @@ body {
   z-index: 100;
 }
 
+/* ===== Block Diagram View ===== */
+.block-diagram {
+  display: none;
+  padding: 28px 36px;
+  min-width: 600px;
+  max-width: 920px;
+  font-family: var(--font-serif);
+}
+
+.bracket-canvas-wrapper.block-diagram-active .bracket-canvas,
+.bracket-canvas-wrapper.block-diagram-active .word-arrows-svg,
+.bracket-canvas-wrapper.block-diagram-active .propositions {
+  display: none !important;
+}
+
+.bracket-canvas-wrapper.block-diagram-active .block-diagram {
+  display: block;
+}
+
+.bd-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  padding: 3px 0;
+  line-height: 1.5;
+}
+
+.bd-ref {
+  flex: 0 0 auto;
+  min-width: 2.6em;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.78em;
+  user-select: none;
+}
+
+.bd-text {
+  flex: 1 1 auto;
+  color: var(--text);
+  font-size: 1.1rem;
+}
+
+.bd-label {
+  flex: 0 0 auto;
+  margin-left: 2em;
+  align-self: center;
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-style: italic;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.bd-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 24px;
+  text-align: center;
+}
+
 .bracket-canvas,
 .word-arrows-svg {
   position: absolute;
