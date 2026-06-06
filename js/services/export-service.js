@@ -32,6 +32,23 @@ const DA_EXPORT = {
   },
 
   /**
+   * Image/PDF capture works off the bracket view's DOM (proposition blocks and
+   * the bracket SVG). When the block diagram view is active those elements are
+   * hidden (display:none), which would make the capture blank. Temporarily flip
+   * back to the bracket view for the capture, returning whether a restore is
+   * needed afterward.
+   */
+  enterBracketViewForCapture() {
+    const wasBlock = !!(window.DA_BLOCK && DA_BLOCK.isActive());
+    if (wasBlock) DA_BLOCK.setActive(false);
+    return wasBlock;
+  },
+
+  restoreViewAfterCapture(wasBlock) {
+    if (wasBlock && window.DA_BLOCK) DA_BLOCK.setActive(true);
+  },
+
+  /**
    * Applies specific styles to the cloned document during html2canvas capture.
    */
   applyExportCloneStyles(clonedDoc) {
@@ -139,6 +156,8 @@ const DA_EXPORT = {
 
     DA_UI.showStatus('Capturing diagram...', 'info');
 
+    const wasBlock = this.enterBracketViewForCapture();
+
     // Save current states and expand all for export
     const prevShowComments = DA_STATE.showCommentsEnabled;
     const savedCollapseStates = DA_STATE.brackets.map(b => b.isCollapsed);
@@ -159,6 +178,7 @@ const DA_EXPORT = {
       DA_STATE.showCommentsEnabled = prevShowComments;
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
       if (window.renderAll) window.renderAll();
+      this.restoreViewAfterCapture(wasBlock);
 
       const dataUrl = canvas.toDataURL('image/png');
       const bracketData = this.buildBracketData();
@@ -188,6 +208,7 @@ const DA_EXPORT = {
       // Ensure restoration on failure
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
       if (window.renderAll) window.renderAll();
+      this.restoreViewAfterCapture(wasBlock);
       DA_UI.showStatus('Capture failed.', 'error');
     }
   },
@@ -200,7 +221,8 @@ const DA_EXPORT = {
     if (!workspace) return;
 
     DA_UI.showStatus('Generating image...', 'info');
-    
+
+    const wasBlock = this.enterBracketViewForCapture();
     const savedCollapseStates = DA_STATE.brackets.map(b => b.isCollapsed);
     DA_STATE.brackets.forEach(b => b.isCollapsed = false);
     if (window.renderAll) window.renderAll();
@@ -213,6 +235,7 @@ const DA_EXPORT = {
       // Restore
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
       if (window.renderAll) window.renderAll();
+      this.restoreViewAfterCapture(wasBlock);
 
       const bracketData = this.buildBracketData();
       const rawBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
@@ -230,6 +253,7 @@ const DA_EXPORT = {
       console.error(err);
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
       if (window.renderAll) window.renderAll();
+      this.restoreViewAfterCapture(wasBlock);
       DA_UI.showStatus('Save failed.', 'error');
     }
   },
@@ -245,7 +269,8 @@ const DA_EXPORT = {
 
     DA_UI.showStatus('Generating PDF...', 'info');
     const workspace = document.getElementById('workspace');
-    
+
+    const wasBlock = this.enterBracketViewForCapture();
     const savedCollapseStates = DA_STATE.brackets.map(b => b.isCollapsed);
     DA_STATE.brackets.forEach(b => b.isCollapsed = false);
     if (window.renderAll) window.renderAll();
@@ -258,6 +283,7 @@ const DA_EXPORT = {
       // Restore
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
       if (window.renderAll) window.renderAll();
+      this.restoreViewAfterCapture(wasBlock);
 
       const imgData = canvas.toDataURL('image/png');
       const { jsPDF } = jspdf;
@@ -288,6 +314,7 @@ const DA_EXPORT = {
       console.error(err);
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
       if (window.renderAll) window.renderAll();
+      this.restoreViewAfterCapture(wasBlock);
       DA_UI.showStatus('PDF export failed.', 'error');
     }
   }
