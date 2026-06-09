@@ -204,6 +204,10 @@ async function fetchPassage() {
   try {
     const result = await DA_BIBLE.fetchPassageData(version, query);
 
+    // Loading a new passage exits any active live cloud session, so the old
+    // project's listener/URL/badge don't linger and clobber the new passage.
+    if (DA_STATE.cloudUnsubscribe && window.DA_CLOUD) DA_CLOUD.stopCloudSync();
+
     DA_STATE.propositions = result.propositions;
     DA_STATE.verseRefs = result.verseRefs;
     DA_STATE.passageRef = result.passageRef;

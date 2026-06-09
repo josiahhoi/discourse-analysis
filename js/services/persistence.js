@@ -113,7 +113,11 @@ function importBracket(data) {
   
   // Legacy migration
   data = normalizeBracketData(data);
-  
+
+  // Loading a different project exits any active live cloud session, so the old
+  // project's listener/URL/badge don't linger and overwrite the loaded data.
+  if (DA_STATE.cloudUnsubscribe && window.DA_CLOUD) DA_CLOUD.stopCloudSync();
+
   DA_STATE.updateState({
     passageRef: data.passageRef || 'Imported bracket',
     propositions: data.propositions.slice(),
