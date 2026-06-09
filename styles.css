@@ -1542,12 +1542,19 @@ body {
   flex: 0 0 auto;
   margin-left: 2em;
   align-self: center;
-  color: var(--accent);
   font-family: var(--font-sans);
   font-size: 0.78rem;
   font-style: italic;
   white-space: nowrap;
   user-select: none;
+}
+
+.bd-label-frag {
+  font-weight: 500;
+}
+
+.bd-label-sep {
+  color: var(--text-muted);
 }
 
 .bd-empty {

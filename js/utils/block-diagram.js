@@ -126,11 +126,15 @@
     return levels;
   }
 
-  /** Build the right-hand relationship label string for each proposition. */
+  /**
+   * Build the right-hand relationship labels for each proposition.
+   * Returns, per proposition, an array of { type, text } fragments so each can
+   * be colored to match its relationship's bracket color.
+   */
   function computeLabels() {
     const n = DA_STATE.propositions.length;
     const inRange = (p) => p >= 0 && p < n;
-    const subFrags = Array.from({ length: n }, () => []);     // ["ground to verse 3a"]
+    const subFrags = Array.from({ length: n }, () => []);     // [{ type, text }]
     const coordFrags = Array.from({ length: n }, () => ({})); // { relType: [{idx, ref}] }
 
     DA_STATE.brackets.forEach((b) => {
@@ -151,7 +155,10 @@
         const domRange = DA_RENDERER.getRepresentativeRange(info.dominantId);
         const subRange = DA_RENDERER.getRepresentativeRange(info.subordinateId);
         if (inRange(subRange.from)) {
-          subFrags[subRange.from].push(`${friendlyRelName(b.type)} to ${versePhrase([refOfRange(domRange)])}`);
+          subFrags[subRange.from].push({
+            type: String(b.type).toLowerCase(),
+            text: `${friendlyRelName(b.type)} to ${versePhrase([refOfRange(domRange)])}`
+          });
         }
       }
     });
@@ -165,11 +172,11 @@
           .sort((a, c) => a.idx - c.idx)
           .map(x => x.ref)
           .filter(r => r && !seen.has(r) && seen.add(r));
-        frags.push(`${friendlyRelName(key)} with ${versePhrase(partners)}`);
+        frags.push({ type: key, text: `${friendlyRelName(key)} with ${versePhrase(partners)}` });
       });
       // Subordinate fragments.
       subFrags[i].forEach(f => frags.push(f));
-      return frags.join(', ');
+      return frags; // [{ type, text }]
     });
   }
 
@@ -210,10 +217,23 @@
       txt.textContent = cleanText(text);
       line.appendChild(txt);
 
-      if (labels[i]) {
+      if (labels[i] && labels[i].length) {
         const lab = document.createElement('span');
         lab.className = 'bd-label';
-        lab.textContent = labels[i];
+        labels[i].forEach((frag, fi) => {
+          if (fi > 0) {
+            const sep = document.createElement('span');
+            sep.className = 'bd-label-sep';
+            sep.textContent = ', ';
+            lab.appendChild(sep);
+          }
+          const fragEl = document.createElement('span');
+          fragEl.className = 'bd-label-frag';
+          fragEl.style.color = DA_CONSTANTS.RELATIONSHIP_COLORS[frag.type]
+            || DA_CONSTANTS.RELATIONSHIP_COLORS.unspecified;
+          fragEl.textContent = frag.text;
+          lab.appendChild(fragEl);
+        });
         line.appendChild(lab);
       }
 
