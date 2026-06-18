@@ -31,6 +31,7 @@ async function startCloudSync() {
   try {
     await db.collection('projects').doc(projectId).set(projectData);
     DA_STATE.activeProjectId = projectId;
+    DA_STATE.cloudDirty = false; // we just wrote the current state
     initCloudSync(projectId);
     DA_UI.updateCloudUI(true, projectId);
     
@@ -55,6 +56,7 @@ async function joinCloudSync(projectId) {
     }
     
     DA_STATE.activeProjectId = projectId;
+    DA_STATE.cloudDirty = false; // an incoming snapshot will define our baseline
     DA_UI.updateCloudUI(true, projectId);
     initCloudSync(projectId);
     
@@ -108,13 +110,26 @@ function handleCloudData(data) {
   }
   
   renderCallbacks.renderAll();
-  
+
   DA_STATE.isUpdatingFromCloud = false;
+
+  // We just adopted the cloud's copy verbatim, so local matches the cloud again.
+  DA_STATE.cloudDirty = false;
+  updateSyncUI();
 }
 
 async function syncToCloud() {
-  if (!DA_STATE.activeProjectId || DA_STATE.isUpdatingFromCloud || !db) return;
-  
+  // Only sync when a LIVE session is active (a listener is attached). Gating on
+  // cloudUnsubscribe — not just a stored activeProjectId — prevents silently
+  // overwriting the wrong project: activeProjectId lingers after stopCloudSync
+  // (for resume) and is also adopted from imported files, so without this guard a
+  // manual sync after fetching a new passage or opening someone's file would
+  // clobber a project that's no longer on screen. Returns false (no session) so
+  // the caller can avoid showing a false "synced!" confirmation.
+  if (!db || !DA_STATE.activeProjectId || !DA_STATE.cloudUnsubscribe || DA_STATE.isUpdatingFromCloud) {
+    return false;
+  }
+
   const pageAuthorInput = document.getElementById('pageAuthor');
   const currentAuthor = (pageAuthorInput?.value || '').trim() || 'Anonymous';
 
@@ -125,10 +140,37 @@ async function syncToCloud() {
     lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
   };
 
-  try {
-    await db.collection('projects').doc(DA_STATE.activeProjectId).update(projectData);
-  } catch (err) {
-    console.error('Sync error:', err);
+  // Let real Firestore failures (e.g. the doc was deleted, so update() rejects)
+  // propagate to the caller so the UI can report them instead of claiming success.
+  await db.collection('projects').doc(DA_STATE.activeProjectId).update(projectData);
+  DA_STATE.cloudDirty = false;
+  updateSyncUI();
+  return true;
+}
+
+/**
+ * Reflect sync state in the header badge: a status dot (green = synced, amber =
+ * unsynced) and the Sync button (disabled "Synced ✓" when clean, active "Sync"
+ * when there are unpushed changes). No-ops when no live session is active.
+ */
+function updateSyncUI() {
+  const badge = document.getElementById('cloudHeaderStatus');
+  if (!badge) return;
+  const btn = document.getElementById('manualSyncBtn');
+
+  if (!DA_STATE.cloudUnsubscribe) {
+    badge.classList.remove('synced', 'unsynced');
+    return;
+  }
+
+  const dirty = !!DA_STATE.cloudDirty;
+  badge.classList.toggle('unsynced', dirty);
+  badge.classList.toggle('synced', !dirty);
+
+  if (btn) {
+    btn.disabled = !dirty;
+    btn.textContent = dirty ? 'Sync' : 'Synced ✓';
+    btn.title = dirty ? 'Sync your changes to the cloud' : 'All changes are synced';
   }
 }
 
@@ -146,5 +188,5 @@ function stopCloudSync() {
 }
 
 window.DA_CLOUD = {
-    registerCloudRenderCallbacks, startCloudSync, joinCloudSync, initCloudSync, handleCloudData, syncToCloud, stopCloudSync
+    registerCloudRenderCallbacks, startCloudSync, joinCloudSync, initCloudSync, handleCloudData, syncToCloud, stopCloudSync, updateSyncUI
 };

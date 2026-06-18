@@ -33,6 +33,7 @@ window.DA_STATE = {
   activeProjectId: null,
   cloudUnsubscribe: null,
   isUpdatingFromCloud: false,
+  cloudDirty: false, // true when local edits haven't been pushed to the cloud
   
   // Text Shifting Mode
   shiftModeActive: false,
@@ -83,6 +84,12 @@ window.DA_STATE = {
     });
     if (s.undoStack.length > 50) s.undoStack.shift();
     s.lastUndoTime = now;
+
+    // Any undoable action means local state now differs from the cloud copy.
+    // (Debounced repeats return early above, but the flag was already set by the
+    // first call and stays set until the next successful sync, so that's fine.)
+    s.cloudDirty = true;
+    if (window.DA_CLOUD && DA_CLOUD.updateSyncUI) DA_CLOUD.updateSyncUI();
   },
 
   undo: function() {

@@ -24,6 +24,7 @@ function updateCloudUI(isActive, projectId = '') {
     if (isActive) {
       if (badge) badge.style.display = 'flex';
       if (idSpan) idSpan.textContent = projectId;
+      if (window.DA_CLOUD && DA_CLOUD.updateSyncUI) DA_CLOUD.updateSyncUI();
     } else {
       if (badge) badge.style.display = 'none';
     }

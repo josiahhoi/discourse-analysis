@@ -207,6 +207,10 @@ async function fetchPassage() {
     // Loading a new passage exits any active live cloud session, so the old
     // project's listener/URL/badge don't linger and clobber the new passage.
     if (DA_STATE.cloudUnsubscribe && window.DA_CLOUD) DA_CLOUD.stopCloudSync();
+    // Drop the stored project ID too — this is new work, not a resume of the old
+    // project. Leaving it set would let a later sync write the new passage over
+    // the old project's cloud doc (stopCloudSync intentionally keeps it).
+    DA_STATE.activeProjectId = null;
 
     DA_STATE.propositions = result.propositions;
     DA_STATE.verseRefs = result.verseRefs;
@@ -390,8 +394,16 @@ document.addEventListener('DOMContentLoaded', () => {
   if (joinBtn) joinBtn.addEventListener('click', () => DA_CLOUD.joinCloudSync(joinInput.value.trim().toUpperCase()));
   if (manualSyncBtn) {
     manualSyncBtn.addEventListener('click', async () => {
-      await DA_CLOUD.syncToCloud();
-      DA_UI.showStatus('Changes synced to cloud!', 'success');
+      try {
+        const synced = await DA_CLOUD.syncToCloud();
+        if (synced) {
+          DA_UI.showStatus('Changes synced to cloud!', 'success');
+        } else {
+          DA_UI.showStatus('No active cloud session. Turn Cloud Sync on first.', 'error');
+        }
+      } catch (err) {
+        DA_UI.showStatus('Sync failed: ' + (err.message || 'unknown error'), 'error');
+      }
     });
   }
   if (copyBtn) copyBtn.addEventListener('click', () => {

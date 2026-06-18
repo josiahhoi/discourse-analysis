@@ -2035,9 +2035,33 @@ body.text-edit-mode-active .verse-ref {
   border: 1px solid rgba(34, 197, 94, 0.2);
   margin-left: 20px;
   margin-right: 15px;
-  animation: pulse-soft 2s infinite;
   white-space: nowrap;
   flex-shrink: 0;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+/* Unsynced: amber + pulse so motion means "you have unpushed changes". */
+.cloud-status-badge.unsynced {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.35);
+  animation: pulse-soft 2s infinite;
+}
+.cloud-status-badge.unsynced .cloud-id {
+  color: #b45309;
+}
+
+/* Status dot: green when synced, amber when there are unpushed changes. */
+.cloud-sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #16a34a;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+.cloud-status-badge.unsynced .cloud-sync-dot {
+  background: #f59e0b;
 }
 
 .cloud-sync-btn {
@@ -2061,6 +2085,18 @@ body.text-edit-mode-active .verse-ref {
 
 .cloud-sync-btn:active {
   transform: translateY(0);
+}
+
+.cloud-sync-btn:disabled {
+  background: #9ca3af;
+  cursor: default;
+  opacity: 0.75;
+  transform: none;
+}
+
+.cloud-sync-btn:disabled:hover {
+  background: #9ca3af;
+  transform: none;
 }
 
 .proposition-block.folded-hidden {

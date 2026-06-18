@@ -3,6 +3,15 @@ window.DA_KEYBOARD = {
     document.addEventListener('keydown', (e) => {
       // Undo
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        // Don't hijack undo while the user is editing a text field. Otherwise we
+        // preventDefault the browser's native field-level undo AND run a whole-
+        // document undo, which silently wipes the in-progress edit (proposition
+        // edits only commit to state on focusout, so renderAll rewrites the span
+        // from stale state). Let the native undo handle the active field instead.
+        const el = document.activeElement;
+        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
+          return;
+        }
         e.preventDefault();
         if (typeof undoLastAction === 'function') undoLastAction();
       }
