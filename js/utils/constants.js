@@ -99,7 +99,7 @@ const BRACKET_LABELS = {
   temporal: 'T/*',
   locative: 'L/*',
   'action-manner': 'Ac/Mn*',
-  comparison: '///*',
+  comparison: '//',
   'negative-positive': '-/+',
   'idea-explanation': 'Id/Exp*',
   'question-answer': 'Q/A*',
@@ -126,7 +126,7 @@ const GURTNER_LABELS = {
   temporal: 'T/*',
   locative: 'L/*',
   'action-manner': 'W/Ed/*',
-  comparison: '///*',
+  comparison: '//',
   'negative-positive': '-/+',
   'idea-explanation': 'Id/Exp*',
   'question-answer': 'Q/A*',
@@ -189,7 +189,7 @@ const RELATIONSHIP_GROUPS_HIERARCHY = [
   }
 ];
 
-const SINGLE_LABEL_TYPES = new Set(['series', 'alternative', 'bilateral', 'both-and', 'unspecified']);
+const SINGLE_LABEL_TYPES = new Set(['series', 'alternative', 'bilateral', 'both-and', 'unspecified', 'comparison']);
 
 const GURTNER_RELATIONSHIP_NAMES = {
   series: 'Series (S)',
