@@ -6,6 +6,43 @@ function _hexToRgba(hex, alpha) {
 }
 
 /**
+ * Create an SVG text element with the given label, rendering stars in a larger
+ * font-size (~1.5x) for better visibility of dominance marking.
+ */
+function createLabelText(label, attrs = {}) {
+  const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  for (const [key, value] of Object.entries(attrs)) {
+    text.setAttribute(key, value);
+  }
+
+  if (!label || !label.includes('*')) {
+    text.textContent = label;
+    return text;
+  }
+
+  // Split on star and create tspan elements with different font sizes
+  const parts = label.split('*');
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i]) {
+      const span = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+      span.textContent = parts[i];
+      text.appendChild(span);
+    }
+
+    // Add star between parts (except after the last part)
+    if (i < parts.length - 1) {
+      const star = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+      star.setAttribute('font-size', '1.5em');
+      star.setAttribute('baseline-shift', 'super');
+      star.textContent = '*';
+      text.appendChild(star);
+    }
+  }
+
+  return text;
+}
+
+/**
  * Creates an SVG element with specified attributes.
  * @param {string} tag - The SVG tag name (e.g., 'path', 'g', 'polygon').
  * @param {Object} attrs - Attribute key-value pairs.
@@ -874,38 +911,38 @@ function renderBrackets() {
 
     if (bracket.isCollapsed && !isCollapsedCoord) {
       // Subordinate collapsed: summary label at the dominant row arm, same position as normal top label
-      group.appendChild(createSVG('text', {
+      group.appendChild(createLabelText(labels.summary, {
         x: x + 5,
         y: topY - 5,
         'text-anchor': 'start',
         class: 'bracket-label',
         dataset: { index: i }
-      })).textContent = labels.summary;
+      }));
     } else if (labels.single) {
-      group.appendChild(createSVG('text', {
+      group.appendChild(createLabelText(labels.single, {
         x: x + 5,
         y: (topY + bottomY) / 2,
         'text-anchor': 'start',
         'dominant-baseline': 'middle',
         class: 'bracket-label single-label',
         dataset: { index: i }
-      })).textContent = labels.single;
+      }));
     } else {
-      group.appendChild(createSVG('text', {
+      group.appendChild(createLabelText(labels.top, {
         x: x + 5,
         y: topY - 5,
         'text-anchor': 'start',
         class: 'bracket-label',
         dataset: { index: i, pos: 'top' }
-      })).textContent = labels.top;
+      }));
 
-      group.appendChild(createSVG('text', {
+      group.appendChild(createLabelText(labels.bottom, {
         x: x + 5,
         y: bottomY - 5,
         'text-anchor': 'start',
         class: 'bracket-label',
         dataset: { index: i, pos: 'bottom' }
-      })).textContent = labels.bottom;
+      }));
     }
   });
 }
