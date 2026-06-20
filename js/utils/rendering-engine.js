@@ -266,7 +266,14 @@ function attachPropositionDelegatedListeners(container) {
       }
     }
 
-    if (block._textBeforeEdit !== undefined && block._textBeforeEdit !== null && currentText !== block._textBeforeEdit) {
+    // Only record a 'text edit' undo if the text actually differs from what's
+    // already stored. After a split/merge the state was updated programmatically
+    // and propositions[i] already matches the DOM — pushing here would add a
+    // redundant snapshot of the post-split state, so the first Undo click would
+    // appear to do nothing (it reverts that no-op) and only the second would
+    // undo the split. Comparing against the current stored value avoids that.
+    const changedFromStored = currentText !== DA_STATE.propositions[i];
+    if (changedFromStored && block._textBeforeEdit !== undefined && block._textBeforeEdit !== null && currentText !== block._textBeforeEdit) {
       DA_STATE.pushUndo('text edit', String(i));
     }
     DA_STATE.propositions[i] = currentText;
