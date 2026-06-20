@@ -904,7 +904,7 @@ function renderBrackets() {
         'text-anchor': 'end',
         'dominant-baseline': 'middle',
         class: 'main-point-star',
-        'font-size': '100px',
+        'font-size': '50px',
         fill: '#e53935',
         'pointer-events': 'none'
       })).textContent = '★';
