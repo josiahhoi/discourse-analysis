@@ -7,7 +7,7 @@ function _hexToRgba(hex, alpha) {
 
 /**
  * Create an SVG text element with the given label, rendering stars in a larger
- * font-size (~1.5x) for better visibility of dominance marking.
+ * font-size (20px) for better visibility of dominance marking.
  */
 function createLabelText(label, attrs = {}) {
   const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -32,8 +32,7 @@ function createLabelText(label, attrs = {}) {
     // Add star between parts (except after the last part)
     if (i < parts.length - 1) {
       const star = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-      star.setAttribute('font-size', '1.5em');
-      star.setAttribute('baseline-shift', 'super');
+      star.setAttribute('font-size', '20px');
       star.textContent = '*';
       text.appendChild(star);
     }
