@@ -16,10 +16,6 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 ### 2. The Bracketing & Structural Engine
 - **18+ Logical Relationships**: Full support for the standard discourse analysis hierarchy, including specialized Gurtner types like **Both-And (B-A)**, **Anticipation-Fulfillment (An/Fl)**, and **General-Specific (Gen/Sp)**.
 - **Switch Stars (Dominance Marking)**: Instantly swap the logical dominance (the asterisk `*`) between bracket ends via the bracket context menu.
-- **Nomenclature "Modes"**:
-    - **Standard**: Classic abbreviations (G, S, Ac/Res).
-    - **Dan Gurtner Mode**: Academic preset with specialized nomenclature (e.g., Means-End, Way-End) and Iowan Old Style typography.
-    - **Brian Kim Mode**: Technical preset with Roboto Mono typography.
 - **Structural Folding (Nesting)**: Collapse complex sub-structures into a single summary label to simplify large-scale diagrams.
 - **Dynamic Re-parenting**: Automatically adjusts parent-child relationships when grouping existing bracketed structures.
 - **Integrity Validation**: Real-time enforcement of "No Crossing" and "Adjacency" rules.
