@@ -57,8 +57,10 @@ async function joinCloudSync(projectId) {
     
     DA_STATE.activeProjectId = projectId;
     DA_STATE.cloudDirty = false; // an incoming snapshot will define our baseline
-    DA_UI.updateCloudUI(true, projectId);
+    // Attach the listener first so cloudUnsubscribe is set before updateCloudUI
+    // calls updateSyncUI — otherwise the sync badge/button show a stale state.
     initCloudSync(projectId);
+    DA_UI.updateCloudUI(true, projectId);
     
     const url = new URL(window.location);
     url.searchParams.set('project', projectId);

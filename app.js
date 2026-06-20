@@ -411,11 +411,28 @@ document.addEventListener('DOMContentLoaded', () => {
     navigator.clipboard.writeText(url).then(() => DA_UI.showStatus('Link copied!', 'success'));
   });
 
-  // Check URL for existing project
+  // Check URL for existing project. A project ID lingers in the URL after a
+  // session, so on reload we confirm before rejoining — otherwise the user gets
+  // silently reconnected to a stale/old project they didn't ask for.
   const urlParams = new URLSearchParams(window.location.search);
   const projectFromUrl = urlParams.get('project');
   if (projectFromUrl) {
-    setTimeout(() => DA_CLOUD.joinCloudSync(projectFromUrl), 1000);
+    // Small delay so the page paints before the confirm dialog appears.
+    setTimeout(() => {
+      const reconnect = confirm(
+        `Reconnect to cloud project ${projectFromUrl}?\n\n` +
+        `Click Cancel to start fresh — you can rejoin later from the cloud panel.`
+      );
+      if (reconnect) {
+        DA_UI.showStatus(`Loading project ${projectFromUrl}…`, 'info');
+        DA_CLOUD.joinCloudSync(projectFromUrl);
+      } else {
+        // Drop the stale param so future reloads don't keep prompting.
+        const url = new URL(window.location);
+        url.searchParams.delete('project');
+        window.history.replaceState({}, '', url);
+      }
+    }, 600);
   }
   
   // Initialize persistence and recovery services
