@@ -412,6 +412,24 @@ document.addEventListener('DOMContentLoaded', () => {
     navigator.clipboard.writeText(url).then(() => DA_UI.showStatus('Link copied!', 'success'));
   });
 
+  // Click the project code to copy it to the clipboard.
+  const headerProjectId = document.getElementById('headerProjectId');
+  if (headerProjectId) {
+    headerProjectId.addEventListener('click', () => {
+      const code = headerProjectId.textContent.trim();
+      if (!code || code === '----') return;
+      // Select the text for visual feedback, then copy.
+      const range = document.createRange();
+      range.selectNodeContents(headerProjectId);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      navigator.clipboard.writeText(code)
+        .then(() => DA_UI.showStatus(`Project code ${code} copied!`, 'success'))
+        .catch(() => DA_UI.showStatus('Could not copy code.', 'error'));
+    });
+  }
+
   // Check URL for existing project. A project ID lingers in the URL after a
   // session, so on reload we confirm before rejoining — otherwise the user gets
   // silently reconnected to a stale/old project they didn't ask for.

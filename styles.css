@@ -2152,6 +2152,11 @@ body.text-edit-mode-active .verse-ref {
   font-family: var(--font-mono);
   letter-spacing: 0.5px;
   color: #16a34a;
+  cursor: pointer;
+}
+
+.cloud-id:hover {
+  text-decoration: underline;
 }
 
 .save-as-author-row {
