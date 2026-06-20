@@ -380,10 +380,13 @@ function showBracketActions(bracketIdx, centerY, centerX) {
     { val: '#E1BEE7', name: 'Lavender' }
   ];
 
+  const isMainPoint = !!bracket.isMainPoint;
+
   popover.innerHTML = `
     <div class="menu-item" data-action="fold">${bracket.isCollapsed ? 'Expand Section' : 'Collapse Section'}</div>
     <div class="menu-item" data-action="comment">${hasComment ? 'View Comment' : 'Add Comment'}</div>
     <div class="menu-item" data-action="select">Connect to...</div>
+    <div class="menu-item${isMainPoint ? ' active' : ''}" data-action="main-point">${isMainPoint ? '★ Unmark Passage Main Point' : '☆ Mark Passage Main Point'}</div>
     <div class="menu-divider"></div>
     <div class="color-palette-title">Highlight Rows</div>
     <div class="color-palette">
@@ -427,6 +430,16 @@ function showBracketActions(bracketIdx, centerY, centerX) {
     e.stopPropagation();
     showCommentPopoverForBracket(bracketIdx, centerY, centerX);
     clearAndDismiss();
+  });
+
+  popover.querySelector('[data-action="main-point"]').addEventListener('click', (e) => {
+    e.stopPropagation();
+    DA_STATE.pushUndo('main point');
+    // Only one bracket can be the main point at a time — clear any existing one first.
+    DA_STATE.brackets.forEach((b, idx) => { if (idx !== bracketIdx) b.isMainPoint = false; });
+    bracket.isMainPoint = !bracket.isMainPoint;
+    clearAndDismiss();
+    if (window.renderAll) window.renderAll();
   });
 
   popover.querySelectorAll('.color-swatch').forEach(btn => {

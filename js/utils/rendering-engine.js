@@ -893,6 +893,23 @@ function renderBrackets() {
       }));
     }
 
+    // Main Point Star — large red ★ on the left side of the dominant arm
+    if (bracket.isMainPoint) {
+      const dominantY = (labels.top && labels.top.includes('*')) ? topY
+                      : (labels.bottom && labels.bottom.includes('*')) ? bottomY
+                      : (topY + bottomY) / 2;
+      group.appendChild(createSVG('text', {
+        x: x - 12,
+        y: dominantY,
+        'text-anchor': 'end',
+        'dominant-baseline': 'middle',
+        class: 'main-point-star',
+        'font-size': '100px',
+        fill: '#e53935',
+        'pointer-events': 'none'
+      })).textContent = '★';
+    }
+
     // Connection Node (Recursive Dot)
     let nodeY = (topY + bottomY) / 2;
     if (!labels.single) {
