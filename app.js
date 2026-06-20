@@ -101,9 +101,10 @@ if (referenceModal) {
 
 // Toolbar buttons are initialized later in the file with full logic.
 
-const undoBtn = document.getElementById('undoBtn');
-if (undoBtn) {
-  undoBtn.addEventListener('click', () => {
+// The visible toolbar button is #undoDivideBtn (declared above). It was wired to
+// a non-existent #undoBtn, so the Undo button did nothing (only Ctrl/Cmd+Z worked).
+if (undoDivideBtn) {
+  undoDivideBtn.addEventListener('click', () => {
     undoLastAction();
   });
 }

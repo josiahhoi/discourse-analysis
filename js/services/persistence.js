@@ -20,9 +20,30 @@ function clearDraft() {
   try { localStorage.removeItem(DRAFT_KEY); } catch (e) { console.warn('Could not clear draft:', e); }
 }
 
+// Strip display letters from a verse ref so the renderer's suffix logic can
+// re-derive them. "3a" -> "3", "3a-4b" -> "3-4", garbled "3b-3" -> "3".
+// Display letters (a/b/c) are computed at render time from how many propositions
+// share a verse; baking them into stored refs causes double-suffixing ("3b" ->
+// "3ba") and breaks split renumbering, so we normalize back to bare numbers.
+function normalizeVerseRef(ref) {
+  if (typeof ref !== 'string') return ref;
+  const parts = ref.split('-').map(p => {
+    const m = p.match(/^\s*(\d+)/);
+    return m ? m[1] : p.trim();
+  });
+  if (parts.length === 2 && parts[0] === parts[1]) return parts[0];
+  return parts.join('-');
+}
+
 function normalizeBracketData(data) {
   if (!data || !Array.isArray(data.propositions)) return data;
-  
+
+  // Normalize verse refs to bare numbers (see normalizeVerseRef). Always runs,
+  // regardless of whether bracket migration below is needed.
+  if (Array.isArray(data.verseRefs)) {
+    data = { ...data, verseRefs: data.verseRefs.map(normalizeVerseRef) };
+  }
+
   const rawBrackets = Array.isArray(data.brackets) ? data.brackets : (Array.isArray(data.arcs) ? data.arcs : []);
   if (rawBrackets.length === 0) return data;
 
