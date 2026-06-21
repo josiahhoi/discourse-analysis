@@ -1338,11 +1338,15 @@ function renderWordArrows() {
     let d, points;
     if (legHitsText(legY, x1, x2)) {
       if (isUp) {
-        const gy = fT - gutter; // gap above the source line (toward the target)
+        // Route the horizontal in the gap above the source line. If a fixed gutter
+        // would overshoot past the target line (e.g. the target is the wrapped line
+        // directly above, only a couple px away), use the midpoint of the actual
+        // gap so the leg sits between the lines instead of striking the one above.
+        const gy = (fT - gutter < tB) ? (tB + fT) / 2 : (fT - gutter);
         d = `M ${fC} ${fT} V ${gy} H ${tC} V ${tB}`;
         points = makeHead(tC, tB, 'up');
       } else if (isDown) {
-        const gy = tT - gutter; // gap above the target line
+        const gy = (tT - gutter < fB) ? (fB + tT) / 2 : (tT - gutter);
         d = `M ${fC} ${fB} V ${gy} H ${tC} V ${tT}`;
         points = makeHead(tC, tT, 'down');
       } else {
