@@ -231,6 +231,18 @@ function attachPropositionDelegatedListeners(container) {
     block._textBeforeEdit = DA_STATE.propositions[i];
   });
 
+  // Gate text editing to Text Edit mode. Outside it, propositions stay
+  // contentEditable (so you can place a caret and press Enter to split, or click
+  // dots for brackets) but character changes are blocked. Enter/Backspace are
+  // handled in keydown with preventDefault, so they never reach beforeinput;
+  // formatting (bold/underline) is non-destructive, so it's allowed through.
+  container.addEventListener('beforeinput', (e) => {
+    if (DA_STATE.textEditMode) return;
+    if (!e.target.closest('.proposition-block')) return;
+    if (e.inputType && e.inputType.startsWith('format')) return;
+    e.preventDefault();
+  });
+
   container.addEventListener('input', (e) => {
     const block = e.target.closest('.proposition-block');
     if (!block) return;
