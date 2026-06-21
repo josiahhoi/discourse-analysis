@@ -223,6 +223,39 @@ function renderPropositions() {
   isRenderingPropositions = false;
 }
 
+/**
+ * After a free-form text edit changes a proposition's length, shift the stored
+ * character offsets of its word arrows and text comments so they keep pointing at
+ * the same words. Format tags are re-derived from the DOM so they don't need this.
+ *
+ * Uses a common-prefix/suffix diff: offsets before the change stay, offsets after
+ * it shift by the length delta, offsets inside the changed region clamp to its
+ * start. Handles the common cases (indenting/typing/deleting at a point) — e.g.
+ * tabbing a line right shifts every anchor on it so an arrow at "apart" follows it.
+ */
+function remapPropositionAnchors(i, oldText, newText) {
+  if (oldText === newText) return;
+  const oLen = oldText.length, nLen = newText.length;
+  let p = 0;
+  while (p < oLen && p < nLen && oldText[p] === newText[p]) p++;
+  let s = 0;
+  while (s < (oLen - p) && s < (nLen - p) && oldText[oLen - 1 - s] === newText[nLen - 1 - s]) s++;
+  const oldChangeEnd = oLen - s;
+  const delta = nLen - oLen;
+  const map = (o) => (o < p) ? o : (o >= oldChangeEnd ? o + delta : p);
+
+  DA_STATE.wordArrows.forEach(wa => {
+    if (wa.fromProp === i) { wa.fromStart = map(wa.fromStart); wa.fromEnd = map(wa.fromEnd); }
+    if (wa.toProp === i) { wa.toStart = map(wa.toStart); wa.toEnd = map(wa.toEnd); }
+  });
+  DA_STATE.comments.forEach(c => {
+    if (c.type === 'text' && c.target && c.target.propIndex === i) {
+      c.target.start = map(c.target.start);
+      c.target.end = map(c.target.end);
+    }
+  });
+}
+
 function attachPropositionDelegatedListeners(container) {
   container.addEventListener('focusin', (e) => {
     const block = e.target.closest('.proposition-block');
@@ -287,6 +320,10 @@ function attachPropositionDelegatedListeners(container) {
     const changedFromStored = currentText !== DA_STATE.propositions[i];
     if (changedFromStored && block._textBeforeEdit !== undefined && block._textBeforeEdit !== null && currentText !== block._textBeforeEdit) {
       DA_STATE.pushUndo('text edit', String(i));
+      // A genuine free-form edit changed this line's length — shift arrow/comment
+      // anchors so they keep pointing at the same words (split/merge skip this via
+      // changedFromStored, since they update state programmatically and already remap).
+      remapPropositionAnchors(i, block._textBeforeEdit, currentText);
     }
     DA_STATE.propositions[i] = currentText;
     DA_STATE.formatTags = DA_STATE.formatTags.filter(f => f.propIndex !== i).concat(newFormatTags);
