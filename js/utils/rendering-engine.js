@@ -1255,13 +1255,33 @@ function renderWordArrows() {
     return false;
   };
 
+  // Measure an anchor by its non-whitespace text, not the full span box. While
+  // editing in Text Edit mode, inserted indentation (e.g. tabbed spaces) lands
+  // INSIDE the anchor span, so its bounding box would left-extend and drag the
+  // arrow off the word; a trimmed range keeps the arrow on the actual word.
+  const anchorRect = (el) => {
+    const tn = el.firstChild;
+    if (tn && tn.nodeType === 3 && el.childNodes.length === 1) {
+      const t = tn.textContent;
+      const start = t.length - t.replace(/^\s+/, '').length;
+      const end = t.replace(/\s+$/, '').length;
+      if (end > start && (start > 0 || end < t.length)) {
+        const rng = document.createRange();
+        rng.setStart(tn, start); rng.setEnd(tn, end);
+        const r = rng.getBoundingClientRect();
+        if (r.width > 0 || r.height > 0) return r;
+      }
+    }
+    return el.getBoundingClientRect();
+  };
+
   DA_STATE.wordArrows.forEach((wa, idx) => {
     const fromEl = wrapper.querySelector(`.arrow-anchor[data-arrow-id="arrow-${idx}-from"]`);
     const toEl = wrapper.querySelector(`.arrow-anchor[data-arrow-id="arrow-${idx}-to"]`);
     if (!fromEl || !toEl) return;
 
-    const fromR = fromEl.getBoundingClientRect();
-    const toR = toEl.getBoundingClientRect();
+    const fromR = anchorRect(fromEl);
+    const toR = anchorRect(toEl);
 
     // word boundaries relative to wrapper
     const fL = fromR.left - wrapperRect.left;
