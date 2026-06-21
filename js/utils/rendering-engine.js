@@ -318,15 +318,27 @@ function attachPropositionDelegatedListeners(container) {
     // appear to do nothing (it reverts that no-op) and only the second would
     // undo the split. Comparing against the current stored value avoids that.
     const changedFromStored = currentText !== DA_STATE.propositions[i];
+    let didFreeformEdit = false;
     if (changedFromStored && block._textBeforeEdit !== undefined && block._textBeforeEdit !== null && currentText !== block._textBeforeEdit) {
       DA_STATE.pushUndo('text edit', String(i));
       // A genuine free-form edit changed this line's length — shift arrow/comment
       // anchors so they keep pointing at the same words (split/merge skip this via
       // changedFromStored, since they update state programmatically and already remap).
       remapPropositionAnchors(i, block._textBeforeEdit, currentText);
+      didFreeformEdit = true;
     }
     DA_STATE.propositions[i] = currentText;
     DA_STATE.formatTags = DA_STATE.formatTags.filter(f => f.propIndex !== i).concat(newFormatTags);
+
+    // If this line carries arrow/comment anchors, their on-screen spans are stale
+    // after the edit (built from the old offsets/positions). Rebuild from the
+    // remapped state so the arrows/marks snap to the words instead of drawing to
+    // where the text used to be. Deferred so it runs after focus has settled.
+    if (didFreeformEdit) {
+      const hasAnchors = DA_STATE.wordArrows.some(w => w.fromProp === i || w.toProp === i)
+        || DA_STATE.comments.some(c => c.type === 'text' && c.target && c.target.propIndex === i);
+      if (hasAnchors) requestAnimationFrame(() => { if (window.renderAll) window.renderAll(); });
+    }
   });
 
   let _glowPropIdx = null;
@@ -1335,6 +1347,10 @@ function renderWordArrows() {
     const wordH = Math.max(fromR.height, toR.height);
     const gutter = Math.min(12, Math.max(5, wordH * 0.4));
 
+    // Sink the arrowhead a few px into the target word so it clearly points at the
+    // word rather than sitting in the gap beneath it.
+    const tIn = Math.min(6, toR.height * 0.3);
+
     let d, points;
     if (legHitsText(legY, x1, x2)) {
       if (isUp) {
@@ -1343,16 +1359,19 @@ function renderWordArrows() {
         // directly above, only a couple px away), use the midpoint of the actual
         // gap so the leg sits between the lines instead of striking the one above.
         const gy = (fT - gutter < tB) ? (tB + fT) / 2 : (fT - gutter);
-        d = `M ${fC} ${fT} V ${gy} H ${tC} V ${tB}`;
-        points = makeHead(tC, tB, 'up');
+        const tipY = tB - tIn;
+        d = `M ${fC} ${fT} V ${gy} H ${tC} V ${tipY}`;
+        points = makeHead(tC, tipY, 'up');
       } else if (isDown) {
         const gy = (tT - gutter < fB) ? (fB + tT) / 2 : (tT - gutter);
-        d = `M ${fC} ${fB} V ${gy} H ${tC} V ${tT}`;
-        points = makeHead(tC, tT, 'down');
+        const tipY = tT + tIn;
+        d = `M ${fC} ${fB} V ${gy} H ${tC} V ${tipY}`;
+        points = makeHead(tC, tipY, 'down');
       } else {
         const gy = fB + gutter; // dip into the gap below this line
-        d = `M ${fC} ${fB} V ${gy} H ${tC} V ${tB}`;
-        points = makeHead(tC, tB, 'up');
+        const tipY = tB - tIn;
+        d = `M ${fC} ${fB} V ${gy} H ${tC} V ${tipY}`;
+        points = makeHead(tC, tipY, 'up');
       }
     } else {
       // No collision — original routing.
