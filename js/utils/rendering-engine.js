@@ -233,6 +233,29 @@ function renderPropositions() {
  * start. Handles the common cases (indenting/typing/deleting at a point) — e.g.
  * tabbing a line right shifts every anchor on it so an arrow at "apart" follows it.
  */
+/**
+ * Resolve an arrow anchor to a single word within `text`. Arrows are word-level,
+ * but offset remapping through heavy edits (inserting blank lines, deletions) can
+ * stretch a stored [start,end) across whitespace until the anchor spans whole
+ * blank regions and the arrow tail balloons. Whenever the span isn't already a
+ * clean single token, re-derive the word at/after start. Idempotent and safe to
+ * run on every render, remap, and import, so corruption self-heals everywhere.
+ */
+function clampToWordAnchor(text, start, end) {
+  if (typeof text !== 'string') return [start, end];
+  const n = text.length;
+  let s = Math.max(0, Math.min(start | 0, n));
+  let e = Math.max(s, Math.min(end | 0, n));
+  // Already a non-empty single token not starting on whitespace → keep as-is.
+  if (e > s && !/\s/.test(text[s]) && !/\s/.test(text.slice(s, e))) return [s, e];
+  // Otherwise advance past whitespace to a word, then take to the next whitespace.
+  while (s < n && /\s/.test(text[s])) s++;
+  let e2 = s;
+  while (e2 < n && !/\s/.test(text[e2])) e2++;
+  if (e2 > s) return [s, e2];
+  return [Math.min(start | 0, n), Math.min(end | 0, n)];
+}
+
 function remapPropositionAnchors(i, oldText, newText) {
   if (oldText === newText) return;
   const oLen = oldText.length, nLen = newText.length;
@@ -245,11 +268,13 @@ function remapPropositionAnchors(i, oldText, newText) {
   const map = (o) => (o < p) ? o : (o >= oldChangeEnd ? o + delta : p);
 
   DA_STATE.wordArrows.forEach(wa => {
-    if (wa.fromProp === i) { wa.fromStart = map(wa.fromStart); wa.fromEnd = map(wa.fromEnd); }
-    if (wa.toProp === i) { wa.toStart = map(wa.toStart); wa.toEnd = map(wa.toEnd); }
+    // Shift, then re-clamp to a single word so edits can't stretch the anchor.
+    if (wa.fromProp === i) { [wa.fromStart, wa.fromEnd] = clampToWordAnchor(newText, map(wa.fromStart), map(wa.fromEnd)); }
+    if (wa.toProp === i) { [wa.toStart, wa.toEnd] = clampToWordAnchor(newText, map(wa.toStart), map(wa.toEnd)); }
   });
   DA_STATE.comments.forEach(c => {
     if (c.type === 'text' && c.target && c.target.propIndex === i) {
+      // Comments may legitimately span a phrase, so only shift — don't clamp.
       c.target.start = map(c.target.start);
       c.target.end = map(c.target.end);
     }
@@ -583,8 +608,16 @@ function renderInlineContent(textSpan, text, i) {
   const textFormats = DA_STATE.formatTags.filter((f) => f.propIndex === i);
   const textArrows = [];
   DA_STATE.wordArrows.forEach((wa, idx) => {
-    if (wa.fromProp === i) textArrows.push({ start: wa.fromStart, end: wa.fromEnd, type: 'arrow-anchor', id: `arrow-${idx}-from` });
-    if (wa.toProp === i) textArrows.push({ start: wa.toStart, end: wa.toEnd, type: 'arrow-anchor', id: `arrow-${idx}-to` });
+    // Clamp each anchor to a single word so a corrupted/stretched offset range can
+    // never render a span across blank lines (which balloons the arrow tail).
+    if (wa.fromProp === i) {
+      const [s, e] = clampToWordAnchor(text, wa.fromStart, wa.fromEnd);
+      textArrows.push({ start: s, end: e, type: 'arrow-anchor', id: `arrow-${idx}-from` });
+    }
+    if (wa.toProp === i) {
+      const [s, e] = clampToWordAnchor(text, wa.toStart, wa.toEnd);
+      textArrows.push({ start: s, end: e, type: 'arrow-anchor', id: `arrow-${idx}-to` });
+    }
   });
 
   textSpan.innerHTML = '';
@@ -1540,6 +1573,6 @@ window.DA_RENDERER = {
     renderAll, renderPropositions, renderBrackets, renderWordArrows, renderCommentPreviews,
     computeSlotAssignments, getBracketX, getConnectionPoints, getBracketLabels,
     getPointExtent, getBracketExtent, getRepresentativeRange, updateBracketPositions,
-    scheduleVisualUpdate, computeVerseDisplay,
+    scheduleVisualUpdate, computeVerseDisplay, clampToWordAnchor,
     getBracketSlots: () => ({ ..._slotForIdx })
 };

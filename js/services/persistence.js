@@ -44,6 +44,23 @@ function normalizeBracketData(data) {
     data = { ...data, verseRefs: data.verseRefs.map(normalizeVerseRef) };
   }
 
+  // Heal arrow anchors that earlier offset-remapping may have stretched across
+  // whitespace/blank lines — clamp each back to a single word so they render
+  // sanely. Arrows are word-level; comments may span phrases so they're left.
+  const clampWord = window.DA_RENDERER && DA_RENDERER.clampToWordAnchor;
+  if (clampWord && Array.isArray(data.wordArrows)) {
+    data = {
+      ...data,
+      wordArrows: data.wordArrows.map((wa) => {
+        const out = { ...wa };
+        const fp = data.propositions[wa.fromProp], tp = data.propositions[wa.toProp];
+        if (typeof fp === 'string') [out.fromStart, out.fromEnd] = clampWord(fp, wa.fromStart, wa.fromEnd);
+        if (typeof tp === 'string') [out.toStart, out.toEnd] = clampWord(tp, wa.toStart, wa.toEnd);
+        return out;
+      })
+    };
+  }
+
   const rawBrackets = Array.isArray(data.brackets) ? data.brackets : (Array.isArray(data.arcs) ? data.arcs : []);
   if (rawBrackets.length === 0) return data;
 
