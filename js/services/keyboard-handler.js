@@ -3,12 +3,31 @@ window.DA_KEYBOARD = {
     document.addEventListener('keydown', (e) => {
       // Undo
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        // Don't hijack undo while the user is editing a text field. Otherwise we
-        // preventDefault the browser's native field-level undo AND run a whole-
-        // document undo, which silently wipes the in-progress edit (proposition
-        // edits only commit to state on focusout, so renderAll rewrites the span
-        // from stale state). Let the native undo handle the active field instead.
         const el = document.activeElement;
+        const block = el && el.closest ? el.closest('.proposition-block') : null;
+
+        if (block) {
+          // Focus is in a proposition. If there's uncommitted typing in this field,
+          // let the browser's native field-level undo handle it (so we don't wipe
+          // the in-progress edit, which only commits to state on focusout). But if
+          // the field matches state (e.g. focus landed here after a split/merge),
+          // there's nothing to undo natively — run the same document-level undo as
+          // the Undo button, so structural actions are undoable from the keyboard.
+          const i = parseInt(block.dataset.index, 10);
+          const span = block.querySelector('.proposition-text');
+          let hasUncommitted = false;
+          if (span && !isNaN(i) && window.DA_EDITOR && DA_EDITOR.extractFormatTags) {
+            hasUncommitted = DA_EDITOR.extractFormatTags(span, i).text !== DA_STATE.propositions[i];
+          }
+          if (hasUncommitted) return; // native undo for the live edit
+          e.preventDefault();
+          if (el.blur) el.blur(); // leave the field so renderAll can rebuild cleanly
+          if (typeof undoLastAction === 'function') undoLastAction();
+          return;
+        }
+
+        // Other text fields (comment box, reply, passage ref, inputs): leave the
+        // browser's native undo alone rather than hijacking it for a document undo.
         if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
           return;
         }
