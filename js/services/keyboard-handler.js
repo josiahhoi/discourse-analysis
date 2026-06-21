@@ -252,9 +252,15 @@ window.DA_KEYBOARD = {
 
             if (preText.length === 0 && i > 0) {
               e.preventDefault();
-              
+
               const prevBlock = container.querySelector(`.proposition-block[data-index="${i - 1}"]`);
               const prevTextSpan = prevBlock?.querySelector('.proposition-text');
+
+              // Commit this block's current text before merging — edits otherwise
+              // only commit on focusout, so a merge would run on stale text.
+              const _c = DA_EDITOR.extractFormatTags(textSpan, i);
+              DA_STATE.propositions[i] = _c.text;
+              DA_STATE.formatTags = DA_STATE.formatTags.filter(f => f.propIndex !== i).concat(_c.tags);
 
               const prevLen = DA_STATE.propositions[i - 1].length;
               DA_EDITOR.mergePropositions(i);
@@ -332,8 +338,14 @@ window.DA_KEYBOARD = {
           preRange.setStart(textSpan, 0);
           preRange.setEnd(range.startContainer, range.startOffset);
           const offset = preRange.toString().length;
+          // Commit this block's current text before splitting — edits otherwise
+          // only commit on focusout, so the split would run on stale text (and the
+          // length guard could even make Enter silently do nothing).
+          const _c = DA_EDITOR.extractFormatTags(textSpan, i);
+          DA_STATE.propositions[i] = _c.text;
+          DA_STATE.formatTags = DA_STATE.formatTags.filter(f => f.propIndex !== i).concat(_c.tags);
           DA_EDITOR.splitPropositionAtOffset(i, offset);
-          
+
           if (window.renderAll) window.renderAll();
           
           requestAnimationFrame(() => {

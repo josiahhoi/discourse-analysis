@@ -1027,7 +1027,12 @@ function getRepresentativeRange(id, _seen) {
   }
 }
 
-function getConnectionPoints(fromId, toId, dotPositions, excludeBracketIdx = -1) {
+function getConnectionPoints(fromId, toId, dotPositions, excludeBracketIdx = -1, _seen) {
+  // Guard against cyclic bracket references (a bracket reachable from itself via
+  // from/to). getExtent/getRepresentativeRange already carry such guards; without
+  // one here a cycle recurses forever and the whole diagram dies on render.
+  if (!_seen) _seen = new Set();
+
   const extentFrom = getExtent(fromId);
   const extentTo = getExtent(toId);
   const totalFrom = Math.min(extentFrom.from, extentTo.from);
@@ -1041,9 +1046,11 @@ function getConnectionPoints(fromId, toId, dotPositions, excludeBracketIdx = -1)
     }
     if (id.startsWith('b')) {
       const bIdx = parseInt(id.slice(1), 10);
+      if (_seen.has(bIdx)) return 0; // cycle — bail
+      _seen.add(bIdx);
       const b = DA_STATE.brackets[bIdx];
       if (!b) return 0; // SAFETY
-      const points = getConnectionPoints(b.from, b.to, dotPositions, bIdx);
+      const points = getConnectionPoints(b.from, b.to, dotPositions, bIdx, _seen);
       
       // NEW: Check for stars to determine connection point
       const labels = getBracketLabels(b.type, b.labelsSwapped, b.dominanceFlipped);

@@ -121,24 +121,42 @@ function splitPropositionAtOffset(i, offset) {
     });
   }
   
+  // Offset math for anchor adjustment. The second half is text.slice(secondStart)
+  // with its leading whitespace trimmed, so the real number of characters removed
+  // from the front of the second half is `secondCut` (= secondStart + that trimmed
+  // leading whitespace). Using plain `offset` here is what caused anchors to drift
+  // right by the trimmed-whitespace length. `firstLen` is the length of the
+  // (trimEnd'd) first half, used to clamp anchors that fall in its trimmed tail.
+  const secondStart = isCleanBreak ? (markerIndexInText + 1) : offset;
+  const _rawSecond = text.slice(secondStart);
+  const secondCut = secondStart + (_rawSecond.length - _rawSecond.trimStart().length);
+  const firstLen = DA_STATE.propositions[i].length;
+
   // Adjust word arrows
-  const cutLenForArrows = isCleanBreak ? (markerIndexInText + 1) : offset;
   DA_STATE.wordArrows.forEach(wa => {
     // From anchor
     if (wa.fromProp > i) {
       wa.fromProp++;
-    } else if (wa.fromProp === i && wa.fromStart >= offset) {
-      wa.fromProp = i + 1;
-      wa.fromStart = Math.max(0, wa.fromStart - cutLenForArrows);
-      wa.fromEnd = Math.max(0, wa.fromEnd - cutLenForArrows);
+    } else if (wa.fromProp === i) {
+      if (wa.fromStart >= secondStart) {
+        wa.fromProp = i + 1;
+        wa.fromStart = Math.max(0, wa.fromStart - secondCut);
+        wa.fromEnd = Math.max(0, wa.fromEnd - secondCut);
+      } else {
+        wa.fromEnd = Math.min(wa.fromEnd, firstLen);
+      }
     }
     // To anchor
     if (wa.toProp > i) {
       wa.toProp++;
-    } else if (wa.toProp === i && wa.toStart >= offset) {
-      wa.toProp = i + 1;
-      wa.toStart = Math.max(0, wa.toStart - cutLenForArrows);
-      wa.toEnd = Math.max(0, wa.toEnd - cutLenForArrows);
+    } else if (wa.toProp === i) {
+      if (wa.toStart >= secondStart) {
+        wa.toProp = i + 1;
+        wa.toStart = Math.max(0, wa.toStart - secondCut);
+        wa.toEnd = Math.max(0, wa.toEnd - secondCut);
+      } else {
+        wa.toEnd = Math.min(wa.toEnd, firstLen);
+      }
     }
   });
 
@@ -148,13 +166,13 @@ function splitPropositionAtOffset(i, offset) {
       if (c.target.propIndex > i) {
         c.target.propIndex++;
       } else if (c.target.propIndex === i) {
-        const cutLen = isCleanBreak ? (markerIndexInText + 1) : offset;
-        if (c.target.start >= offset) {
+        if (c.target.start >= secondStart) {
           c.target.propIndex++;
-          c.target.start = Math.max(0, c.target.start - cutLen);
-          c.target.end = Math.max(0, c.target.end - cutLen);
-        } else if (c.target.end > offset) {
-          c.target.end = offset;
+          c.target.start = Math.max(0, c.target.start - secondCut);
+          c.target.end = Math.max(0, c.target.end - secondCut);
+        } else {
+          // Stays in first half; clamp the end into the trimmed first half.
+          c.target.end = Math.min(c.target.end, firstLen);
         }
       }
     }
@@ -166,19 +184,21 @@ function splitPropositionAtOffset(i, offset) {
     if (f.propIndex > i) {
       f.propIndex++;
     } else if (f.propIndex === i) {
-      const cutLen = isCleanBreak ? (markerIndexInText + 1) : offset;
-      if (f.start >= offset) {
+      if (f.start >= secondStart) {
         f.propIndex++;
-        f.start = Math.max(0, f.start - cutLen);
-        f.end = Math.max(0, f.end - cutLen);
-      } else if (f.end > offset) {
+        f.start = Math.max(0, f.start - secondCut);
+        f.end = Math.max(0, f.end - secondCut);
+      } else if (f.end > secondStart) {
+        // Spans the boundary — keep the first-half portion, copy the rest over.
         newTags.push({
           type: f.type,
           propIndex: i + 1,
           start: 0,
-          end: Math.max(0, f.end - cutLen)
+          end: Math.max(0, f.end - secondCut)
         });
-        f.end = offset;
+        f.end = firstLen;
+      } else {
+        f.end = Math.min(f.end, firstLen);
       }
     }
   });
@@ -198,12 +218,14 @@ function mergePropositions(i) {
   const endA = refA.split('-').pop();
   const startB = refB.split('-')[0];
   
-  // Only insert the invisible marker if we are transitioning to a NEW verse
-  if (endA && startB && endA !== startB) {
-    DA_STATE.propositions[i - 1] = (prevText + '\u200B' + currText).trim();
-  } else {
-    DA_STATE.propositions[i - 1] = (prevText + ' ' + currText).trim();
-  }
+  // Join with a single character (zero-width marker at a verse transition, else a
+  // space). Keep prevText intact \u2014 only trim currText's leading whitespace and the
+  // combined trailing whitespace. Trimming the *front* of the combined string (as a
+  // plain .trim() did) would drop prevText's leading whitespace and silently shift
+  // all of prop i-1's existing anchors; not trimming the front keeps them valid.
+  const joiner = (endA && startB && endA !== startB) ? '\u200B' : ' ';
+  const _currLeadingWS = currText.length - currText.replace(/^\s+/, '').length;
+  DA_STATE.propositions[i - 1] = (prevText + joiner + currText.replace(/^\s+/, '')).replace(/\s+$/, '');
   
   if (refA && refB && refA !== refB) {
     const partsA = refA.split('-');
@@ -273,7 +295,10 @@ function mergePropositions(i) {
     }
   }
   
-  const prevLen = prevText.length + 1; // +1 for the space or zero-width space added
+  // Where currText's content now begins in the merged string: prevText is kept
+  // whole, plus the 1-char joiner, minus the leading whitespace we trimmed off
+  // currText (so anchors that were after that whitespace land correctly).
+  const prevLen = prevText.length + joiner.length - _currLeadingWS;
 
   // Adjust word arrows
   DA_STATE.wordArrows.forEach(wa => {
