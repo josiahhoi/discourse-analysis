@@ -1182,8 +1182,42 @@ function renderWordArrows() {
   if (!svg) return;
   svg.innerHTML = '';
   const wrapper = document.getElementById('propositions');
+  if (!wrapper) return;
   const wrapperRect = wrapper.getBoundingClientRect();
-  
+
+  const _hL = 8, _hW = 4;
+  const makeHead = (x, y, dir) => {
+    if (dir === 'up') return `${x},${y} ${x - _hW},${y + _hL} ${x + _hW},${y + _hL}`;
+    if (dir === 'down') return `${x},${y} ${x - _hW},${y - _hL} ${x + _hW},${y - _hL}`;
+    if (dir === 'left') return `${x},${y} ${x + _hL},${y - _hW} ${x + _hL},${y + _hW}`;
+    return `${x},${y} ${x - _hL},${y - _hW} ${x - _hL},${y + _hW}`; // right
+  };
+
+  // Returns true if a wrapper-relative point sits on a visible glyph. Used so we
+  // only reroute a horizontal leg into the gutter when it would actually cross
+  // text — legs that run through empty space (e.g. an indented sub-line's left
+  // margin) keep the original routing.
+  const pointOnGlyph = (xWrap, yWrap) => {
+    if (!document.caretRangeFromPoint) return false;
+    const xc = xWrap + wrapperRect.left, yc = yWrap + wrapperRect.top;
+    const r = document.caretRangeFromPoint(xc, yc);
+    if (!r || !r.startContainer || r.startContainer.nodeType !== 3) return false;
+    const s = r.startContainer.textContent || '';
+    for (let k = 0; k < 2; k++) {
+      const a = k === 0 ? r.startOffset : r.startOffset - 1, b = a + 1;
+      if (a < 0 || b > s.length || !/\S/.test(s[a])) continue;
+      const cr = document.createRange(); cr.setStart(r.startContainer, a); cr.setEnd(r.startContainer, b);
+      const rect = cr.getBoundingClientRect();
+      if (xc >= rect.left && xc <= rect.right && yc >= rect.top && yc <= rect.bottom) return true;
+    }
+    return false;
+  };
+  const legHitsText = (yWrap, xa, xb) => {
+    const lo = Math.min(xa, xb) + 2, hi = Math.max(xa, xb) - 2;
+    for (let x = lo; x <= hi; x += 8) if (pointOnGlyph(x, yWrap)) return true;
+    return false;
+  };
+
   DA_STATE.wordArrows.forEach((wa, idx) => {
     const fromEl = wrapper.querySelector(`.arrow-anchor[data-arrow-id="arrow-${idx}-from"]`);
     const toEl = wrapper.querySelector(`.arrow-anchor[data-arrow-id="arrow-${idx}-to"]`);
@@ -1236,36 +1270,52 @@ function renderWordArrows() {
       isLastHorizontal = true;
     }
 
-    // Start Offset: push x1/y1 away from the word edge
-    const sOff = 4;
-    let finalX1 = x1;
-    let finalY1 = y1;
+    // Collision-aware routing: keep the original geometry, but if the horizontal
+    // leg would cross a word, lift it into the inter-line gap (and drop straight
+    // down/up onto the target's center) instead of striking through text.
+    const isUp = tM < fM - 10, isDown = tM > fM + 10;
+    const legY = isDown ? y2 : y1; // the horizontal leg's y in the base routing
+    const wordH = Math.max(fromR.height, toR.height);
+    const gutter = Math.min(12, Math.max(5, wordH * 0.4));
 
-    if (tM < fM - 10) {
-      if (x1 === fL) finalX1 -= sOff;
-      else if (x1 === fR) finalX1 += sOff;
-    } else if (tM > fM + 10) {
-      finalY1 += sOff;
+    let d, points;
+    if (legHitsText(legY, x1, x2)) {
+      if (isUp) {
+        const gy = fT - gutter; // gap above the source line (toward the target)
+        d = `M ${fC} ${fT} V ${gy} H ${tC} V ${tB}`;
+        points = makeHead(tC, tB, 'up');
+      } else if (isDown) {
+        const gy = tT - gutter; // gap above the target line
+        d = `M ${fC} ${fB} V ${gy} H ${tC} V ${tT}`;
+        points = makeHead(tC, tT, 'down');
+      } else {
+        const gy = fB + gutter; // dip into the gap below this line
+        d = `M ${fC} ${fB} V ${gy} H ${tC} V ${tB}`;
+        points = makeHead(tC, tB, 'up');
+      }
     } else {
-      if (x1 === fL) finalX1 -= sOff;
-      else if (x1 === fR) finalX1 += sOff;
-    }
+      // No collision — original routing.
+      const sOff = 4;
+      let finalX1 = x1, finalY1 = y1;
+      if (isUp) { if (x1 === fL) finalX1 -= sOff; else if (x1 === fR) finalX1 += sOff; }
+      else if (isDown) { finalY1 += sOff; }
+      else { if (x1 === fL) finalX1 -= sOff; else if (x1 === fR) finalX1 += sOff; }
 
-    // Shorten the line slightly so the tip of the arrowhead is clear
-    let finalX2 = x2;
-    let finalY2 = y2;
-    const offset = 1.5;
-    if (isLastHorizontal) {
-      if (x2 < x1) finalX2 += offset;
-      else finalX2 -= offset;
-    } else {
-      if (y2 < y1) finalY2 += offset;
-      else finalY2 -= offset;
-    }
+      let finalX2 = x2, finalY2 = y2;
+      const offset = 1.5;
+      if (isLastHorizontal) { if (x2 < x1) finalX2 += offset; else finalX2 -= offset; }
+      else { if (y2 < y1) finalY2 += offset; else finalY2 -= offset; }
 
-    const d = (isLastHorizontal && y1 !== y2)
-      ? `M ${finalX1} ${finalY1} V ${y2} H ${finalX2}`
-      : `M ${finalX1} ${finalY1} H ${x2} V ${finalY2}`;
+      d = (isLastHorizontal && y1 !== y2)
+        ? `M ${finalX1} ${finalY1} V ${y2} H ${finalX2}`
+        : `M ${finalX1} ${finalY1} H ${x2} V ${finalY2}`;
+
+      if (isLastHorizontal) {
+        points = (x2 < x1) ? makeHead(x2, y2, 'left') : makeHead(x2, y2, 'right');
+      } else {
+        points = (y2 < y1) ? makeHead(x2, y2, 'up') : makeHead(x2, y2, 'down');
+      }
+    }
 
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g.setAttribute('class', 'word-arrow-group');
@@ -1276,18 +1326,6 @@ function renderWordArrows() {
     path.setAttribute('class', 'word-arrow-path');
     path.style.strokeLinecap = 'butt'; // Cleaner tip
     g.appendChild(path);
-
-    // Manual Arrowhead (Polygon)
-    let points = '';
-    const hL = 8; // head length
-    const hW = 4;  // head half-width
-    if (isLastHorizontal) {
-      if (x2 < x1) points = `${x2},${y2} ${x2 + hL},${y2 - hW} ${x2 + hL},${y2 + hW}`; // Left
-      else points = `${x2},${y2} ${x2 - hL},${y2 - hW} ${x2 - hL},${y2 + hW}`; // Right
-    } else {
-      if (y2 < y1) points = `${x2},${y2} ${x2 - hW},${y2 + hL} ${x2 + hW},${y2 + hL}`; // Up
-      else points = `${x2},${y2} ${x2 - hW},${y2 - hL} ${x2 + hW},${y2 - hL}`; // Down
-    }
     const head = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     head.setAttribute('points', points);
     head.setAttribute('fill', 'var(--text)');
