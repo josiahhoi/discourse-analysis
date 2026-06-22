@@ -83,7 +83,7 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 | B-A | Both-And | Coordinate |
 | An/Fl | Anticipation-Fulfillment | Coordinate |
 | G | Ground | Support by Distinct Statement |
-| I | Inference | Support by Distinct Statement |
+| ∴ | Inference | Support by Distinct Statement |
 | Bl | Bilateral | Support by Distinct Statement |
 | Ac/Res | Action-Result | Support by Distinct Statement |
 | Ac/Pur | Action-Purpose | Support by Distinct Statement |
