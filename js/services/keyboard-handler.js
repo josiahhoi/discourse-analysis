@@ -308,16 +308,17 @@ window.DA_KEYBOARD = {
           const sel = window.getSelection();
           const range = sel.getRangeAt(0);
 
+          const TAB_SIZE = 8;
+          const preRange = document.createRange();
+          preRange.setStart(textSpan, 0);
+          preRange.setEnd(range.startContainer, range.startOffset);
+          const preText = preRange.toString();
+          const currentLine = preText.split('\n').pop();
+
           if (e.shiftKey) {
-            const preRange = document.createRange();
-            preRange.setStart(textSpan, 0);
-            preRange.setEnd(range.startContainer, range.startOffset);
-            const preText = preRange.toString();
-            const currentLine = preText.split('\n').pop();
-            
             if (currentLine.startsWith(' ')) {
               const spaces = currentLine.match(/^ +/)[0].length;
-              const toRemove = Math.min(8, spaces);
+              const toRemove = Math.min(spaces % TAB_SIZE || TAB_SIZE, spaces);
               const newRange = document.createRange();
               newRange.setStart(range.startContainer, range.startOffset - currentLine.length);
               newRange.setEnd(range.startContainer, range.startOffset - currentLine.length + toRemove);
@@ -327,7 +328,9 @@ window.DA_KEYBOARD = {
               DA_RENDERER.scheduleVisualUpdate();
             }
           } else {
-            document.execCommand('insertText', false, '        ');
+            const col = currentLine.length;
+            const spacesToInsert = TAB_SIZE - (col % TAB_SIZE);
+            document.execCommand('insertText', false, ' '.repeat(spacesToInsert));
           }
           return;
         }
