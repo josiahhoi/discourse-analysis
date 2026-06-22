@@ -266,6 +266,9 @@ window.DA_KEYBOARD = {
               newRange.setStart(range.startContainer, range.startOffset - toRemove);
               newRange.setEnd(range.startContainer, range.startOffset);
               newRange.deleteContents();
+              // deleteContents() doesn't fire an 'input' event, so redraw arrows
+              // now instead of waiting for the next render (avoids a visible lag).
+              DA_RENDERER.scheduleVisualUpdate();
               return;
             }
 
@@ -319,6 +322,9 @@ window.DA_KEYBOARD = {
               newRange.setStart(range.startContainer, range.startOffset - currentLine.length);
               newRange.setEnd(range.startContainer, range.startOffset - currentLine.length + toRemove);
               newRange.deleteContents();
+              // deleteContents() doesn't fire an 'input' event, so redraw arrows
+              // now instead of waiting for the next render (avoids a visible lag).
+              DA_RENDERER.scheduleVisualUpdate();
             }
           } else {
             document.execCommand('insertText', false, '        ');
