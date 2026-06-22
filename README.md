@@ -14,7 +14,7 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
     - **Intelligent Renumbering**: Press **Enter** to split propositions; the engine automatically handles **verse suffixes (e.g., 1a, 1b)** and markers like `[1]` or `[2:1]` dynamically.
 
 ### 2. The Bracketing & Structural Engine
-- **18+ Logical Relationships**: Full support for the standard discourse analysis hierarchy, including specialized Gurtner types like **Both-And (B-A)**, **Anticipation-Fulfillment (An/Fl)**, and **General-Specific (Gen/Sp)**.
+- **18+ Logical Relationships**: Full support for the standard discourse analysis hierarchy, including specialized types like **Both-And (B-A)**, **Anticipation-Fulfillment (An/Fl)**, and **General-Specific (Gen/Sp)**.
 - **Switch Stars (Dominance Marking)**: Instantly swap the logical dominance (the asterisk `*`) between bracket ends via the bracket context menu.
 - **Structural Folding (Nesting)**: Collapse complex sub-structures into a single summary label to simplify large-scale diagrams.
 - **Dynamic Re-parenting**: Automatically adjusts parent-child relationships when grouping existing bracketed structures.
@@ -38,8 +38,8 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 
 ### Desktop (Recommended)
 1. Download the latest release for your platform from the `dist/` folder or the Releases page.
-   - **Windows**: `Discourse Analysis 2.7.2 x64 Portable.exe` (No installation required)
-   - **macOS**: `Discourse Analysis-2.7.2-arm64-mac.zip`
+   - **Windows**: `Discourse Analysis 2.9.3 x64 Portable.exe` (No installation required)
+   - **macOS**: `Discourse Analysis-2.9.3-arm64-mac.zip`
 2. Run the application directly.
 
 ### Web / Development
@@ -91,7 +91,7 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 | T | Temporal | Support by Distinct Statement |
 | L | Locative | Support by Distinct Statement |
 | Ac/Mn | Action-Manner | Support by Restatement |
-| Cf | Comparison | Support by Restatement |
+| // | Comparison | Support by Restatement |
 | -/+ | Negative-Positive | Support by Restatement |
 | Id/Exp | Idea-Explanation | Support by Restatement |
 | Q/A | Question-Answer | Support by Restatement |
@@ -108,6 +108,29 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 - **Libraries**: `html2canvas` and `jsPDF` for exports, `LZ-String` for data compression.
 
 ## Changelog
+
+### Version 2.9.3
+- **Word-Style Tab Stops**: **Tab** and **Shift-Tab** now snap to tab stops (column multiples of 8) instead of inserting/removing a flat block of spaces.
+- **Snappier Arrows**: Word arrows redraw immediately when un-indenting (Backspace/Shift-Tab), with no lag.
+- **Rock-Solid Arrow Anchors**: Arrow anchors stay locked to their word across edits, tabbing, splits, and merges — no more drift or "ballooning" across blank lines.
+- **Collision-Aware Arrow Routing**: Orthogonal word arrows reroute around text instead of striking through it; arrowheads point cleanly into the target word.
+- **Gated Text Editing**: Proposition text can only be altered in **Text Edit** mode, preventing accidental edits while bracketing.
+- **Keyboard Undo Parity**: **Cmd/Ctrl+Z** now undoes structural actions (splits, merges) just like the Undo button.
+
+### Version 2.9.2
+- **Mark Passage Main Point**: Right-click a bracket to mark the passage's main point with a large red star.
+- **Comparison Relabeled**: The Comparison relationship now uses `//` (single-arm) instead of `Cf`.
+- **Click-to-Copy Project Code**: Click the cloud project code to copy the 6-digit ID to the clipboard.
+- **Stability Fixes**: Undo now reverts a split in one click; verse renumbering on split is correct; the app confirms before auto-reconnecting to a cloud project on reload.
+
+### Version 2.9.1
+- **Silent Data-Loss & Sync Fixes**: Hardened cloud sync against silent overwrites and stale-session writes; loading a new passage cleanly exits any active cloud session.
+- **Block Diagram Polish**: Block diagram labels are color-coded to match their bracket relationships.
+
+### Version 2.9.0
+- **Block Diagram View**: New view that renders the passage's logical structure as an indented block diagram.
+- **Richer Comments**: Comment rich-text formatting with viewport-clamped popups.
+- **Bible Service Refactor**: Restructured fetching with NASB (1995) support and a Logos local-API stub.
 
 ### Version 2.7.2
 - **Maintenance Update**: Finalized color-coding and UI streamline fixes.
