@@ -220,9 +220,13 @@ async function fetchPassage() {
     if (copyrightLabel) copyrightLabel.textContent = result.copyright;
     
     if (propositionsContainer) {
-      if (result.isGreek) propositionsContainer.classList.add('greek-text');
-      else propositionsContainer.classList.remove('greek-text');
+      propositionsContainer.classList.toggle('greek-text', !!result.isGreek);
+      propositionsContainer.classList.toggle('hebrew-text', !!result.isHebrew);
     }
+
+    // Hebrew passages flip the layout to right-to-left; any other version flips
+    // it back. setRTL also re-renders, so brackets mirror correctly.
+    DA_MODES.setRTL(!!result.isRTL);
 
     if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
 

@@ -163,6 +163,14 @@ function parseBollsText(rawText) {
  * @param {string} query   - Passage reference e.g. "John 1:1-5"
  */
 async function fetchPassageData(version, query) {
+  if (version === 'hebrew') {
+    // Westminster Leningrad Codex (Hebrew OT) via bolls.life. Returns isRTL so
+    // the UI flips to right-to-left layout automatically.
+    const data = await fetchFromBolls('WLC', query);
+    const parsed = parseBollsText(data.text);
+    return { ...parsed, passageRef: data.passageRef, copyright: data.copyright, isHebrew: true, isRTL: true };
+  }
+
   if (version === 'greek') {
     const ref = parsePassageReference(query);
     if (ref && ref.file) {

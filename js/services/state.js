@@ -34,6 +34,10 @@ window.DA_STATE = {
   cloudUnsubscribe: null,
   isUpdatingFromCloud: false,
   cloudDirty: false, // true when local edits haven't been pushed to the cloud
+
+  // Set automatically to true when a Hebrew passage is loaded; reset to false for
+  // all other languages. Not persisted — language choice drives RTL, not a toggle.
+  isRTL: false,
   
   // Text Shifting Mode
   shiftModeActive: false,

@@ -44,6 +44,29 @@ function toggleArrowMode(forceState) {
     }
 }
 
+/**
+ * Set right-to-left / Hebrew mode. Called automatically by fetchPassage() —
+ * true when Hebrew (WLC) is loaded, false for all other languages.
+ * Word arrows are not supported in RTL, so enabling it exits arrow mode and
+ * hides its button.
+ *
+ * @param {boolean} isRTL
+ */
+function setRTL(isRTL) {
+    DA_STATE.isRTL = !!isRTL;
+    document.body.classList.toggle('rtl-mode', DA_STATE.isRTL);
+
+    const arrowBtn = document.getElementById('arrowModeBtn');
+    if (DA_STATE.isRTL) {
+        if (DA_STATE.arrowMode) toggleArrowMode(false);
+        if (arrowBtn) arrowBtn.style.display = 'none';
+    } else if (arrowBtn) {
+        arrowBtn.style.display = '';
+    }
+
+    if (window.renderAll) window.renderAll();
+}
+
 window.DA_MODES = {
-    toggleTextEditMode, toggleArrowMode
+    toggleTextEditMode, toggleArrowMode, setRTL
 };

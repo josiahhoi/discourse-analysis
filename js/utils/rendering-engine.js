@@ -119,7 +119,15 @@ function renderPropositions() {
   const dynamicPaddingLeft = Math.max(200, DA_STATE.brackets.length
     ? BASE_PADDING + GAP + BRACKET_WIDTH + (_maxSlot + 1) * SLOT_WIDTH
     : BASE_PADDING);
-  container.style.paddingLeft = `${dynamicPaddingLeft + 20}px`;
+  // In RTL the bracket gutter mirrors to the right side, so pad on the right
+  // instead of the left (and clear the opposite side when switching modes).
+  if (DA_STATE.isRTL) {
+    container.style.paddingRight = `${dynamicPaddingLeft + 20}px`;
+    container.style.paddingLeft = '';
+  } else {
+    container.style.paddingLeft = `${dynamicPaddingLeft + 20}px`;
+    container.style.paddingRight = '';
+  }
 
   while (DA_STATE.verseRefs.length < DA_STATE.propositions.length) DA_STATE.verseRefs.push(String(DA_STATE.verseRefs.length + 1));
   if (DA_STATE.verseRefs.length > DA_STATE.propositions.length) DA_STATE.verseRefs.length = DA_STATE.propositions.length;
@@ -800,6 +808,13 @@ function bracketContainsForSlot(outer, outerIdx, inner, innerIdx) {
   return false;
 }
 
+// Canvas width captured each renderBrackets pass, used to mirror computed gutter
+// X coordinates in RTL mode. Shared so getConnectionPoints can mirror too.
+let _bracketCanvasW = 0;
+function _mirrorGutterX(xv) {
+  return DA_STATE.isRTL ? _bracketCanvasW - xv : xv;
+}
+
 function getBracketX(bracketIdx) {
   const slot = _slotForIdx[bracketIdx] ?? 0;
   const { GAP, BRACKET_WIDTH, SLOT_WIDTH, BASE_PADDING } = DA_CONSTANTS.BRACKET_GEO;
@@ -862,6 +877,20 @@ function renderBrackets() {
 
   const _coordTypes = new Set(DA_CONSTANTS.RELATIONSHIP_GROUPS_HIERARCHY[0].types);
 
+  // --- RTL mirroring ---
+  // In right-to-left mode the bracket gutter is on the right, so every *computed*
+  // gutter X (the spine, connection node, star, and label offsets) is mirrored
+  // around the canvas width. The arm endpoints (topLeft/bottomLeft) are measured
+  // from the already-mirrored DOM, so they are used as-is and not mirrored here.
+  const _rtl = DA_STATE.isRTL;
+  _bracketCanvasW = svg.getBoundingClientRect().width;
+  const MX = _mirrorGutterX;                        // mirror a computed gutter X
+  const _labelDX = _rtl ? -5 : 5;                   // label sits toward the text
+  const _labelAnchor = _rtl ? 'end' : 'start';
+  const _nodeDX = _rtl ? 15 : -15;                  // node sits away from the text
+  const _starDX = _rtl ? 12 : -12;
+  const _starAnchor = _rtl ? 'start' : 'end';
+
   DA_STATE.brackets.forEach((bracket, i) => {
     // 1. Hide brackets that are inside a collapsed parent
     const isInsideCollapsed = DA_STATE.brackets.some((otherB, otherIdx) => {
@@ -873,7 +902,7 @@ function renderBrackets() {
     if (isInsideCollapsed) return;
 
     let { topY, topLeft, bottomY, bottomLeft } = getConnectionPoints(bracket.from, bracket.to, dotPositions, i);
-    const x = getBracketX(i);
+    const x = MX(getBracketX(i));
 
     const isCollapsedCoord = bracket.isCollapsed && _coordTypes.has(bracket.type.toLowerCase());
 
@@ -1000,9 +1029,9 @@ function renderBrackets() {
                       : (labels.bottom && labels.bottom.includes('*')) ? bottomY
                       : (topY + bottomY) / 2;
       group.appendChild(createSVG('text', {
-        x: x - 12,
+        x: x + _starDX,
         y: dominantY,
-        'text-anchor': 'end',
+        'text-anchor': _starAnchor,
         'dominant-baseline': 'middle',
         class: 'main-point-star',
         'font-size': '50px',
@@ -1019,7 +1048,7 @@ function renderBrackets() {
     }
 
     group.appendChild(createSVG('circle', {
-      cx: x - 15,
+      cx: x + _nodeDX,
       cy: nodeY,
       r: 5,
       class: `${(DA_STATE.bracketSelectStep === 1 && DA_STATE.firstBracketPoint === `b${i}`) ? 'connection-node active-node' : 'connection-node'} ${bracket.isCollapsed ? 'collapsed' : ''}`,
@@ -1029,34 +1058,34 @@ function renderBrackets() {
     if (bracket.isCollapsed && !isCollapsedCoord) {
       // Subordinate collapsed: summary label at the dominant row arm, same position as normal top label
       group.appendChild(createLabelText(labels.summary, {
-        x: x + 5,
+        x: x + _labelDX,
         y: topY - 5,
-        'text-anchor': 'start',
+        'text-anchor': _labelAnchor,
         class: 'bracket-label',
         dataset: { index: i }
       }));
     } else if (labels.single) {
       group.appendChild(createLabelText(labels.single, {
-        x: x + 5,
+        x: x + _labelDX,
         y: (topY + bottomY) / 2,
-        'text-anchor': 'start',
+        'text-anchor': _labelAnchor,
         'dominant-baseline': 'middle',
         class: 'bracket-label single-label',
         dataset: { index: i }
       }));
     } else {
       group.appendChild(createLabelText(labels.top, {
-        x: x + 5,
+        x: x + _labelDX,
         y: topY - 5,
-        'text-anchor': 'start',
+        'text-anchor': _labelAnchor,
         class: 'bracket-label',
         dataset: { index: i, pos: 'top' }
       }));
 
       group.appendChild(createLabelText(labels.bottom, {
-        x: x + 5,
+        x: x + _labelDX,
         y: bottomY - 5,
-        'text-anchor': 'start',
+        'text-anchor': _labelAnchor,
         class: 'bracket-label',
         dataset: { index: i, pos: 'bottom' }
       }));
@@ -1170,7 +1199,9 @@ function getConnectionPoints(fromId, toId, dotPositions, excludeBracketIdx = -1,
     }
     if (id.startsWith('b')) {
       const bIdx = parseInt(id.slice(1), 10);
-      return getBracketX(bIdx) - 15; // Point at the connection-node
+      // Point at the connection-node, mirrored to the right gutter in RTL (the
+      // node offset flips sign just like in renderBrackets: -15 LTR, +15 RTL).
+      return _mirrorGutterX(getBracketX(bIdx)) + (DA_STATE.isRTL ? 15 : -15);
     }
     return 0;
   };
@@ -1263,6 +1294,9 @@ function renderWordArrows() {
   const svg = document.getElementById('wordArrowsSvg');
   if (!svg) return;
   svg.innerHTML = '';
+  // Word arrows are not supported in right-to-left mode (their collision-aware
+  // routing assumes LTR glyph positions), so skip rendering them entirely.
+  if (DA_STATE.isRTL) return;
   const wrapper = document.getElementById('propositions');
   if (!wrapper) return;
   const wrapperRect = wrapper.getBoundingClientRect();

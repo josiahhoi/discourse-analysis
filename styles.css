@@ -1940,6 +1940,44 @@ body.text-edit-mode-active .verse-ref {
   font-size: 1.05em;
 }
 
+/* Hebrew text (WLC) - serif Hebrew face, larger for niqqud legibility */
+.propositions.hebrew-text .proposition-text {
+  font-family: 'Noto Serif Hebrew', 'SBL Hebrew', 'Times New Roman', serif;
+  font-size: 1.3em;
+  line-height: 2.2;
+}
+
+/* ── Right-to-left / Hebrew mode ──────────────────────────────────────────────
+   The propositions read right-to-left and the bracket gutter mirrors to the
+   right. The dynamic gutter padding side is swapped in JS (paddingRight instead
+   of paddingLeft); here we flip text direction and move the connect dots to the
+   right edge of each proposition block. */
+body.rtl-mode .propositions {
+  direction: rtl;
+  text-align: right;
+}
+
+body.rtl-mode .proposition-block {
+  flex-direction: row-reverse;
+}
+
+body.rtl-mode .prop-dot {
+  left: auto;
+  right: -18px;
+}
+
+body.rtl-mode .proposition-block .verse-ref {
+  margin-right: 0;
+  margin-left: 0.35em;
+}
+
+/* The proposition text itself stays direction:rtl so Hebrew renders correctly;
+   keep the editable span aligned to the start (right) edge. */
+body.rtl-mode .proposition-block .proposition-text {
+  direction: rtl;
+  text-align: right;
+}
+
 /* Text Shifting Mode Styles */
 .shift-source-text {
   opacity: 0.4;
