@@ -1040,6 +1040,69 @@ function closeSettings() {
     if (modal) modal.style.display = 'none';
 }
 
+/**
+ * First-run identity prompt. Shows a one-time welcome modal asking for the
+ * user's name when no identity is saved yet (neither the reviewer name nor the
+ * legacy comment-author key). The name becomes "Reviewing As" and seeds
+ * "Project Owner" for the current blank passage. Skippable — once dismissed or
+ * saved, a saved name (or empty-but-touched key) keeps it from showing again.
+ */
+function maybeShowWelcome() {
+    const savedName = (localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY)
+        || localStorage.getItem(DA_CONSTANTS.COMMENT_AUTHOR_KEY) || '').trim();
+    if (savedName) return; // Already have an identity — nothing to prompt.
+    if (localStorage.getItem(DA_CONSTANTS.WELCOME_SEEN_KEY) === 'true') return; // Skipped before.
+
+    const modal = document.getElementById('welcomeModal');
+    const input = document.getElementById('welcomeName');
+    const saveBtn = document.getElementById('welcomeSaveBtn');
+    const skipBtn = document.getElementById('welcomeSkipBtn');
+    if (!modal || !input || !saveBtn || !skipBtn) return;
+
+    // Mark seen on dismissal (save or skip) so the prompt never nags again.
+    const close = () => {
+        try { localStorage.setItem(DA_CONSTANTS.WELCOME_SEEN_KEY, 'true'); } catch (_) { }
+        modal.style.display = 'none';
+    };
+
+    const save = () => {
+        const name = input.value.trim();
+        if (!name) { close(); return; } // Empty save behaves like skip.
+
+        try {
+            localStorage.setItem(DA_CONSTANTS.REVIEWER_NAME_KEY, name);
+            localStorage.setItem(DA_CONSTANTS.COMMENT_AUTHOR_KEY, name);
+        } catch (_) { }
+
+        const reviewerInput = document.getElementById('reviewerName');
+        if (reviewerInput) reviewerInput.value = name;
+
+        // Seed Project Owner for the current (blank) passage if it has none yet.
+        const pageAuthorInput = document.getElementById('pageAuthor');
+        const ownerEmpty = !((pageAuthorInput?.value || '').trim()
+            || (localStorage.getItem(DA_CONSTANTS.PAGE_AUTHOR_KEY) || '').trim());
+        if (ownerEmpty) {
+            if (pageAuthorInput) pageAuthorInput.value = name;
+            try { localStorage.setItem(DA_CONSTANTS.PAGE_AUTHOR_KEY, name); } catch (_) { }
+            syncPassageAuthorDisplay();
+            updateFontByAuthor();
+        }
+
+        close();
+        showStatus(`Welcome, ${name}!`, 'success');
+    };
+
+    saveBtn.addEventListener('click', save);
+    skipBtn.addEventListener('click', close);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); save(); }
+        else if (e.key === 'Escape') { e.preventDefault(); close(); }
+    });
+
+    modal.style.display = 'flex';
+    input.focus();
+}
+
 function openReferenceGuide() {
     const modal = document.getElementById('referenceModal');
     if (modal) {
@@ -1451,7 +1514,7 @@ window.DA_UI = {
     getCommentForBracket, showCommentPopover, showCommentPopoverForText, showCommentPopoverForBracket,
     showBracketActions, showTextContextMenu, showLabelPicker, showExportMenu, showOpenMenu, saveState, restoreState,
     showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings,
-    openReferenceGuide, closeReferenceGuide,
+    openReferenceGuide, closeReferenceGuide, maybeShowWelcome,
     updateFontByAuthor, syncPassageAuthorDisplay, handleNewBracket, startNewBracket, parsePastedText,
     formatBracketType, makeCommentPopoverDraggableAndResizable
 };

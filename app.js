@@ -458,6 +458,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 600);
   }
   
+  // First-run identity prompt. Skip it when reconnecting to a cloud project
+  // from the URL — that path has its own confirm dialog and sets the owner from
+  // the project, so we don't want two dialogs stacking on load.
+  if (!projectFromUrl) DA_UI.maybeShowWelcome();
+
   // Initialize persistence and recovery services
   DA_PERSISTENCE.renderRecentList();
   DA_PERSISTENCE.initDraftRecovery();

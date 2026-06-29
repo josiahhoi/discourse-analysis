@@ -166,6 +166,25 @@
       <p class="footer-version">Version 2.9.3 · Made by Josiah Hoi and Bryce Bussert, based on the method taught by Dr. Daniel M. Gurtner.</p>
     </footer>
   </div>
+  <div id="welcomeModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content settings-modal">
+      <div class="modal-header">
+        <h2>Welcome to Discourse Analysis</h2>
+      </div>
+      <div class="modal-body">
+        <p class="welcome-blurb">What's your name? It's attached to your comments and set as the owner of new projects. You can change it anytime in Settings.</p>
+        <div class="sidebar-field">
+          <label for="welcomeName" class="field-label">Your Name</label>
+          <input type="text" id="welcomeName" placeholder="e.g. Jane Smith" autocomplete="name">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="welcomeSkipBtn" class="secondary">Skip for now</button>
+        <button id="welcomeSaveBtn" class="primary-action">Save</button>
+      </div>
+    </div>
+  </div>
+
   <div id="settingsModal" class="modal-overlay" style="display: none;">
     <div class="modal-content settings-modal">
       <div class="modal-header">

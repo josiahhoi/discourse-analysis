@@ -917,6 +917,13 @@ body {
   min-width: 0;
   overflow-x: auto;
   padding: 1.5rem 2rem; /* Add consistent padding here */
+  /* Hide the horizontal scrollbar but keep the area scrollable (wide bracket
+     diagrams stay reachable via trackpad / shift-scroll). */
+  scrollbar-width: none; /* Firefox */
+}
+
+.workspace::-webkit-scrollbar {
+  display: none; /* WebKit / Chromium (Electron) */
 }
 
 /* Comments preview (right sidebar) */
@@ -2508,6 +2515,15 @@ body.rtl-mode .proposition-block .proposition-text {
   background: var(--surface);
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
+}
+
+/* First-run welcome prompt */
+.welcome-blurb {
+  margin: 0 0 18px;
+  color: var(--text-secondary);
+  font-size: 0.95em;
+  line-height: 1.5;
 }
 
 /* Ensure settings icon aligns well in button */
