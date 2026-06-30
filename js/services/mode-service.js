@@ -67,6 +67,23 @@ function setRTL(isRTL) {
     if (window.renderAll) window.renderAll();
 }
 
+/**
+ * Restore script classes and RTL state from a saved/cloud data object.
+ * Falls back to copyright-string sniffing for files predating the explicit flags.
+ * Used by both importBracket (persistence.js) and handleCloudData (cloud-sync.js).
+ */
+function applyScriptDirection(data) {
+  const propsEl = document.getElementById('propositions');
+  const copyright = data.copyrightLabel || '';
+  const isGreek = data.isGreek ?? (copyright.includes('SBL') || copyright.includes('LXX'));
+  const isHebrew = data.isHebrew ?? copyright.includes('WLC');
+  if (propsEl) {
+    propsEl.classList.toggle('greek-text', !!isGreek);
+    propsEl.classList.toggle('hebrew-text', !!isHebrew);
+  }
+  setRTL(data.isRTL ?? isHebrew);
+}
+
 window.DA_MODES = {
-    toggleTextEditMode, toggleArrowMode, setRTL
+    toggleTextEditMode, toggleArrowMode, setRTL, applyScriptDirection
 };

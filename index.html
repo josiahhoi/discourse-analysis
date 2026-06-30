@@ -193,6 +193,42 @@
       </div>
       <div class="modal-body">
         <div class="settings-section">
+          <h3>Notation</h3>
+          <div class="sidebar-field">
+            <label for="profileSelect" class="field-label">Notation profile</label>
+            <select id="profileSelect" title="How relationships are labeled and whether dominance is marked"></select>
+          </div>
+        </div>
+
+        <details class="settings-section advanced-notation">
+          <summary class="settings-summary">Advanced Notation Settings</summary>
+          <div class="notation-toolbar">
+            <button id="domAllOnBtn" type="button" class="secondary" title="Mark dominance on every relationship">Dominance: All on</button>
+            <button id="domAllOffBtn" type="button" class="secondary" title="Turn dominance off for every relationship">All off</button>
+            <span class="notation-toolbar-spacer"></span>
+            <button id="importProfileBtn" type="button" class="secondary" title="Load a profile from a file">Import…</button>
+            <button id="exportProfileBtn" type="button" class="secondary" title="Save the current profile to a file">Export</button>
+            <input type="file" id="importProfileInput" accept=".json,application/json" hidden>
+          </div>
+          <div class="notation-grid-head">
+            <span>Relationship</span><span>Label</span><span class="col-dom" title="Mark dominance">★</span><span>Color</span>
+          </div>
+          <div id="notationGrid" class="notation-grid"></div>
+          <p class="notation-hint">Edits create your own profile. Use <strong>Export</strong> to share it; others <strong>Import</strong> to load it.</p>
+          <div class="notation-cloud">
+            <div class="notation-cloud-title">Share on the cloud</div>
+            <div class="notation-cloud-row">
+              <input type="text" id="cloudProfileName" placeholder="Profile name" title="The name students type to load this profile">
+              <button id="cloudLoadBtn" type="button" class="secondary" title="Load a profile by name">Load</button>
+            </div>
+            <div class="notation-cloud-row">
+              <input type="password" id="cloudProfilePassword" placeholder="Password (to publish/update)" title="Required only to publish or change a profile">
+              <button id="cloudPublishBtn" type="button" class="secondary" title="Publish or update this profile on the cloud">Publish</button>
+            </div>
+            <p class="notation-hint">Anyone can load by name. The password protects changes (in-app gate).</p>
+          </div>
+        </details>
+        <div class="settings-section">
           <h3>Identity</h3>
           <div class="sidebar-field">
             <label for="pageAuthor" class="field-label">Project Owner</label>
@@ -321,7 +357,9 @@
   <script src="js/services/firebase-config.js"></script>
   <script src="js/utils/constants.js"></script>
   <script src="js/services/state.js"></script>
+  <script src="js/services/profiles.js"></script>
   <script src="js/utils/ui.js"></script>
+  <script src="js/services/notation-ui.js"></script>
   <script src="js/services/persistence.js"></script>
   <script src="js/services/mode-service.js"></script>
   <script src="js/services/bible-service.js"></script>

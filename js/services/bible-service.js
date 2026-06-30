@@ -1,15 +1,5 @@
 const PASSAGE_REF_REGEX = /^(\d?\s*[a-zA-Z\s]+?)\s*(\d+)(?::(\d+)(?:-(\d+))?)?$/;
 
-// ── Logos Source ───────────────────────────────────────────────────────────────
-
-// TODO: Implement once the Logos local API endpoint format is confirmed.
-// When Logos is running it exposes a local HTTP server. Consult the Logos
-// Platform developer docs for the correct base URL, resource IDs (ESV, NASB,
-// NA28), and response shape. Then wire up `transformLogosResponse` below.
-async function fetchFromLogos(_version, _query) {
-  return null;
-}
-
 // ── SBLGNT Source (NT Greek) ──────────────────────────────────────────────────
 
 async function fetchSBLGNTPassage(query, ref) {
@@ -154,12 +144,12 @@ function parseBollsText(rawText) {
  * Fetch a Bible passage from the best available source.
  *
  * Source priority:
- *   Greek NT  — Logos (NA28) → SBLGNT
+ *   Greek NT  — SBLGNT (GitHub raw)
  *   Greek OT  — Bolls LXX
- *   ESV       — Logos → Bolls ESV
- *   NASB      — Logos → Bolls NASB
+ *   Hebrew OT — Bolls WLC
+ *   ESV/NASB  — Bolls
  *
- * @param {string} version - 'esv' | 'nasb' | 'greek'
+ * @param {string} version - 'esv' | 'nasb' | 'greek' | 'hebrew'
  * @param {string} query   - Passage reference e.g. "John 1:1-5"
  */
 async function fetchPassageData(version, query) {
@@ -174,8 +164,6 @@ async function fetchPassageData(version, query) {
   if (version === 'greek') {
     const ref = parsePassageReference(query);
     if (ref && ref.file) {
-      const logos = await fetchFromLogos('na28', query);
-      if (logos) return { ...logos, isGreek: true };
       const result = await fetchSBLGNTPassage(query, ref);
       return { ...result, isGreek: true };
     } else {
@@ -183,12 +171,6 @@ async function fetchPassageData(version, query) {
       const parsed = parseBollsText(data.text);
       return { ...parsed, passageRef: data.passageRef, copyright: data.copyright, isGreek: true };
     }
-  }
-
-  const logos = await fetchFromLogos(version, query);
-  if (logos) {
-    const parsed = parseBollsText(logos.text);
-    return { ...parsed, passageRef: logos.passageRef, copyright: logos.copyright, isGreek: false };
   }
 
   const translation = version === 'nasb' ? 'NASB' : 'ESV';

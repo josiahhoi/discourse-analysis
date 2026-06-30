@@ -27,12 +27,10 @@
   /** Human-readable, lowercase relationship name, e.g. "ground", "action-purpose". */
   function friendlyRelName(type) {
     const key = String(type).toLowerCase();
-    let name;
-    if (DA_UI.isGurtnerMode() && DA_CONSTANTS.GURTNER_RELATIONSHIP_NAMES[key]) {
-      name = DA_CONSTANTS.GURTNER_RELATIONSHIP_NAMES[key];
-    } else {
-      name = DA_CONSTANTS.RELATIONSHIP_LABELS[key] || type;
-    }
+    // Resolve through the active notation profile (handles renames + Gurtner).
+    const name = window.DA_PROFILES
+      ? DA_PROFILES.getName(key)
+      : (DA_CONSTANTS.RELATIONSHIP_LABELS[key] || type);
     // Strip a trailing " (ABBR)" suffix, then lowercase.
     return name.replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
   }

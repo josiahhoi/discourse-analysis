@@ -8,9 +8,16 @@ const DA_EXPORT = {
    * Helper to build a clean JSON representation of the current state.
    */
   buildBracketData() {
+    // Persist script/direction so Hebrew (RTL) and Greek projects survive a
+    // save/load round-trip. Without these, reloading a saved Hebrew passage came
+    // back left-to-right with the wrong font.
+    const propsEl = document.getElementById('propositions');
     return {
       version: 1,
       passageRef: DA_STATE.passageRef,
+      isRTL: !!DA_STATE.isRTL,
+      isHebrew: !!propsEl?.classList.contains('hebrew-text'),
+      isGreek: !!propsEl?.classList.contains('greek-text'),
       propositions: DA_STATE.propositions,
       verseRefs: DA_STATE.verseRefs,
       brackets: DA_STATE.brackets.map((a) => ({ ...a })),

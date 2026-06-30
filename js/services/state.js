@@ -83,6 +83,7 @@ window.DA_STATE = {
       })),
       indentation: s.indentation.slice(),
       bracketHighlights: Object.assign({}, s.bracketHighlights),
+      customLabels: s.customLabels.map(cl => ({ ...cl })),
       bracketSelectStep: s.bracketSelectStep,
       firstBracketPoint: s.firstBracketPoint
     });
@@ -110,6 +111,7 @@ window.DA_STATE = {
     s.comments = snapshot.comments;
     s.indentation = snapshot.indentation || [];
     s.bracketHighlights = snapshot.bracketHighlights || {};
+    s.customLabels = snapshot.customLabels || [];
     s.bracketSelectStep = snapshot.bracketSelectStep ?? 0;
     s.firstBracketPoint = snapshot.firstBracketPoint ?? null;
 

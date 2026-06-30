@@ -120,14 +120,17 @@ function undoLastAction() {
 }
 
 if (reviewerNameInput) {
-  reviewerNameInput.value = localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || localStorage.getItem(DA_CONSTANTS.COMMENT_AUTHOR_KEY) || '';
+  const _savedReviewerName = localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || localStorage.getItem(DA_CONSTANTS.COMMENT_AUTHOR_KEY) || '';
+  reviewerNameInput.value = _savedReviewerName;
+  DA_PROFILES.maybeApplyGurtnerProfile(_savedReviewerName);
+
   reviewerNameInput.addEventListener('input', () => {
-    try { 
-      localStorage.setItem(DA_CONSTANTS.REVIEWER_NAME_KEY, reviewerNameInput.value.trim());
-      // Also update comment author key for consistency with existing code
-      localStorage.setItem(DA_CONSTANTS.COMMENT_AUTHOR_KEY, reviewerNameInput.value.trim());
+    const name = reviewerNameInput.value.trim();
+    try {
+      localStorage.setItem(DA_CONSTANTS.REVIEWER_NAME_KEY, name);
+      localStorage.setItem(DA_CONSTANTS.COMMENT_AUTHOR_KEY, name);
     } catch (_) { }
-    // Update labels immediately if Gurtner mode is toggled
+    DA_PROFILES.maybeApplyGurtnerProfile(name);
     renderAll();
   });
 }

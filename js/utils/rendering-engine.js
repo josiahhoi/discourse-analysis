@@ -5,6 +5,12 @@ function _hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+// Relationship types that may be created by "jumping over" intermediate
+// propositions (flat multi-member units whose interior dots/nodes are hidden).
+const _JUMP_OVER_TYPES = new Set(
+  (window.DA_PROFILES && DA_PROFILES.JUMP_OVER_TYPES) || ['series', 'bilateral', 'double-ground']
+);
+
 /**
  * Create an SVG text element with the given label, rendering stars in a larger
  * font-size (20px) for better visibility of dominance marking.
@@ -16,11 +22,16 @@ function createLabelText(label, attrs = {}) {
   }
 
   if (!label || !label.includes('*')) {
+    // Inference symbol is tiny at the default 11px — use inline style (beats CSS).
+    if (label === '∴') text.setAttribute('style', 'font-size: 30px');
     text.textContent = label;
     return text;
   }
 
-  // Split on star and create tspan elements with different font sizes
+  // Star is always rendered as a tspan so its 20px size isn't overridden by the
+  // CSS .bracket-label { font-size: 11px } rule (CSS beats presentation attrs on
+  // the same element, but not on child tspans that lack the class).
+  // Mixed label (e.g. "E*"): render the star in a larger tspan so it stands out.
   const parts = label.split('*');
   for (let i = 0; i < parts.length; i++) {
     if (parts[i]) {
@@ -181,6 +192,21 @@ function renderPropositions() {
     }
   });
 
+  // Interior members of a series read as one unit with the ends, so their
+  // standalone dots are hidden. This includes lines that are endpoints of a
+  // nested sub-bracket: that sub-bracket carries its own visual connection
+  // (its vertical line + label), so the bare dot would just be noise.
+  const seriesMemberIndices = new Set();
+  DA_STATE.brackets.forEach((b, idx) => {
+    const t = b.type && b.type.toLowerCase();
+    if (b.isJumpOver && _JUMP_OVER_TYPES.has(t)) {
+      const ext = getBracketExtent(idx);
+      for (let k = ext.from + 1; k <= ext.to - 1; k++) {
+        seriesMemberIndices.add(k);
+      }
+    }
+  });
+
   // Remove excess blocks
   while (existingBlocks.length > targetCount) {
     existingBlocks.pop().remove();
@@ -198,6 +224,7 @@ function renderPropositions() {
 
     // Toggle visibility based on folding
     block.classList.toggle('folded-hidden', hiddenIndices.has(i));
+    block.classList.toggle('series-member', seriesMemberIndices.has(i));
     updatePropositionBlock(block, text, i, _verseSuffixMap[i]);
   });
 
@@ -891,6 +918,26 @@ function renderBrackets() {
   const _starDX = _rtl ? 12 : -12;
   const _starAnchor = _rtl ? 'start' : 'end';
 
+  // Connection-nodes to suppress: a bracket "jumped over" by a series or
+  // bilateral is an implicit member, so its own parent-attach anchor would just
+  // dangle inside the span. We hide it. A bracket the jump-over references
+  // directly (its from/to) keeps its node — the arm terminates there.
+  const _hiddenNodeIdx = new Set();
+  DA_STATE.brackets.forEach((s, sIdx) => {
+    const _t = s.type && s.type.toLowerCase();
+    if (!s.isJumpOver || !_JUMP_OVER_TYPES.has(_t)) return;
+    const sExt = getBracketExtent(sIdx);
+    const refs = new Set([s.from, s.to]);
+    DA_STATE.brackets.forEach((b, bIdx) => {
+      if (bIdx === sIdx || refs.has(`b${bIdx}`)) return;
+      const bExt = getBracketExtent(bIdx);
+      if (bExt.from >= sExt.from && bExt.to <= sExt.to &&
+          !(bExt.from === sExt.from && bExt.to === sExt.to)) {
+        _hiddenNodeIdx.add(bIdx);
+      }
+    });
+  });
+
   DA_STATE.brackets.forEach((bracket, i) => {
     // 1. Hide brackets that are inside a collapsed parent
     const isInsideCollapsed = DA_STATE.brackets.some((otherB, otherIdx) => {
@@ -953,7 +1000,7 @@ function renderBrackets() {
     const isBracketSelected = DA_STATE.firstBracketPoint === `b${i}`;
     const isActiveTarget = DA_STATE.activeCommentTarget && DA_STATE.activeCommentTarget.type === 'bracket' && DA_STATE.activeCommentTarget.bracketIdx === i;
     const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    const color = DA_CONSTANTS.RELATIONSHIP_COLORS[bracket.type] || DA_CONSTANTS.RELATIONSHIP_COLORS.unspecified;
+    const color = (window.DA_PROFILES ? DA_PROFILES.getColor(bracket.type) : DA_CONSTANTS.RELATIONSHIP_COLORS[bracket.type]) || DA_CONSTANTS.RELATIONSHIP_COLORS.unspecified;
     group.setAttribute('style', `--bracket-color: ${color};`);
     group.setAttribute('class', `bracket-group ${bracket.type} ${bracket.isCollapsed ? 'is-collapsed' : ''} ${isCollapsedCoord ? 'is-collapsed-coord' : ''} ${isBracketSelected ? 'is-selected' : ''} ${isActiveTarget ? 'is-active-target' : ''}`);
     group.dataset.index = i;
@@ -1051,7 +1098,7 @@ function renderBrackets() {
       cx: x + _nodeDX,
       cy: nodeY,
       r: 5,
-      class: `${(DA_STATE.bracketSelectStep === 1 && DA_STATE.firstBracketPoint === `b${i}`) ? 'connection-node active-node' : 'connection-node'} ${bracket.isCollapsed ? 'collapsed' : ''}`,
+      class: `${(DA_STATE.bracketSelectStep === 1 && DA_STATE.firstBracketPoint === `b${i}`) ? 'connection-node active-node' : 'connection-node'} ${bracket.isCollapsed ? 'collapsed' : ''} ${_hiddenNodeIdx.has(i) ? 'series-absorbed' : ''}`,
       dataset: { bracketIdx: i }
     }));
 
@@ -1074,18 +1121,26 @@ function renderBrackets() {
         dataset: { index: i }
       }));
     } else {
+      // Standalone stars ('*' only) are centered on the bracket endpoint via
+      // dominant-baseline:middle. Mixed labels ('E*') use baseline positioning
+      // with a -5 offset so the text sits just above the endpoint.
+      const topStarOnly = labels.top === '*';
+      const bottomStarOnly = labels.bottom === '*';
+
       group.appendChild(createLabelText(labels.top, {
         x: x + _labelDX,
-        y: topY - 5,
+        y: topStarOnly ? topY : topY - 5,
         'text-anchor': _labelAnchor,
+        ...(topStarOnly ? { 'dominant-baseline': 'middle' } : {}),
         class: 'bracket-label',
         dataset: { index: i, pos: 'top' }
       }));
 
       group.appendChild(createLabelText(labels.bottom, {
         x: x + _labelDX,
-        y: bottomY - 5,
+        y: bottomStarOnly ? bottomY : bottomY - 5,
         'text-anchor': _labelAnchor,
+        ...(bottomStarOnly ? { 'dominant-baseline': 'middle' } : {}),
         class: 'bracket-label',
         dataset: { index: i, pos: 'bottom' }
       }));
@@ -1214,80 +1269,71 @@ function getConnectionPoints(fromId, toId, dotPositions, excludeBracketIdx = -1,
   };
 }
 
+// Sentinel that stands in for the literal "//" comparison glyph while we split
+// the label on "/" — so the double-slash is never mistaken for two separators.
+const _GLYPH_DBLSLASH = '';
+
+function _twoArmSummary(typeKey, type) {
+  const canonical = window.DA_PROFILES ? DA_PROFILES.getName(typeKey)
+    : (DA_CONSTANTS.RELATIONSHIP_LABELS[typeKey] || type);
+  return canonical.includes('-')
+    ? canonical.split('-').map((s) => s.trim().substring(0, 3)).join('/')
+    : (canonical.length > 6 ? canonical.substring(0, 4) : canonical);
+}
+
 function getBracketLabels(type, labelsSwapped = false, dominanceFlipped = false) {
   const typeKey = type.toLowerCase();
-  let labelStr = DA_CONSTANTS.BRACKET_LABELS[typeKey];
-  
-  // Check for custom label in project state or saved bank
-  if (!labelStr && typeKey.startsWith('cl_')) {
-    const custom = DA_STATE.customLabels.find(cl => cl.id === typeKey) || 
-                   DA_STATE.savedCustomLabels.find(cl => cl.id === typeKey);
-    if (custom) labelStr = custom.label;
-  }
-  
-  if (!labelStr) labelStr = type.slice(0, 2);
-  
-  if (DA_UI.isGurtnerMode() && DA_CONSTANTS.GURTNER_LABELS[typeKey]) labelStr = DA_CONSTANTS.GURTNER_LABELS[typeKey];
-  
-  if (DA_CONSTANTS.SINGLE_LABEL_TYPES.has(typeKey)) {
-    return { single: labelStr, summary: labelStr };
+  // The active notation profile resolves the label (with any rename/alias/custom
+  // cl_ override) and whether dominance is marked. Falls back to defaults when
+  // the profile module isn't present (e.g. isolated tests).
+  const labelStr = window.DA_PROFILES
+    ? DA_PROFILES.getAbbr(typeKey)
+    : (DA_CONSTANTS.BRACKET_LABELS[typeKey] || type.slice(0, 2));
+  const showDominance = window.DA_PROFILES ? DA_PROFILES.isDominanceShown(typeKey) : true;
+
+  // Structure is read straight from the string — no per-type tables, no auto
+  // stars. "/" splits the two arms, "*" marks dominance, and "//" is a literal
+  // comparison glyph (protected from the split, then restored).
+  const restore = (s) => s.split(_GLYPH_DBLSLASH).join('//').trim();
+  const parts = labelStr.replace(/\/\//g, _GLYPH_DBLSLASH).split('/').map(restore);
+
+  // Single arm (no separator): one centered label, no dominance star.
+  if (parts.length === 1) {
+    const single = parts[0];
+    return { single, summary: single };
   }
 
-  let top = '', bottom = '';
-  
-  // Robust parsing for labels like "*/Id/Exp" or "C/E/*"
-  const parts = labelStr.split('/');
-  if (parts.length === 3) {
-    // Format: Ornament/TopLabel/BottomLabel
-    if (parts[0] === '*') {
-      top = parts[1] + '*';
-      bottom = parts[2];
-    } else if (parts[2] === '*') {
-      top = parts[0];
-      bottom = parts[1] + '*';
-    } else {
-      top = parts[0]; bottom = parts[1]; // fallback
-    }
-  } else if (parts.length === 2) {
-    top = parts[0] || '';
-    bottom = parts[1] || '';
-    // If it's a 2-part label but no side has a star yet, add one to the bottom
-    if (!top.includes('*') && !bottom.includes('*')) {
-      bottom += '*';
-    }
+  let top, bottom;
+  if (parts.length === 2) {
+    top = parts[0];
+    bottom = parts[1];
   } else {
-    top = labelStr;
-    bottom = '*'; // Default star on bottom if no slash
+    // 3-part ornament form "*/Top/Bot" or "Top/Bot/*" (legacy/built-in labels).
+    if (parts[0] === '*') { top = parts[1] + '*'; bottom = parts[2]; }
+    else if (parts[2] === '*') { top = parts[0]; bottom = parts[1] + '*'; }
+    else { top = parts[0]; bottom = parts[1]; }
   }
 
-  if (labelsSwapped) {
-    [top, bottom] = [bottom, top];
+  if (labelsSwapped) { const t = top; top = bottom; bottom = t; }
+
+  if (dominanceFlipped && showDominance) {
+    const st = top.includes('*');
+    const sb = bottom.includes('*');
+    if (st && !sb) { top = top.replace('*', ''); bottom += '*'; }
+    else if (sb && !st) { bottom = bottom.replace('*', ''); top += '*'; }
+    else if (!st && !sb) { top += '*'; }
   }
 
-  if (dominanceFlipped) {
-    // Correctly move the star from one side to the other
-    const hasStarTop = top.includes('*');
-    const hasStarBottom = bottom.includes('*');
-
-    if (hasStarTop && !hasStarBottom) {
-      top = top.replace('*', '');
-      bottom += '*';
-    } else if (hasStarBottom && !hasStarTop) {
-      bottom = bottom.replace('*', '');
-      top += '*';
-    } else if (!hasStarTop && !hasStarBottom) {
-      top += '*';
-    }
+  // Dominance off for this relationship: drop the star from both arms. Every
+  // downstream consumer (the star renderer, getConnectionPoints, the block
+  // diagram) keys off whether the label contains "*", so removing it here also
+  // routes parent→child joins to the vertical middle — the "no dominance" look.
+  if (!showDominance) {
+    top = top.replace(/\*/g, '');
+    bottom = bottom.replace(/\*/g, '');
   }
 
-  // Create a clean summary using the canonical order (ignoring swaps for the name)
-  const canonical = DA_CONSTANTS.RELATIONSHIP_LABELS[typeKey] || type;
-  // If it's a known short-code pair, use it, otherwise use a shortened version of the label name
-  const summary = canonical.includes('-') 
-    ? canonical.split('-').map(s => s.trim().substring(0,3)).join('/') 
-    : (canonical.length > 6 ? canonical.substring(0, 4) : canonical);
-
-  return { top: top.trim(), bottom: bottom.trim(), summary };
+  return { top: top.trim(), bottom: bottom.trim(), summary: _twoArmSummary(typeKey, type) };
 }
 
 function renderWordArrows() {

@@ -30,11 +30,6 @@ function updateCloudUI(isActive, projectId = '') {
     }
 }
 
-function isGurtnerMode() {
-  const reviewerNameInput = document.getElementById('reviewerName');
-  const name = (reviewerNameInput?.value || '').trim().toLowerCase();
-  return name.includes('gurtner');
-}
 
 function escapeHtml(str) {
     if (!str) return '';
@@ -369,7 +364,9 @@ function showBracketActions(bracketIdx, centerY, centerX) {
   popover.id = 'bracketActions';
   popover.className = 'context-menu';
   const bracket = DA_STATE.brackets[bracketIdx];
-  const hasTwoLabels = !DA_CONSTANTS.SINGLE_LABEL_TYPES.has(bracket.type);
+  const hasTwoLabels = window.DA_PROFILES
+    ? DA_PROFILES.isTwoArm(bracket.type)
+    : !DA_CONSTANTS.SINGLE_LABEL_TYPES.has(bracket.type);
   const hasComment = !!getCommentForBracket(bracketIdx);
 
   const pastels = [
@@ -529,9 +526,13 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
   picker.className = 'label-picker';
   
   const bracket = DA_STATE.brackets[bracketIdx];
-  const hasTwoLabels = !DA_CONSTANTS.SINGLE_LABEL_TYPES.has(bracket.type);
+  const hasTwoLabels = window.DA_PROFILES
+    ? DA_PROFILES.isTwoArm(bracket.type)
+    : !DA_CONSTANTS.SINGLE_LABEL_TYPES.has(bracket.type);
+  // Switch Stars is meaningless when the active profile doesn't mark dominance
+  // for this relationship, so hide it in that case.
+  const showStars = !window.DA_PROFILES || DA_PROFILES.isDominanceShown(bracket.type);
   const RELATIONSHIP_LABELS = DA_CONSTANTS.RELATIONSHIP_LABELS;
-  const GURTNER_RELATIONSHIP_NAMES = DA_CONSTANTS.GURTNER_RELATIONSHIP_NAMES;
 
   picker.innerHTML = `
     <div class="picker-title">
@@ -539,7 +540,7 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
       <div class="picker-header-tools">
         <button class="tool-btn" data-action="add-custom" title="Add Custom Label">Custom Label</button>
         ${hasTwoLabels ? '<button class="tool-btn" data-action="swap" title="Swap Labels">⇅ Swap</button>' : ''}
-        ${hasTwoLabels ? '<button class="tool-btn" data-action="flip-dominance" title="Switch Stars">★ Switch Stars</button>' : ''}
+        ${hasTwoLabels && showStars ? '<button class="tool-btn" data-action="flip-dominance" title="Switch Stars">★ Switch Stars</button>' : ''}
       </div>
     </div>
     <div class="relationship-picker-content"></div>
@@ -558,6 +559,17 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
 
 
   const RELATIONSHIP_GROUPS_LIST = [...DA_CONSTANTS.RELATIONSHIP_GROUPS_HIERARCHY];
+
+  // The picker only offers the active profile's relationships (plus the bracket's
+  // current type, so a foreign type loaded from another system stays selectable).
+  // Custom cl_ labels are always allowed. A foreign type whose display already
+  // aliases to a visible type (e.g. general-specific → idea-explanation) is NOT
+  // re-added — that would render a second, identically-labeled button.
+  const visibleTypes = new Set(window.DA_PROFILES ? DA_PROFILES.getVisibleTypes() : []);
+  const effectiveBracketType = window.DA_PROFILES
+    ? DA_PROFILES.effectiveType(bracket.type) : bracket.type;
+  if (!visibleTypes.has(effectiveBracketType)) visibleTypes.add(bracket.type);
+  const isVisibleType = (t) => !window.DA_PROFILES || t.startsWith('cl_') || visibleTypes.has(t);
 
   // Group 1: My Presets (Persistent)
   if (DA_STATE.savedCustomLabels && DA_STATE.savedCustomLabels.length > 0) {
@@ -579,31 +591,29 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
   }
 
   const createButton = (typeKey) => {
-    let labelText = RELATIONSHIP_LABELS[typeKey];
     const isCustom = typeKey.startsWith('cl_');
-    
-    if (!labelText && isCustom) {
-      const custom = (DA_STATE.customLabels || []).find(cl => cl.id === typeKey) || 
+    // Resolve through the active profile (handles renames + Gurtner). getName
+    // returns the bare typeKey when it has no entry, which we treat as "unknown".
+    let labelText = window.DA_PROFILES ? DA_PROFILES.getName(typeKey) : RELATIONSHIP_LABELS[typeKey];
+    if ((!labelText || labelText === typeKey) && isCustom) {
+      const custom = (DA_STATE.customLabels || []).find(cl => cl.id === typeKey) ||
                      (DA_STATE.savedCustomLabels || []).find(cl => cl.id === typeKey);
       if (custom) labelText = `${custom.name} (${custom.label})`;
     }
 
-    if (!labelText) return null;
+    if (!labelText || labelText === typeKey) return null;
 
     const wrapper = document.createElement('div');
     wrapper.className = 'picker-btn-wrapper';
 
     const btn = document.createElement('button');
-    if (isGurtnerMode() && GURTNER_RELATIONSHIP_NAMES[typeKey]) {
-      labelText = GURTNER_RELATIONSHIP_NAMES[typeKey];
-    }
     btn.textContent = labelText;
     btn.title = labelText;
     btn.className = typeKey;
     if (isCustom) btn.classList.add('custom-label-btn');
 
     // Apply relationship color
-    const color = DA_CONSTANTS.RELATIONSHIP_COLORS[typeKey] || DA_CONSTANTS.RELATIONSHIP_COLORS.unspecified;
+    const color = (window.DA_PROFILES ? DA_PROFILES.getColor(typeKey) : DA_CONSTANTS.RELATIONSHIP_COLORS[typeKey]) || DA_CONSTANTS.RELATIONSHIP_COLORS.unspecified;
     btn.style.setProperty('--bracket-color', color);
     btn.style.borderColor = color;
     btn.style.color = color;
@@ -669,18 +679,23 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
     if (group.types) {
       const btnContainer = document.createElement('div');
       btnContainer.className = 'picker-btn-container';
-      group.types.forEach(typeKey => {
+      group.types.filter(isVisibleType).forEach(typeKey => {
         const btn = createButton(typeKey);
         if (btn) btnContainer.appendChild(btn);
       });
+      // Skip an empty group entirely (none of its types are in this profile).
+      if (!btnContainer.children.length) return null;
       groupDiv.appendChild(btnContainer);
     }
 
     if (group.subgroups) {
       group.subgroups.forEach(sub => {
+        const visible = sub.types.filter(isVisibleType);
+        if (!visible.length) return;
+
         const subDiv = document.createElement('div');
         subDiv.className = 'picker-subgroup';
-        
+
         const subHeader = document.createElement('h5');
         subHeader.className = 'picker-subgroup-header';
         subHeader.textContent = sub.name;
@@ -688,7 +703,7 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
 
         const btnContainer = document.createElement('div');
         btnContainer.className = 'picker-btn-container';
-        sub.types.forEach(typeKey => {
+        visible.forEach(typeKey => {
           const btn = createButton(typeKey);
           if (btn) btnContainer.appendChild(btn);
         });
@@ -700,9 +715,30 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
     return groupDiv;
   };
 
-  RELATIONSHIP_GROUPS_LIST.forEach(group => {
-    content.appendChild(createGroup(group));
-  });
+  if (bracket.isJumpOver) {
+    // Offer only the jump-over-capable types the active profile actually has
+    // (always at least Series), since the bracket spans multiple members.
+    const jumpTypes = (window.DA_PROFILES ? DA_PROFILES.JUMP_OVER_TYPES : ['series', 'bilateral'])
+      .filter(isVisibleType);
+    const names = jumpTypes.map(t => (window.DA_PROFILES ? DA_PROFILES.getName(t)
+      : DA_CONSTANTS.RELATIONSHIP_LABELS[t] || t).replace(/\s*\([^)]*\)\s*$/, '').trim());
+    const note = document.createElement('p');
+    note.className = 'picker-jump-note';
+    note.textContent = `Jump-over bracket — choose ${names.join(' or ')}.`;
+    content.appendChild(note);
+    const container = document.createElement('div');
+    container.className = 'picker-btn-container';
+    jumpTypes.forEach(type => {
+      const btn = createButton(type);
+      if (btn) container.appendChild(btn);
+    });
+    content.appendChild(container);
+  } else {
+    RELATIONSHIP_GROUPS_LIST.forEach(group => {
+      const el = createGroup(group);
+      if (el) content.appendChild(el);
+    });
+  }
 
   // Setup header tools
   picker.querySelector('[data-action="add-custom"]').addEventListener('click', (e) => {
@@ -718,7 +754,9 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
       if (window.renderAll) window.renderAll();
       picker.remove();
     });
-    picker.querySelector('[data-action="flip-dominance"]').addEventListener('click', (e) => {
+    // The flip-dominance button is only rendered when dominance is shown.
+    const flipBtn = picker.querySelector('[data-action="flip-dominance"]');
+    if (flipBtn) flipBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       DA_STATE.pushUndo('switch stars');
       bracket.dominanceFlipped = !bracket.dominanceFlipped;
@@ -1032,6 +1070,7 @@ function openSettings() {
     const modal = document.getElementById('settingsModal');
     if (modal) {
         modal.style.display = 'flex';
+        if (window.DA_NOTATION) DA_NOTATION.renderEditor();
     }
 }
 
@@ -1088,6 +1127,7 @@ function maybeShowWelcome() {
             updateFontByAuthor();
         }
 
+        if (window.DA_PROFILES) DA_PROFILES.maybeApplyGurtnerProfile(name);
         close();
         showStatus(`Welcome, ${name}!`, 'success');
     };
@@ -1510,7 +1550,7 @@ function showCustomLabelDialog(bracketIdx, centerY, centerX, mainPicker) {
 }
 
 window.DA_UI = {
-    showStatus, updateCloudUI, isGurtnerMode, escapeHtml, renderCommentText, clampToViewport, makePopupDraggable, makeFixedDraggable, setupClickOutside, clearPropositionHighlights,
+    showStatus, updateCloudUI, escapeHtml, renderCommentText, clampToViewport, makePopupDraggable, makeFixedDraggable, setupClickOutside, clearPropositionHighlights,
     getCommentForBracket, showCommentPopover, showCommentPopoverForText, showCommentPopoverForBracket,
     showBracketActions, showTextContextMenu, showLabelPicker, showExportMenu, showOpenMenu, saveState, restoreState,
     showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings,

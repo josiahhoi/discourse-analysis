@@ -92,6 +92,7 @@ const BRACKET_LABELS = {
   ground: '*/G',
   inference: '∴',
   bilateral: 'Bl',
+  'double-ground': 'DG',
   'cause-effect': 'C/E*',
   'action-result': 'Ac/Res*',
   'action-purpose': 'Ac/Pur*',
@@ -99,34 +100,7 @@ const BRACKET_LABELS = {
   temporal: 'T/*',
   locative: 'L/*',
   'action-manner': 'Ac/Mn*',
-  comparison: '//',
-  'negative-positive': '-/+',
-  'idea-explanation': 'Id/Exp*',
-  'question-answer': 'Q/A*',
-  'general-specific': 'Gen/Sp*',
-  'fact-interpretation': 'Ft/In*',
-  'anticipation-fulfillment': 'An/Fl*',
-  concessive: 'Csv/*',
-  'situation-response': 'Sit/R*',
-  'unspecified': '?'
-};
-
-const GURTNER_LABELS = {
-  series: 'S',
-  progression: 'P/*',
-  alternative: 'A',
-  'both-and': 'B-A',
-  ground: '*/G',
-  inference: '∴',
-  bilateral: 'Bl',
-  'cause-effect': 'C/E/*',
-  'action-result': 'C/E/*',
-  'action-purpose': 'M/Ed/*',
-  conditional: 'C?/E/*',
-  temporal: 'T/*',
-  locative: 'L/*',
-  'action-manner': 'W/Ed/*',
-  comparison: '//',
+  comparison: 'Cf/Cf',
   'negative-positive': '-/+',
   'idea-explanation': 'Id/Exp*',
   'question-answer': 'Q/A*',
@@ -146,6 +120,7 @@ const RELATIONSHIP_LABELS = {
   ground: 'Ground (G)',
   inference: 'Inference (∴)',
   bilateral: 'Bilateral (Bl)',
+  'double-ground': 'Double Ground (DG)',
   'cause-effect': 'Cause-Effect (C/E)',
   'action-result': 'Action-Result (Ac/Res)',
   'action-purpose': 'Action-Purpose (Ac/Pur)',
@@ -179,7 +154,7 @@ const RELATIONSHIP_GROUPS_HIERARCHY = [
       },
       {
         name: 'Support by Distinct Statement',
-        types: ['ground', 'inference', 'bilateral', 'action-result', 'action-purpose', 'conditional', 'temporal', 'locative']
+        types: ['ground', 'double-ground', 'inference', 'bilateral', 'action-result', 'action-purpose', 'conditional', 'temporal', 'locative']
       },
       {
         name: 'Support by Contrary Statement',
@@ -189,30 +164,7 @@ const RELATIONSHIP_GROUPS_HIERARCHY = [
   }
 ];
 
-const SINGLE_LABEL_TYPES = new Set(['series', 'alternative', 'bilateral', 'both-and', 'unspecified', 'comparison']);
-
-const GURTNER_RELATIONSHIP_NAMES = {
-  series: 'Series (S)',
-  progression: 'Progression (P)',
-  alternative: 'Alternative (A)',
-  ground: 'Ground (G)',
-  inference: 'Inference (∴)',
-  bilateral: 'Bilateral (Bl)',
-  'cause-effect': 'Cause-Effect (C/E)',
-  'action-result': 'Cause-Effect (C/E)',
-  'action-purpose': 'Means-End (M/Ed)',
-  conditional: 'Conditional (C?/E)',
-  temporal: 'Temporal (T)',
-  locative: 'Locative (L)',
-  'action-manner': 'Way-End (W/Ed)',
-  comparison: 'Comparison (/)',
-  'negative-positive': 'Negative-Positive (-/+)',
-  'idea-explanation': 'Idea-Explanation (Id/Exp)',
-  'question-answer': 'Question-Answer (Q/A)',
-  concessive: 'Concessive (Csv)',
-  'situation-response': 'Situation-Response (Sit/R)',
-  'unspecified': '?'
-};
+const SINGLE_LABEL_TYPES = new Set(['series', 'alternative', 'bilateral', 'both-and', 'unspecified']);
 
 const BRACKET_GEO = {
   GAP: 15,
@@ -236,6 +188,7 @@ const RELATIONSHIP_COLORS = {
   ground: '#10b981',             // Emerald
   inference: '#06b6d4',          // Cyan
   bilateral: '#3b82f6',          // Blue
+  'double-ground': '#1d4ed8',    // Deep Blue
   'cause-effect': '#6366f1',     // Indigo
   'action-result': '#8b5cf6',    // Violet
   'action-purpose': '#a855f7',   // Purple
@@ -278,13 +231,14 @@ const RELATIONSHIP_DEFINITIONS = {
   'anticipation-fulfillment': { definition: "A main clause that fulfills the anticipation or promise of a prior clause (subset of progression)", keywords: "" },
   'both-and': { definition: "Each proposition makes an independent contribution to the whole, but the contributions are inseparable (subset of series)", keywords: "" },
   bilateral: { definition: "A bilateral relationship supporting the preceding proposition and supported by the following proposition.", keywords: "for... therefore" },
+  'double-ground': { definition: "A proposition supported on both sides by grounds — like a bilateral, it can be formed by jumping over the middle member.", keywords: "for... for" },
   'idea-explanation': { definition: "A relationship where the second proposition explains the idea of the first.", keywords: "that is" }
 };
 
 window.DA_CONSTANTS = {
     ESV_API, SBLGNT_BASE, SBLGNT_BOOKS, FULL_BOOK_NAMES, BOLLS_BOOKS,
-    BRACKET_LABELS, GURTNER_LABELS, RELATIONSHIP_LABELS, RELATIONSHIP_GROUPS_HIERARCHY,
-    SINGLE_LABEL_TYPES, GURTNER_RELATIONSHIP_NAMES, BRACKET_GEO,
+    BRACKET_LABELS, RELATIONSHIP_LABELS, RELATIONSHIP_GROUPS_HIERARCHY,
+    SINGLE_LABEL_TYPES, BRACKET_GEO,
     RELATIONSHIP_COLORS, RELATIONSHIP_DEFINITIONS,
     THEME_KEY, COMMENT_AUTHOR_KEY, REVIEWER_NAME_KEY, PAGE_AUTHOR_KEY, WELCOME_SEEN_KEY
 };

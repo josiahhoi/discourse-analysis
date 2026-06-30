@@ -199,10 +199,7 @@ function importBracket(data) {
   const copyrightLabel = document.getElementById('copyrightLabel');
   if (copyrightLabel && data.copyrightLabel) copyrightLabel.textContent = data.copyrightLabel;
   
-  const propositionsContainer = document.getElementById('propositionsContainer');
-  if (propositionsContainer) {
-    propositionsContainer.classList.toggle('greek-text', !!data.copyrightLabel?.includes('SBL'));
-  }
+  if (window.DA_MODES) DA_MODES.applyScriptDirection(data);
 
   DA_UI.clearPropositionHighlights();
   if (window.renderAll) window.renderAll();

@@ -6,6 +6,7 @@
     "scripts": {
       "start": "electron .",
       "dev": "electron .",
+      "test": "node --test",
       "build": "electron-builder --mac --arm64 && electron-builder --win --x64",
       "build:mac": "electron-builder --mac --arm64",
       "build:win": "electron-builder --win --x64",

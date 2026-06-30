@@ -509,10 +509,20 @@ function handleDotClick(pointId, x, y) {
     const firstEnd = Math.min(ext1.to, ext2.to);
     const secondStart = Math.max(ext1.from, ext2.from);
 
+    // A forward gap between the two sides means the user "jumped over" the lines
+    // in between. This is allowed only as a SERIES — the line(s) in the gap become
+    // implicit members of one flat series (their dots are hidden at render time).
+    // The cross-check below still rejects anything that would truly cross out of
+    // the new range. Overlap (firstEnd + 1 > secondStart) keeps the old error.
+    let isSeriesJumpOver = false;
     if (firstEnd + 1 !== secondStart) {
-        DA_UI.showStatus('Brackets must connect adjacent items. No "jumping over" allowed.', 'error');
-        resetBracketSelection();
-        return;
+        if (firstEnd + 1 < secondStart) {
+            isSeriesJumpOver = true;
+        } else {
+            DA_UI.showStatus('Brackets must connect adjacent items. No "jumping over" allowed.', 'error');
+            resetBracketSelection();
+            return;
+        }
     }
 
     // If both resolve to the same target, block creation
@@ -578,9 +588,10 @@ function handleDotClick(pointId, x, y) {
       id: Date.now().toString(),
       from: finalP1,
       to: finalP2,
-      type: DA_STATE.currentRelationshipType || 'unspecified',
+      type: isSeriesJumpOver ? 'series' : (DA_STATE.currentRelationshipType || 'unspecified'),
       labelsSwapped: false,
-      dominanceFlipped: false
+      dominanceFlipped: false,
+      ...(isSeriesJumpOver && { isJumpOver: true })
     };
 
     DA_STATE.brackets.push(newBracket);
@@ -600,9 +611,11 @@ function handleDotClick(pointId, x, y) {
         if (toRange.from >= newRange.from && toRange.to <= newRange.to) oldB.to = newBracketId;
     });
 
-    DA_UI.showStatus('Bracket created', 'success');
     resetBracketSelection();
 
+    // Both paths open the label picker (jump-over brackets get a restricted one,
+    // keyed off bracket.isJumpOver inside showLabelPicker); only the toast differs.
+    DA_UI.showStatus(isSeriesJumpOver ? 'Jump-over bracket created' : 'Bracket created', 'success');
     if (x !== undefined && y !== undefined && window.showLabelPicker) {
       window.showLabelPicker(DA_STATE.brackets.length - 1, y, x);
     }
