@@ -55,7 +55,7 @@ test('effectiveType aliases General-Specific to Idea-Explanation in BibleArc', (
 test('isTwoArm is derived from the resolved label string', () => {
   const sb = setup();
   sb.DA_PROFILES.setActiveById('josiah');
-  assert.equal(sb.DA_PROFILES.isTwoArm('ground'), true);   // "G / *"
+  assert.equal(sb.DA_PROFILES.isTwoArm('ground'), true);   // "* / G"
   assert.equal(sb.DA_PROFILES.isTwoArm('series'), false);  // "S"
   sb.DA_PROFILES.setActiveById('gurtner');
   assert.equal(sb.DA_PROFILES.isTwoArm('comparison'), false); // "//" glyph, single arm
@@ -85,7 +85,7 @@ test('setActive persists to localStorage and reloads', () => {
 test('getAbbr resolves override > builtin > custom > fallback', () => {
   const sb = setup();
   // builtin default (Josiah)
-  assert.equal(sb.DA_PROFILES.getAbbr('ground'), 'G / *');
+  assert.equal(sb.DA_PROFILES.getAbbr('ground'), '* / G');
   // override wins
   sb.DA_PROFILES.setActive({ name: 'O', dominance: { default: true, perType: {} }, labels: { ground: { abbr: 'Gr' } } });
   assert.equal(sb.DA_PROFILES.getAbbr('ground'), 'Gr');
