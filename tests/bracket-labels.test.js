@@ -15,7 +15,9 @@ function setup() {
   load(sb, 'js/utils/constants.js');
   load(sb, 'js/services/state.js');
   load(sb, 'js/services/profiles.js');
-  load(sb, 'js/utils/rendering-engine.js');
+  // getBracketLabels now lives in its own focused module (split out of
+  // rendering-engine.js); load just that — it needs no other render code.
+  load(sb, 'js/utils/render-labels.js');
   return sb;
 }
 
