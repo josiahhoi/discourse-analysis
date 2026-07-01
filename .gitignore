@@ -13,3 +13,14 @@ node_modules/
 dist/
 .env
 .env.local
+
+# Local scratch / debug helpers (not part of the app)
+scratch/
+
+# Claude Code / agent tooling config (local to each machine)
+.claude/
+AGENTS.md
+
+# Working inputs & user data (not source)
+Book1.xlsx
+Brackets/
