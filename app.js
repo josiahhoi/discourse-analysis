@@ -236,7 +236,10 @@ async function fetchPassage() {
     clearAllFormatting();
     DA_STATE.undoStack = [];
     renderAll();
-    DA_UI.showStatus('Passage loaded.', 'success');
+    // Only ESV specifically has a primary/fallback split (api.esv.org → Bolls);
+    // other versions are always Bolls, so don't call that a "fallback".
+    const usedFallback = version === 'esv' && result.source === 'bolls';
+    DA_UI.showStatus(usedFallback ? 'Passage loaded (via Bolls — ESV API unavailable).' : 'Passage loaded.', 'success');
   } catch (err) {
     DA_UI.showStatus(err.message || 'Failed to fetch passage', 'error');
   } finally {

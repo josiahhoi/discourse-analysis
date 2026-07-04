@@ -90,3 +90,69 @@ test('parseBollsText: empty input yields empty arrays', () => {
   assert.deepEqual(out.propositions, []);
   assert.deepEqual(out.verseRefs, []);
 });
+
+// ── fetchFromESVApi (desktop-only, via the electronAPI bridge) ─────────────
+// No network here — electronAPI.fetchESV is the IPC bridge to main.js, mocked
+// directly, matching how the app calls it from the renderer.
+
+test('fetchFromESVApi throws when electronAPI is absent (web/browser build)', async () => {
+  const sb = setup(); // no window.electronAPI in a plain sandbox
+  await assert.rejects(() => sb.fetchFromESVApi('John 1:1'), /not available/i);
+});
+
+test('fetchFromESVApi throws when no key is configured', async () => {
+  const sb = setup();
+  sb.window.electronAPI = { fetchESV: async () => ({ ok: false, noKey: true }) };
+  await assert.rejects(() => sb.fetchFromESVApi('John 1:1'), /no ESV API key/i);
+});
+
+test('fetchFromESVApi throws on an API error response', async () => {
+  const sb = setup();
+  sb.window.electronAPI = { fetchESV: async () => ({ ok: false, status: 401 }) };
+  await assert.rejects(() => sb.fetchFromESVApi('John 1:1'), /401/);
+});
+
+test('fetchFromESVApi parses a successful response like Bolls text', async () => {
+  const sb = setup();
+  sb.window.electronAPI = {
+    fetchESV: async () => ({ ok: true, text: '[1] In the beginning was the Word.', canonical: 'John 1:1' })
+  };
+  const out = await sb.fetchFromESVApi('John 1:1');
+  assert.deepEqual(out.propositions, ['In the beginning was the Word.']);
+  assert.deepEqual(out.verseRefs, ['1']);
+  assert.equal(out.passageRef, 'John 1:1');
+  assert.equal(out.copyright, '(ESV)');
+});
+
+// ── fetchPassageData: ESV primary → Bolls fallback ───────────────────────────
+// Stub fetchFromBolls (a sibling top-level function in the same sandbox) so no
+// real network call happens; only the branching logic is under test.
+
+test('fetchPassageData falls back to Bolls when the ESV API is unavailable, tagging the source', async () => {
+  const sb = setup(); // no electronAPI -> fetchFromESVApi always throws
+  sb.fetchFromBolls = async () => ({ text: '[1] hello', passageRef: 'John 1:1', copyright: '(ESV)' });
+  const result = await sb.fetchPassageData('esv', 'John 1:1');
+  assert.equal(result.source, 'bolls');
+  assert.deepEqual(result.propositions, ['hello']);
+});
+
+test('fetchPassageData uses the ESV API result when available, tagging the source', async () => {
+  const sb = setup();
+  sb.window.electronAPI = {
+    fetchESV: async () => ({ ok: true, text: '[1] hello from ESV API', canonical: 'John 1:1' })
+  };
+  sb.fetchFromBolls = async () => { throw new Error('should not be called'); };
+  const result = await sb.fetchPassageData('esv', 'John 1:1');
+  assert.equal(result.source, 'esv-api');
+  assert.deepEqual(result.propositions, ['hello from ESV API']);
+});
+
+test('fetchPassageData never attempts the ESV API for NASB (unsupported translation)', async () => {
+  const sb = setup();
+  let esvCalled = false;
+  sb.window.electronAPI = { fetchESV: async () => { esvCalled = true; return { ok: true, text: '[1] x' }; } };
+  sb.fetchFromBolls = async () => ({ text: '[1] nasb text', passageRef: 'John 1:1', copyright: '(NASB)' });
+  const result = await sb.fetchPassageData('nasb', 'John 1:1');
+  assert.equal(esvCalled, false);
+  assert.equal(result.source, 'bolls');
+});

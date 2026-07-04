@@ -138,6 +138,28 @@ function parseBollsText(rawText) {
   return { propositions, verseRefs };
 }
 
+// ── ESV API (desktop only) ──────────────────────────────────────────────────
+//
+// The real api.esv.org fetch + API key live in the Electron main process
+// (main.js), reached via the preload bridge (window.electronAPI.fetchESV).
+// That bridge only exists in the Electron desktop app — the static/GitHub
+// Pages web build has no server to hold the secret, so it always falls
+// through to the keyless Bolls source below. See .env.example.
+
+async function fetchFromESVApi(query) {
+  if (!window.electronAPI || typeof window.electronAPI.fetchESV !== 'function') {
+    throw new Error('ESV API not available in this build (web/browser).');
+  }
+  const res = await window.electronAPI.fetchESV(query);
+  if (!res || !res.ok) {
+    if (res && res.noKey) throw new Error('No ESV API key configured (.env).');
+    throw new Error(`ESV API error${res && res.status ? ` (${res.status})` : ''}`);
+  }
+  const parsed = parseBollsText(res.text);
+  if (parsed.propositions.length === 0) throw new Error('ESV API returned no verses.');
+  return { ...parsed, passageRef: res.canonical || query, copyright: '(ESV)' };
+}
+
 // ── Main entry point ──────────────────────────────────────────────────────────
 
 /**
@@ -147,7 +169,8 @@ function parseBollsText(rawText) {
  *   Greek NT  — SBLGNT (GitHub raw)
  *   Greek OT  — Bolls LXX
  *   Hebrew OT — Bolls WLC
- *   ESV/NASB  — Bolls
+ *   ESV       — api.esv.org (desktop app with a key) → falls back to Bolls
+ *   NASB      — Bolls (the ESV API only serves the ESV translation)
  *
  * @param {string} version - 'esv' | 'nasb' | 'greek' | 'hebrew'
  * @param {string} query   - Passage reference e.g. "John 1:1-5"
@@ -173,10 +196,20 @@ async function fetchPassageData(version, query) {
     }
   }
 
+  if (version !== 'nasb') {
+    try {
+      const result = await fetchFromESVApi(query);
+      return { ...result, isGreek: false, source: 'esv-api' };
+    } catch (_) {
+      // No key, not the desktop app, network error, bad reference, etc. —
+      // fall through to the keyless Bolls source below.
+    }
+  }
+
   const translation = version === 'nasb' ? 'NASB' : 'ESV';
   const data = await fetchFromBolls(translation, query);
   const parsed = parseBollsText(data.text);
-  return { ...parsed, passageRef: data.passageRef, copyright: data.copyright, isGreek: false };
+  return { ...parsed, passageRef: data.passageRef, copyright: data.copyright, isGreek: false, source: 'bolls' };
 }
 
 window.DA_BIBLE = {
