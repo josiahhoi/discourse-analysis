@@ -14,9 +14,6 @@ function showBracketActions(bracketIdx, centerY, centerX) {
   popover.id = 'bracketActions';
   popover.className = 'context-menu';
   const bracket = DA_STATE.brackets[bracketIdx];
-  const hasTwoLabels = window.DA_PROFILES
-    ? DA_PROFILES.isTwoArm(bracket.type)
-    : !DA_CONSTANTS.SINGLE_LABEL_TYPES.has(bracket.type);
   const hasComment = !!getCommentForBracket(bracketIdx);
 
   const pastels = [
@@ -66,7 +63,7 @@ function showBracketActions(bracketIdx, centerY, centerX) {
 
   popover.querySelector('[data-action="select"]').addEventListener('click', (e) => {
     e.stopPropagation();
-    DA_STATE.firstBracketPoint = `b${bracketIdx}`;
+    DA_STATE.firstBracketPoint = bracket.id;
     DA_STATE.bracketSelectStep = 1;
     document.getElementById('bracketCanvas')?.classList.add('connect-mode');
     showStatus('Bracket selected. Click a node or dot to connect.', 'info');
@@ -75,7 +72,7 @@ function showBracketActions(bracketIdx, centerY, centerX) {
 
   popover.querySelector('[data-action="comment"]').addEventListener('click', (e) => {
     e.stopPropagation();
-    showCommentPopoverForBracket(bracketIdx, centerY, centerX);
+    showCommentPopoverForBracket(bracketIdx);
     clearAndDismiss();
   });
 
@@ -95,19 +92,20 @@ function showBracketActions(bracketIdx, centerY, centerX) {
       const color = btn.dataset.color;
       DA_STATE.pushUndo('highlight rows');
       if (color === 'clear') {
-        delete DA_STATE.bracketHighlights[bracketIdx];
+        delete DA_STATE.bracketHighlights[bracket.id];
       } else {
-        DA_STATE.bracketHighlights[bracketIdx] = color;
+        DA_STATE.bracketHighlights[bracket.id] = color;
       }
       clearAndDismiss();
       if (window.renderAll) window.renderAll();
     });
   });
 
+  manageDialogFocus(popover);
   setupClickOutside(popover, () => popover.remove());
 }
 
-function showTextContextMenu(propIndex, start, end, centerY, centerX, anchorRect) {
+function showTextContextMenu(propIndex, start, end, centerY, centerX) {
   const existing = document.getElementById('textContextMenu');
   if (existing) existing.remove();
 
@@ -140,7 +138,7 @@ function showTextContextMenu(propIndex, start, end, centerY, centerX, anchorRect
   menu.querySelector('[data-action="add-comment"]').addEventListener('click', (e) => {
     e.stopPropagation();
     menu.remove();
-    showCommentPopoverForText(propIndex, start, end, null, { anchorRect });
+    showCommentPopoverForText(propIndex, start, end);
   });
 
   menu.querySelectorAll('.color-swatch').forEach(btn => {
@@ -164,6 +162,7 @@ function showTextContextMenu(propIndex, start, end, centerY, centerX, anchorRect
     });
   });
 
+  manageDialogFocus(menu);
   setupClickOutside(menu, () => menu.remove());
 }
 
@@ -434,6 +433,7 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
 
   makeFixedDraggable(picker, '.picker-title');
 
+  manageDialogFocus(picker);
   setupClickOutside(picker, () => picker.remove());
 }
 
@@ -506,6 +506,7 @@ function showExportMenu(e) {
     });
   });
 
+  manageDialogFocus(menu);
   setupClickOutside(menu, () => menu.remove());
 }
 
@@ -574,10 +575,11 @@ function showOpenMenu(e) {
 
   const openMenuBtn = document.getElementById('openMenuBtn');
   document.body.appendChild(picker);
-  const rect = openMenuBtn?.getBoundingClientRect() || { top: e.clientY, right: e.clientX };
+  const rect = openMenuBtn?.getBoundingClientRect() || { top: e.clientY, right: e.clientX, left: e.clientX };
   picker.style.top = `${rect.top}px`;
   picker.style.left = `${(rect.right || rect.left) + 10}px`;
 
+  manageDialogFocus(picker);
   setupClickOutside(picker, () => picker.remove());
 }
 
@@ -626,12 +628,12 @@ function showCustomLabelDialog(bracketIdx, centerY, centerX, mainPicker) {
     </div>
   `;
   document.body.appendChild(dialog);
-  
+
   makePopupDraggable(dialog, '.picker-title');
 
   const input = dialog.querySelector('#customInput');
-  input.focus();
-  
+  manageDialogFocus(dialog, { initialFocus: input });
+
   const handleAdd = () => {
     const val = input.value.trim();
     if (!val) return;

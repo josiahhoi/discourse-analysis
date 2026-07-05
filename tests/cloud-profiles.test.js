@@ -84,6 +84,30 @@ test('updating with the wrong password is rejected', async () => {
   );
 });
 
+test('pwHash is salted with the profile key (same password ≠ same hash)', async () => {
+  const { sb, store } = setup();
+  await sb.DA_PROFILES.publishToCloud(profile('Class A'), 'secret');
+  await sb.DA_PROFILES.publishToCloud(profile('Class B'), 'secret');
+  assert.notEqual(store.class_a.pwHash, store.class_b.pwHash);
+  // And it is not the bare sha256 of the password either.
+  assert.notEqual(store.class_a.pwHash, await sb.DA_PROFILES.sha256Hex('secret'));
+});
+
+test('legacy unsalted pwHash still authorizes an update and is upgraded', async () => {
+  const { sb, store } = setup();
+  // Simulate a profile published before salting: bare sha256(password).
+  store.class_a = { name: 'Class A', pwHash: await sb.DA_PROFILES.sha256Hex('secret') };
+  const created = await sb.DA_PROFILES.publishToCloud(profile('Class A'), 'secret');
+  assert.equal(created, false);
+  // Rewritten with the salted scheme.
+  assert.equal(store.class_a.pwHash, await sb.DA_PROFILES.sha256Hex('class_a:secret'));
+  // Wrong password is still rejected.
+  await assert.rejects(
+    () => sb.DA_PROFILES.publishToCloud(profile('Class A'), 'wrong'),
+    /password does not match/
+  );
+});
+
 test('loading a name that does not exist returns null', async () => {
   const { sb } = setup();
   const loaded = await sb.DA_PROFILES.loadFromCloud('nope');

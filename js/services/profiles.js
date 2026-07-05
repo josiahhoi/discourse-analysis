@@ -333,6 +333,11 @@
    * Publish the given profile to the cloud under its name. Claims the name if
    * free; otherwise requires the matching password. Returns true if newly
    * created, false if it updated an existing one. Throws on wrong password.
+   *
+   * The stored hash is salted with the profile key so identical passwords on
+   * different profiles hash differently and a leaked pwHash can't be checked
+   * against a plain SHA-256 dictionary. Profiles published before salting hold
+   * a bare sha256(password); those are accepted once and re-written salted.
    */
   async function publishToCloud(profile, password) {
     if (!window.db) throw new Error('Cloud is not available.');
@@ -340,18 +345,19 @@
     const key = nameKey(profile && profile.name);
     if (!key) throw new Error('Enter a profile name first.');
 
-    const hash = await sha256Hex(password);
+    const saltedHash = await sha256Hex(`${key}:${password}`);
+    const legacyHash = await sha256Hex(password); // pre-salt scheme
     const ref = db.collection('profiles').doc(key);
 
     return db.runTransaction(async (tx) => {
       const snap = await tx.get(ref);
-      if (snap.exists && snap.data().pwHash !== hash) {
+      if (snap.exists && snap.data().pwHash !== saltedHash && snap.data().pwHash !== legacyHash) {
         throw new Error('That name is taken and the password does not match.');
       }
       tx.set(ref, {
         ...normalize(profile),
         builtin: false,
-        pwHash: hash,
+        pwHash: saltedHash,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
       return !snap.exists;

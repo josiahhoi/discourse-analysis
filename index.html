@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://*.firebaseapp.com https://apis.google.com https://www.gstatic.com 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://api.esv.org https://bolls.life https://raw.githubusercontent.com http://localhost:*;">
+  <!-- script-src deliberately has no 'unsafe-inline'/'unsafe-eval': all scripts are
+       external files and none of the vendored libs (html2canvas, jspdf, lz-string)
+       or the Firebase compat SDK use eval. Keep new scripts in .js files. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://*.firebaseapp.com https://apis.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://api.esv.org https://bolls.life https://raw.githubusercontent.com http://localhost:*;">
   <title>Discourse Analysis</title>
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -28,10 +31,6 @@
         </select>
         <input type="text" id="passageInput" placeholder="e.g. John 1:1-5, Romans 8:28" value="Rom 3:21-26">
         <button id="fetchBtn" type="button">Fetch Passage</button>
-        <div class="api-key-row" id="apiKeyRow" style="display: none;">
-          <label for="apiKey">ESV API Key:</label>
-          <input type="password" id="apiKey" placeholder="Your API key (stored in browser only)">
-        </div>
         <details class="import-section">
           <summary>Or paste text to bracket or import</summary>
           <textarea id="pasteText" placeholder="Paste passage text here. Use [1], [2], [3:14] for verse breaks."></textarea>
@@ -225,7 +224,7 @@
               <input type="password" id="cloudProfilePassword" placeholder="Password (to publish/update)" title="Required only to publish or change a profile">
               <button id="cloudPublishBtn" type="button" class="secondary" title="Publish or update this profile on the cloud">Publish</button>
             </div>
-            <p class="notation-hint">Anyone can load by name. The password protects changes (in-app gate).</p>
+            <p class="notation-hint">Anyone can load by name. The password protects changes (in-app gate, not hardened security) — pick a fresh one, not a password you use elsewhere.</p>
           </div>
         </details>
         <div class="settings-section">

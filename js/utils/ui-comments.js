@@ -7,7 +7,7 @@
  */
 
 function showCommentPopover(config) {
-  const { propIndex, start, end, bracketIdx, existingCommentId, anchorX, anchorY, options = {} } = config;
+  const { propIndex, start, end, bracketIdx, existingCommentId } = config;
   const isBracket = bracketIdx !== undefined;
   
   const existing = document.getElementById('commentPopover');
@@ -80,7 +80,7 @@ function showCommentPopover(config) {
       const replyTemplate = document.getElementById('replyItemTemplate');
 
       (comment.replies || []).forEach((r, rIdx) => {
-        const replyEl = replyTemplate.content.cloneNode(true).querySelector('.reply-item');
+        const replyEl = /** @type {DocumentFragment} */ (replyTemplate.content.cloneNode(true)).querySelector('.reply-item');
         replyEl.dataset.idx = rIdx;
         replyEl.querySelector('.comment-author').textContent = r.author || 'Anonymous';
         replyEl.querySelector('.comment-time').textContent = formatDate(r.timestamp || r.createdAt);
@@ -158,7 +158,9 @@ function showCommentPopover(config) {
         text,
         timestamp: Date.now(),
         type: isBracket ? 'bracket' : 'text',
-        target: isBracket ? { bracketIdx } : { propIndex, start, end },
+        // Bracket comments anchor to the bracket's stable id, so they survive
+        // other brackets being added/deleted without any index fix-ups.
+        target: isBracket ? { bracketId: DA_STATE.brackets[bracketIdx]?.id } : { propIndex, start, end },
         replies: []
       };
       DA_STATE.comments.push(newComment);
@@ -204,18 +206,9 @@ function showCommentPopover(config) {
     const sendBtn = popover.querySelector('.send-reply-btn');
     
     const submitReply = () => {
-      const text = replyInput.value.trim();
-      if (!text) return;
-      DA_STATE.pushUndo('reply to comment');
-      comment.replies = comment.replies || [];
-      comment.replies.push({
-        author: localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || 'Anonymous',
-        text,
-        timestamp: Date.now()
-      });
+      if (!addReplyToComment(comment, replyInput.value)) return;
       replyInput.value = '';
       renderContent();
-      if (window.renderAll) window.renderAll();
     };
 
     if (sendBtn) sendBtn.onclick = submitReply;
@@ -226,9 +219,8 @@ function showCommentPopover(config) {
     }
   };
 
-  const wrapper = document.getElementById('propositionsContainer')?.parentElement || document.body;
-  const rect = wrapper.getBoundingClientRect();
-  
+  const wrapper = document.getElementById('propositions')?.parentElement || document.body;
+
   // Standardize position for all comment popovers: always center horizontally, 
   // and set to a consistent vertical position (28% is slightly lower than the old 20%).
   popover.style.left = '50%';
@@ -243,6 +235,7 @@ function showCommentPopover(config) {
   if (typeof makeCommentPopoverDraggableAndResizable === 'function') {
     makeCommentPopoverDraggableAndResizable(popover);
   }
+  manageDialogFocus(popover);
   setupClickOutside(popover, () => {
     DA_STATE.activeCommentTarget = null;
     if (window.renderAll) window.renderAll();
@@ -250,19 +243,13 @@ function showCommentPopover(config) {
   });
 }
 
-function showCommentPopoverForText(propIndex, start, end, existingCommentId = null, options = {}) {
-  showCommentPopover({ propIndex, start, end, existingCommentId, options });
+function showCommentPopoverForText(propIndex, start, end, existingCommentId = null) {
+  showCommentPopover({ propIndex, start, end, existingCommentId });
 }
 
-function showCommentPopoverForBracket(bracketIdx, centerY, centerX, options = {}) {
+function showCommentPopoverForBracket(bracketIdx) {
   const comment = getCommentForBracket(bracketIdx);
-  showCommentPopover({ 
-    bracketIdx, 
-    existingCommentId: comment?.id, 
-    anchorX: centerX, 
-    anchorY: centerY, 
-    options 
-  });
+  showCommentPopover({ bracketIdx, existingCommentId: comment?.id });
 }
 
 window.DA_UI = Object.assign(window.DA_UI || {}, {

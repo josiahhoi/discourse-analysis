@@ -4,59 +4,71 @@
     "description": "Discourse Analysis — diagram the logical structure of Scripture",
     "main": "main.js",
     "scripts": {
-      "start": "electron .",
-      "dev": "electron .",
-      "test": "node --test",
-      "build": "electron-builder --mac --arm64 && electron-builder --win --x64",
-      "build:mac": "electron-builder --mac --arm64",
-      "build:win": "electron-builder --win --x64",
-      "build:all": "npm run build"
+        "start": "electron .",
+        "dev": "electron .",
+        "test": "node --test",
+        "test:e2e": "playwright test",
+        "lint": "eslint .",
+        "typecheck": "tsc -p jsconfig.json",
+        "check": "npm run lint && npm run typecheck && npm test",
+        "build": "electron-builder --mac --arm64 && electron-builder --win --x64",
+        "build:mac": "electron-builder --mac --arm64",
+        "build:win": "electron-builder --win --x64",
+        "build:all": "npm run build"
     },
     "author": "",
     "license": "MIT",
     "devDependencies": {
-      "electron": "^28.0.0",
-      "electron-builder": "^24.9.1"
+        "@playwright/test": "^1.61.1",
+        "electron": "^28.0.0",
+        "electron-builder": "^24.9.1",
+        "eslint": "^10.6.0",
+        "globals": "^17.7.0",
+        "typescript": "^6.0.3"
     },
     "build": {
-      "appId": "com.discourseanalysis.app",
-      "productName": "Discourse Analysis",
-      "files": [
-        "index.html",
-        "styles.css",
-        "app.js",
-        "main.js",
-        "preload.js",
-        "js/**"
-      ],
-      "directories": {
-        "output": "dist"
-      },
-      "mac": {
-        "category": "public.app-category.education",
-        "target": [
-          "zip"
+        "appId": "com.discourseanalysis.app",
+        "productName": "Discourse Analysis",
+        "files": [
+            "index.html",
+            "styles.css",
+            "app.js",
+            "main.js",
+            "preload.js",
+            "js/**"
         ],
-        "icon": "build/icon.png",
-        "fileAssociations": [{
-          "ext": "json",
-          "name": "Discourse Analysis Bracket",
-          "role": "Editor"
-        }]
-      },
-      "win": {
-        "target": [
-          "portable"
-        ],
-        "icon": "build/icon.png",
-        "fileAssociations": [{
-          "ext": "json",
-          "name": "Discourse Analysis Bracket",
-          "role": "Editor"
-        }]
-      },
-      "portable": {
-        "artifactName": "${productName} ${version} ${arch} Portable.${ext}"
-      }
+        "directories": {
+            "output": "dist"
+        },
+        "mac": {
+            "category": "public.app-category.education",
+            "target": [
+                "zip"
+            ],
+            "icon": "build/icon.png",
+            "fileAssociations": [
+                {
+                    "ext": "json",
+                    "name": "Discourse Analysis Bracket",
+                    "role": "Editor"
+                }
+            ]
+        },
+        "win": {
+            "target": [
+                "portable"
+            ],
+            "icon": "build/icon.png",
+            "fileAssociations": [
+                {
+                    "ext": "json",
+                    "name": "Discourse Analysis Bracket",
+                    "role": "Editor"
+                }
+            ]
+        },
+        "portable": {
+            "artifactName": "${productName} ${version} ${arch} Portable.${ext}"
+        }
     }
-  }
+}

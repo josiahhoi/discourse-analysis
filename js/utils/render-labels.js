@@ -9,7 +9,7 @@
 
 // Sentinel that stands in for the literal "//" comparison glyph while we split
 // the label on "/" — so the double-slash is never mistaken for two separators.
-const _GLYPH_DBLSLASH = '';
+const _GLYPH_DBLSLASH = '\u0001'; // written as an escape so it is visible in editors/diffs
 
 function _twoArmSummary(typeKey, type) {
   const canonical = window.DA_PROFILES ? DA_PROFILES.getName(typeKey)
@@ -19,7 +19,31 @@ function _twoArmSummary(typeKey, type) {
     : (canonical.length > 6 ? canonical.substring(0, 4) : canonical);
 }
 
+// Memo: getBracketLabels is pure string work over (type, swapped, flipped) plus
+// the active profile, but it's called O(brackets × nesting depth) times per
+// render frame. Cache per profile object — DA_PROFILES.setActive always installs
+// a fresh object, so switching or editing a profile busts the cache
+// automatically. Custom cl_ labels are immutable once created (a new label gets
+// a new id), so they're safe to cache too. Consumers treat the returned object
+// as read-only, so sharing the cached instance is safe.
+let _labelCacheProfile;
+let _labelCache = new Map();
+
 function getBracketLabels(type, labelsSwapped = false, dominanceFlipped = false) {
+  const _profile = window.DA_PROFILES ? DA_PROFILES.getActive() : null;
+  if (_profile !== _labelCacheProfile) {
+    _labelCacheProfile = _profile;
+    _labelCache = new Map();
+  }
+  const _key = `${type}|${labelsSwapped ? 1 : 0}${dominanceFlipped ? 1 : 0}`;
+  const _hit = _labelCache.get(_key);
+  if (_hit) return _hit;
+  const result = _computeBracketLabels(type, labelsSwapped, dominanceFlipped);
+  _labelCache.set(_key, result);
+  return result;
+}
+
+function _computeBracketLabels(type, labelsSwapped, dominanceFlipped) {
   const typeKey = type.toLowerCase();
   // The active notation profile resolves the label (with any rename/alias/custom
   // cl_ override) and whether dominance is marked. Falls back to defaults when

@@ -108,16 +108,17 @@ function splitPropositionAtOffset(i, offset) {
   });
 
   if (referencingIndices.length > 0) {
-    const newBracketIdx = DA_STATE.brackets.length;
-    DA_STATE.brackets.push({
+    const newBracket = {
+      id: DA_STATE.newBracketId(),
       from: 'p' + i,
       to: 'p' + (i + 1),
       type: 'unspecified'
-    });
+    };
+    DA_STATE.brackets.push(newBracket);
     referencingIndices.forEach(({ idx, refersFrom, refersTo }) => {
       const b = DA_STATE.brackets[idx];
-      if (refersFrom) b.from = 'b' + newBracketIdx;
-      if (refersTo) b.to = 'b' + newBracketIdx;
+      if (refersFrom) b.from = newBracket.id;
+      if (refersTo) b.to = newBracket.id;
     });
   }
   
@@ -255,43 +256,22 @@ function mergePropositions(i) {
     b.to = unshiftRef(b.to, i);
   });
 
-  // Remove degenerate brackets where from === to (e.g., auto-created brackets whose halves merged back)
+  // Remove degenerate brackets where from === to (e.g., auto-created brackets
+  // whose halves merged back). Brackets are referenced by stable id, so removal
+  // needs no renumbering — just reparent references and drop the id's comments
+  // and highlight.
   for (let j = DA_STATE.brackets.length - 1; j >= 0; j--) {
     const b = DA_STATE.brackets[j];
     if (b.from === b.to) {
-      const bRef = 'b' + j;
       // Reparent: any bracket pointing to this one should now point to its child
       DA_STATE.brackets.forEach((other, k) => {
         if (k === j) return;
-        if (other.from === bRef) other.from = b.from;
-        if (other.to === bRef) other.to = b.to;
+        if (other.from === b.id) other.from = b.from;
+        if (other.to === b.id) other.to = b.to;
       });
       DA_STATE.brackets.splice(j, 1);
-      // Fix shifted bN references
-      DA_STATE.brackets.forEach(other => {
-        const fix = (val) => {
-          if (typeof val === 'string' && val.startsWith('b')) {
-            const idx = parseInt(val.slice(1), 10);
-            if (idx > j) return 'b' + (idx - 1);
-          }
-          return val;
-        };
-        other.from = fix(other.from);
-        other.to = fix(other.to);
-      });
-      // Fix comment references
-      DA_STATE.comments = DA_STATE.comments.filter(c => c.type !== 'bracket' || c.target?.bracketIdx !== j);
-      DA_STATE.comments.forEach(c => {
-        if (c.type === 'bracket' && c.target?.bracketIdx > j) c.target.bracketIdx--;
-      });
-      // Fix bracketHighlights references
-      const _mh = {};
-      Object.entries(DA_STATE.bracketHighlights).forEach(([k, v]) => {
-        const idx = parseInt(k, 10);
-        if (idx < j) _mh[idx] = v;
-        else if (idx > j) _mh[idx - 1] = v;
-      });
-      DA_STATE.bracketHighlights = _mh;
+      DA_STATE.comments = DA_STATE.comments.filter(c => c.type !== 'bracket' || c.target?.bracketId !== b.id);
+      delete DA_STATE.bracketHighlights[b.id];
     }
   }
   
@@ -399,55 +379,27 @@ function deleteBracket(bracketIdx) {
 
   DA_STATE.pushUndo('delete bracket');
 
-  const bRef = 'b' + bracketIdx;
-
-  // 1. Any bracket pointing to THIS one should now point to its children
+  // Any bracket pointing to THIS one (by id) should now point to its children.
+  // References are stable ids, so nothing else needs renumbering.
   DA_STATE.brackets.forEach((b, i) => {
     if (i === bracketIdx) return;
-    if (b.from === bRef) b.from = bToDelete.from;
-    if (b.to === bRef) b.to = bToDelete.to;
+    if (b.from === bToDelete.id) b.from = bToDelete.from;
+    if (b.to === bToDelete.id) b.to = bToDelete.to;
   });
 
-  // 2. Remove the bracket from state
   DA_STATE.brackets.splice(bracketIdx, 1);
-
-  // 3. Fix indices in ALL 'bN' references because they just shifted
-  DA_STATE.brackets.forEach((b) => {
-    const fix = (val) => {
-      if (typeof val === 'string' && val.startsWith('b')) {
-        const idx = parseInt(val.slice(1), 10);
-        if (idx > bracketIdx) return 'b' + (idx - 1);
-      }
-      return val;
-    };
-    b.from = fix(b.from);
-    b.to = fix(b.to);
-  });
-
-  // 4. Update comments references
-  DA_STATE.comments = DA_STATE.comments.filter((c) => c.type !== 'bracket' || c.target?.bracketIdx !== bracketIdx);
-  DA_STATE.comments.forEach((c) => {
-    if (c.type === 'bracket' && c.target?.bracketIdx > bracketIdx) c.target.bracketIdx--;
-  });
-
-  // 5. Update bracketHighlights references
-  const _dh = {};
-  Object.entries(DA_STATE.bracketHighlights).forEach(([k, v]) => {
-    const idx = parseInt(k, 10);
-    if (idx < bracketIdx) _dh[idx] = v;
-    else if (idx > bracketIdx) _dh[idx - 1] = v;
-  });
-  DA_STATE.bracketHighlights = _dh;
+  DA_STATE.comments = DA_STATE.comments.filter((c) => c.type !== 'bracket' || c.target?.bracketId !== bToDelete.id);
+  delete DA_STATE.bracketHighlights[bToDelete.id];
 
   if (window.DA_RENDERER) DA_RENDERER.renderAll();
 }
 
 function findBestAttachment(pId, proposedMin, proposedMax) {
-    if (pId.toString().startsWith('b')) return pId;
-    
+    if (!DA_STATE.isPropRef(pId)) return pId; // already a bracket id
+
     let bestB = null;
     let minRange = Infinity;
-    
+
     DA_STATE.brackets.forEach((b, i) => {
         const range = DA_RENDERER.getBracketExtent(i);
         if (range.from <= proposedMin && range.to >= proposedMax) {
@@ -456,12 +408,12 @@ function findBestAttachment(pId, proposedMin, proposedMax) {
                 // If it's a bracket, we can only attach if it points directly to our target node
                 if (b.from === pId || b.to === pId) {
                     minRange = size;
-                    bestB = 'b' + i;
+                    bestB = b.id;
                 }
             }
         }
     });
-    
+
     return bestB || pId;
 }
 
@@ -561,8 +513,8 @@ function handleDotClick(pointId, x, y) {
         return;
     }
 
-    const finalP1IsNode = finalP1.toString().startsWith('p');
-    const finalP2IsNode = finalP2.toString().startsWith('p');
+    const finalP1IsNode = DA_STATE.isPropRef(finalP1);
+    const finalP2IsNode = DA_STATE.isPropRef(finalP2);
     const p1AlreadyBusy = DA_STATE.brackets.some(b => b.from === finalP1 || b.to === finalP1);
     const p2AlreadyBusy = DA_STATE.brackets.some(b => b.from === finalP2 || b.to === finalP2);
 
@@ -585,7 +537,7 @@ function handleDotClick(pointId, x, y) {
     DA_STATE.pushUndo('add bracket');
 
     const newBracket = {
-      id: Date.now().toString(),
+      id: DA_STATE.newBracketId(),
       from: finalP1,
       to: finalP2,
       type: isSeriesJumpOver ? 'series' : (DA_STATE.currentRelationshipType || 'unspecified'),
@@ -596,7 +548,6 @@ function handleDotClick(pointId, x, y) {
 
     DA_STATE.brackets.push(newBracket);
     const newIdx = DA_STATE.brackets.length - 1;
-    const newBracketId = `b${newIdx}`;
     const newRange = DA_RENDERER.getBracketExtent(newIdx);
 
     DA_STATE.brackets.forEach((oldB, i) => {
@@ -605,10 +556,10 @@ function handleDotClick(pointId, x, y) {
         if (newRange.from <= oldRange.from && newRange.to >= oldRange.to) return;
 
         const fromRange = DA_RENDERER.getPointExtent(oldB.from);
-        if (fromRange.from >= newRange.from && fromRange.to <= newRange.to) oldB.from = newBracketId;
+        if (fromRange.from >= newRange.from && fromRange.to <= newRange.to) oldB.from = newBracket.id;
 
         const toRange = DA_RENDERER.getPointExtent(oldB.to);
-        if (toRange.from >= newRange.from && toRange.to <= newRange.to) oldB.to = newBracketId;
+        if (toRange.from >= newRange.from && toRange.to <= newRange.to) oldB.to = newBracket.id;
     });
 
     resetBracketSelection();

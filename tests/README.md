@@ -36,14 +36,16 @@ structurally-identical arrays/objects.
 |------|----------------|
 | `editor-logic.test.js` | Proposition split/merge: verse renumbering, indentation, and re-anchoring of brackets, word arrows, and format tags as the proposition array shifts. |
 | `state.test.js` | Undo stack: deep-copy snapshots, restore (incl. `customLabels`), debounce, 50-entry cap. |
-| `persistence.test.js` | `normalizeBracketData` import migration: verse-ref normalization and legacy numeric → `pN`/`bN` bracket upgrade. |
+| `persistence.test.js` | `normalizeBracketData` import migration: verse-ref normalization, legacy numeric bracket upgrade, and positional (`bN`/`bracketIdx`) → stable-id reference conversion. |
 | `bible-service.test.js` | `parsePassageReference` (book/chapter/verse, numbered books, whole chapters, unparseable input) and `parseBollsText` ([n] verse-marker splitting). |
 | `bracket-labels.test.js` | `getBracketLabels` star/dominance engine: single vs top/bottom labels, `labelsSwapped`, `dominanceFlipped`, per-type/profile dominance (goal #1), renames, Gurtner (now a profile), and custom (`cl_`) labels. |
 | `profiles.test.js` | Notation-profile module: built-ins, active-profile preference + persistence, `normalize`, and the abbr/name/color/dominance resolution helpers. |
 | `cloud-profiles.test.js` | Cloud sharing (against a fake Firestore): first-come name claiming, the password gate on updates, public load by name, and that `pwHash` never leaks into a loaded profile. |
 
-These target the pure, logic-heavy core. DOM rendering, fetching, and export are
-better verified in the browser preview.
+These target the pure, logic-heavy core. DOM rendering, keyboard handling, and
+export are covered by the Playwright end-to-end suite in `e2e/` — run it with
+`npm run test:e2e` (starts its own static server on :8766 and drives real
+Chromium through import → split → bracket → comment → export → re-import).
 
 Some tested functions (e.g. `parsePassageReference`, `getBracketLabels`) are
 sloppy-mode top-level `function` declarations rather than members of a `DA_*`

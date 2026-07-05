@@ -126,10 +126,7 @@ function renderPropositions() {
 
   isRenderingPropositions = true;
 
-  const { GAP, BRACKET_WIDTH, SLOT_WIDTH, BASE_PADDING } = DA_CONSTANTS.BRACKET_GEO;
-  const dynamicPaddingLeft = Math.max(200, DA_STATE.brackets.length
-    ? BASE_PADDING + GAP + BRACKET_WIDTH + (_maxSlot + 1) * SLOT_WIDTH
-    : BASE_PADDING);
+  const dynamicPaddingLeft = getGutterPadding();
   // In RTL the bracket gutter mirrors to the right side, so pad on the right
   // instead of the left (and clear the opposite side when switching modes).
   if (DA_STATE.isRTL) {
@@ -213,19 +210,22 @@ function renderPropositions() {
   }
 
   const _verseSuffixMap = precomputeVerseSuffixes(DA_STATE.verseRefs);
+  // Highlight extents once per pass, not once per block (each resolution is an
+  // id lookup + recursive extent walk).
+  const _hlForPass = computeHighlightEntries();
 
   // Update existing or create new blocks
   DA_STATE.propositions.forEach((text, i) => {
     let block = existingBlocks[i];
     if (!block) {
-      block = createPropositionBlock(text, i, _verseSuffixMap[i]);
+      block = createPropositionBlock(text, i, _verseSuffixMap[i], _hlForPass);
       container.appendChild(block);
     }
 
     // Toggle visibility based on folding
     block.classList.toggle('folded-hidden', hiddenIndices.has(i));
     block.classList.toggle('series-member', seriesMemberIndices.has(i));
-    updatePropositionBlock(block, text, i, _verseSuffixMap[i]);
+    updatePropositionBlock(block, text, i, _verseSuffixMap[i], _hlForPass);
   });
 
   // Remove stale gap indicators then re-insert for current hidden runs
@@ -431,8 +431,9 @@ function attachPropositionDelegatedListeners(container) {
       _glowPropIdx = i;
       _clearBracketGlow();
       if (i !== null && !isNaN(i) && Object.keys(DA_STATE.bracketHighlights).length) {
-        Object.entries(DA_STATE.bracketHighlights).forEach(([bIdxStr, color]) => {
-          const bIdx = parseInt(bIdxStr, 10);
+        Object.entries(DA_STATE.bracketHighlights).forEach(([bracketId, color]) => {
+          const bIdx = DA_STATE.bracketIndexById(bracketId);
+          if (bIdx === -1) return;
           const extent = getBracketExtent(bIdx);
           if (i >= extent.from && i <= extent.to) {
             const group = document.querySelector(`.bracket-group[data-index="${bIdx}"]`);
@@ -463,7 +464,18 @@ function attachPropositionDelegatedListeners(container) {
   });
 }
 
-function createPropositionBlock(text, i, verseDisplay) {
+/** Resolve every row highlight (id-keyed) to its color + covered extent. */
+function computeHighlightEntries() {
+  const out = [];
+  Object.entries(DA_STATE.bracketHighlights).forEach(([bracketId, color]) => {
+    const bIdx = DA_STATE.bracketIndexById(bracketId);
+    if (bIdx === -1) return;
+    out.push({ bIdx, color, extent: getBracketExtent(bIdx) });
+  });
+  return out;
+}
+
+function createPropositionBlock(text, i, verseDisplay, highlightEntries) {
   const block = document.createElement('div');
   block.className = 'proposition-block';
   block.dataset.index = i;
@@ -484,24 +496,26 @@ function createPropositionBlock(text, i, verseDisplay) {
   textSpan.spellcheck = false;
   block.appendChild(textSpan);
 
-  updatePropositionBlock(block, text, i, verseDisplay);
+  updatePropositionBlock(block, text, i, verseDisplay, highlightEntries);
   return block;
 }
 
-function updatePropositionBlock(block, text, i, verseDisplay) {
+function updatePropositionBlock(block, text, i, verseDisplay, highlightEntries) {
   block.dataset.index = i;
   const dot = block.querySelector('.prop-dot');
   if (dot) dot.dataset.index = i;
 
   const isDirectPropSelection = DA_STATE.firstBracketPoint === `p${i}`;
   let isRangeSelected = isDirectPropSelection;
-  
+
   // If a bracket is selected, highlight all propositions in its range for context
-  if (DA_STATE.firstBracketPoint && DA_STATE.firstBracketPoint.startsWith('b')) {
-    const bIdx = parseInt(DA_STATE.firstBracketPoint.slice(1), 10);
-    const range = getBracketExtent(bIdx);
-    if (i >= range.from && i <= range.to) {
-      isRangeSelected = true;
+  if (DA_STATE.firstBracketPoint && !DA_STATE.isPropRef(DA_STATE.firstBracketPoint)) {
+    const bIdx = DA_STATE.bracketIndexById(DA_STATE.firstBracketPoint);
+    if (bIdx !== -1) {
+      const range = getBracketExtent(bIdx);
+      if (i >= range.from && i <= range.to) {
+        isRangeSelected = true;
+      }
     }
   }
 
@@ -510,14 +524,13 @@ function updatePropositionBlock(block, text, i, verseDisplay) {
 
   block.style.marginLeft = `${(DA_STATE.indentation[i] || 0) * 20}px`;
 
-  // Collect highlight colors and bracket indices covering this proposition
-  const _highlightEntries = [];
-  Object.entries(DA_STATE.bracketHighlights).forEach(([bIdxStr, color]) => {
-    const bIdx = parseInt(bIdxStr, 10);
-    const extent = getBracketExtent(bIdx);
-    if (i >= extent.from && i <= extent.to) _highlightEntries.push({ bIdx, color, extent });
-  });
-  const _highlightColors = _highlightEntries.map(e => e.color);
+  // Highlight colors of brackets covering this proposition. The resolved
+  // entries are computed once per render pass by the caller; the fallback keeps
+  // standalone calls correct.
+  const _hlAll = highlightEntries !== undefined ? highlightEntries : computeHighlightEntries();
+  const _highlightColors = _hlAll
+    .filter(e => i >= e.extent.from && i <= e.extent.to)
+    .map(e => e.color);
 
   // --- Left accent bar ---
   let _bar = block.querySelector('.section-highlight-bar');
@@ -596,44 +609,10 @@ function precomputeVerseSuffixes(verseRefs) {
   });
 }
 
+// Single-index convenience over precomputeVerseSuffixes, so the suffix logic
+// (which propositions share a verse → a/b/c letters) lives in exactly one place.
 function computeVerseDisplay(i) {
-  const currentRef = DA_STATE.verseRefs[i];
-  if (!currentRef) return '';
-
-  const checkNeedsSuffix = (verse, idx) => {
-    return DA_STATE.verseRefs.some((r, rIdx) => {
-      if (rIdx === idx) return false;
-      return r === verse || r.startsWith(verse + '-') || r.endsWith('-' + verse) || r.includes('-' + verse + '-');
-    });
-  };
-
-  const getSuffix = (verse, idx) => {
-    let count = 0;
-    for (let j = 0; j < DA_STATE.verseRefs.length; j++) {
-      const ref = DA_STATE.verseRefs[j];
-      if (!ref) continue;
-      const isMatch = ref === verse || ref.startsWith(verse + '-') || ref.endsWith('-' + verse) || ref.includes('-' + verse + '-');
-      if (isMatch) {
-        if (j === idx) return String.fromCharCode(97 + count);
-        count++;
-      }
-    }
-    return '';
-  };
-
-  const getFullDisplay = (ref, idx) => {
-    if (!ref.includes('-')) {
-      return checkNeedsSuffix(ref, idx) ? ref + getSuffix(ref, idx) : ref;
-    }
-    const parts = ref.split('-');
-    const start = parts[0];
-    const end = parts[parts.length - 1];
-    const startDisplay = checkNeedsSuffix(start, idx) ? start + getSuffix(start, idx) : start;
-    const endDisplay = checkNeedsSuffix(end, idx) ? end + getSuffix(end, idx) : end;
-    return `${startDisplay}-${endDisplay}`;
-  };
-
-  return getFullDisplay(currentRef, i);
+  return precomputeVerseSuffixes(DA_STATE.verseRefs)[i] || '';
 }
 
 function renderInlineContent(textSpan, text, i) {
@@ -727,7 +706,8 @@ function renderInlineContent(textSpan, text, i) {
 function appendChunk(textSpan, chunk, startPos, propIdx, activeTags, allTags) {
   let node = document.createTextNode(chunk);
 
-  let wrapper = null, currentInner = null;
+  /** @type {HTMLElement|null} */ let wrapper = null;
+  /** @type {HTMLElement|null} */ let currentInner = null;
   const activeIds = Array.from(activeTags);
 
   activeIds.forEach(id => {
@@ -791,64 +771,75 @@ function appendChunk(textSpan, chunk, startPos, propIdx, activeTags, allTags) {
 
 function computeSlotAssignments() {
   _slotForIdx = {};
+  const n = DA_STATE.brackets.length;
+  if (n === 0) { _maxSlot = 0; return; }
+
+  // Extents are computed ONCE up front. The containment check runs over every
+  // bracket pair (O(n²)), so recomputing recursive extents inside it made deep
+  // nestings O(n³) — the main reason chapter-length passages froze per frame.
+  const extents = DA_STATE.brackets.map((_, i) => getBracketExtent(i));
+
+  const contains = (outerIdx, innerIdx) => {
+    if (outerIdx === innerIdx) return false;
+    const eOuter = extents[outerIdx];
+    const eInner = extents[innerIdx];
+    if (eInner.from >= eOuter.from && eInner.to <= eOuter.to) {
+      if (eInner.from === eOuter.from && eInner.to === eOuter.to) {
+        return innerIdx < outerIdx;
+      }
+      return true;
+    }
+    return false;
+  };
+
   const order = [];
   const visited = new Set();
-  
   const visit = (idx) => {
     if (visited.has(idx)) return;
     visited.add(idx);
-    DA_STATE.brackets.forEach((a, i) => {
-      if (bracketContainsForSlot(DA_STATE.brackets[idx], idx, a, i)) visit(i);
-    });
+    for (let i = 0; i < n; i++) {
+      if (contains(idx, i)) visit(i);
+    }
     order.push(idx);
   };
-  
-  DA_STATE.brackets.forEach((_, i) => visit(i));
-  
-  order.forEach((idx) => {
-    const bracket = DA_STATE.brackets[idx];
-    const contained = DA_STATE.brackets
-      .map((a, i) => ({ a, i }))
-      .filter(({ a, i }) => bracketContainsForSlot(bracket, idx, a, i));
-      
-    if (contained.length === 0) {
-      _slotForIdx[idx] = 0;
-    } else {
-      _slotForIdx[idx] = 1 + Math.max(...contained.map(({ i }) => _slotForIdx[i]));
-    }
-  });
-  
-  _maxSlot = DA_STATE.brackets.length ? Math.max(...Object.values(_slotForIdx)) : 0;
-}
+  for (let i = 0; i < n; i++) visit(i);
 
-function bracketContainsForSlot(outer, outerIdx, inner, innerIdx) {
-  if (outerIdx === innerIdx) return false;
-  const eOuter = getBracketExtent(outerIdx);
-  const eInner = getBracketExtent(innerIdx);
-  
-  if (eInner.from >= eOuter.from && eInner.to <= eOuter.to) {
-    if (eInner.from === eOuter.from && eInner.to === eOuter.to) {
-      return innerIdx < outerIdx;
+  _maxSlot = 0;
+  order.forEach((idx) => {
+    let slot = 0;
+    for (let i = 0; i < n; i++) {
+      if (contains(idx, i)) slot = Math.max(slot, _slotForIdx[i] + 1);
     }
-    return true;
-  }
-  return false;
+    _slotForIdx[idx] = slot;
+    if (slot > _maxSlot) _maxSlot = slot;
+  });
 }
 
 // Canvas width captured each renderBrackets pass, used to mirror computed gutter
 // X coordinates in RTL mode. Shared so getConnectionPoints can mirror too.
 let _bracketCanvasW = 0;
+
+// Per-pass memo for getConnectionPoints, keyed "from|to". Only non-null while
+// renderBrackets is mid-pass (dot positions are frozen then); always reset to
+// null afterwards so no stale geometry survives between frames.
+let _connCache = null;
 function _mirrorGutterX(xv) {
   return DA_STATE.isRTL ? _bracketCanvasW - xv : xv;
 }
 
-function getBracketX(bracketIdx) {
-  const slot = _slotForIdx[bracketIdx] ?? 0;
+// Width of the bracket gutter (text padding) given the current nesting depth.
+// Shared by renderPropositions (as padding) and getBracketX (as the origin).
+function getGutterPadding() {
   const { GAP, BRACKET_WIDTH, SLOT_WIDTH, BASE_PADDING } = DA_CONSTANTS.BRACKET_GEO;
-  const dynamicPaddingLeft = Math.max(200, DA_STATE.brackets.length
+  return Math.max(200, DA_STATE.brackets.length
     ? BASE_PADDING + GAP + BRACKET_WIDTH + (_maxSlot + 1) * SLOT_WIDTH
     : BASE_PADDING);
-  return dynamicPaddingLeft - GAP - BRACKET_WIDTH - slot * SLOT_WIDTH;
+}
+
+function getBracketX(bracketIdx) {
+  const slot = _slotForIdx[bracketIdx] ?? 0;
+  const { GAP, BRACKET_WIDTH, SLOT_WIDTH } = DA_CONSTANTS.BRACKET_GEO;
+  return getGutterPadding() - GAP - BRACKET_WIDTH - slot * SLOT_WIDTH;
 }
 
 function renderBrackets() {
@@ -886,8 +877,9 @@ function renderBrackets() {
       _hoveredBracketIdx = newIdx;
       _clearCardActive();
       if (newIdx === null || isNaN(newIdx)) return;
+      const hoveredId = DA_STATE.brackets[newIdx]?.id;
       DA_STATE.comments.forEach(c => {
-        if (c.type === 'bracket' && c.target?.bracketIdx === newIdx) {
+        if (c.type === 'bracket' && c.target?.bracketId === hoveredId) {
           const card = document.querySelector(`.comments-preview-card[data-comment-id="${c.id}"]`);
           if (card) {
             card.classList.add('comment-hover-active');
@@ -903,6 +895,11 @@ function renderBrackets() {
   }
 
   const _coordTypes = new Set(DA_CONSTANTS.RELATIONSHIP_GROUPS_HIERARCHY[0].types);
+
+  // All bracket extents for this pass, computed once. Several checks below run
+  // over bracket pairs; recomputing recursive extents inside those loops is
+  // what made deep nestings quadratic-to-cubic per frame.
+  const _extents = DA_STATE.brackets.map((_, idx) => getBracketExtent(idx));
 
   // --- RTL mirroring ---
   // In right-to-left mode the bracket gutter is on the right, so every *computed*
@@ -926,11 +923,11 @@ function renderBrackets() {
   DA_STATE.brackets.forEach((s, sIdx) => {
     const _t = s.type && s.type.toLowerCase();
     if (!s.isJumpOver || !_JUMP_OVER_TYPES.has(_t)) return;
-    const sExt = getBracketExtent(sIdx);
+    const sExt = _extents[sIdx];
     const refs = new Set([s.from, s.to]);
     DA_STATE.brackets.forEach((b, bIdx) => {
-      if (bIdx === sIdx || refs.has(`b${bIdx}`)) return;
-      const bExt = getBracketExtent(bIdx);
+      if (bIdx === sIdx || refs.has(b.id)) return;
+      const bExt = _extents[bIdx];
       if (bExt.from >= sExt.from && bExt.to <= sExt.to &&
           !(bExt.from === sExt.from && bExt.to === sExt.to)) {
         _hiddenNodeIdx.add(bIdx);
@@ -938,12 +935,17 @@ function renderBrackets() {
     });
   });
 
+  // Per-pass memo for getConnectionPoints: a nested bracket's geometry is
+  // otherwise recomputed recursively for every ancestor that references it.
+  _connCache = new Map();
+  try {
+
   DA_STATE.brackets.forEach((bracket, i) => {
     // 1. Hide brackets that are inside a collapsed parent
     const isInsideCollapsed = DA_STATE.brackets.some((otherB, otherIdx) => {
       if (otherIdx === i || !otherB.isCollapsed) return false;
-      const outerRange = getBracketExtent(otherIdx);
-      const innerRange = getBracketExtent(i);
+      const outerRange = _extents[otherIdx];
+      const innerRange = _extents[i];
       return innerRange.from >= outerRange.from && innerRange.to <= outerRange.to;
     });
     if (isInsideCollapsed) return;
@@ -966,7 +968,7 @@ function renderBrackets() {
           bottomY = toPos.midY;
           bottomLeft = toPos.left;
         } else {
-          const extent = getBracketExtent(i);
+          const extent = _extents[i];
           for (let j = extent.from; j <= extent.to; j++) {
             const pos = dotPositions[j];
             if (pos && pos.midY > 0) { topY = bottomY = pos.midY; topLeft = bottomLeft = pos.left; break; }
@@ -987,7 +989,7 @@ function renderBrackets() {
           topLeft = bottomLeft = dominantPos.left;
         } else {
           // Fallback: find first visible prop in the bracket's full extent
-          const extent = getBracketExtent(i);
+          const extent = _extents[i];
           for (let j = extent.from; j <= extent.to; j++) {
             const pos = dotPositions[j];
             if (pos && pos.midY > 0) { topY = bottomY = pos.midY; topLeft = bottomLeft = pos.left; break; }
@@ -997,7 +999,7 @@ function renderBrackets() {
     }
 
     // Create Group for Hovering and Selection
-    const isBracketSelected = DA_STATE.firstBracketPoint === `b${i}`;
+    const isBracketSelected = DA_STATE.firstBracketPoint === bracket.id;
     const isActiveTarget = DA_STATE.activeCommentTarget && DA_STATE.activeCommentTarget.type === 'bracket' && DA_STATE.activeCommentTarget.bracketIdx === i;
     const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     const color = (window.DA_PROFILES ? DA_PROFILES.getColor(bracket.type) : DA_CONSTANTS.RELATIONSHIP_COLORS[bracket.type]) || DA_CONSTANTS.RELATIONSHIP_COLORS.unspecified;
@@ -1010,7 +1012,7 @@ function renderBrackets() {
 
     // Background highlight path for comments
     if (DA_STATE.showCommentsEnabled) {
-      const bComments = DA_STATE.comments.filter(c => c.type === 'bracket' && c.target && c.target.bracketIdx === i);
+      const bComments = DA_STATE.comments.filter(c => c.type === 'bracket' && c.target && c.target.bracketId === bracket.id);
       if (bComments.length > 0) {
           group.classList.add('has-comment');
           let d;
@@ -1098,7 +1100,7 @@ function renderBrackets() {
       cx: x + _nodeDX,
       cy: nodeY,
       r: 5,
-      class: `${(DA_STATE.bracketSelectStep === 1 && DA_STATE.firstBracketPoint === `b${i}`) ? 'connection-node active-node' : 'connection-node'} ${bracket.isCollapsed ? 'collapsed' : ''} ${_hiddenNodeIdx.has(i) ? 'series-absorbed' : ''}`,
+      class: `${(DA_STATE.bracketSelectStep === 1 && DA_STATE.firstBracketPoint === bracket.id) ? 'connection-node active-node' : 'connection-node'} ${bracket.isCollapsed ? 'collapsed' : ''} ${_hiddenNodeIdx.has(i) ? 'series-absorbed' : ''}`,
       dataset: { bracketIdx: i }
     }));
 
@@ -1146,27 +1148,29 @@ function renderBrackets() {
       }));
     }
   });
+
+  } finally {
+    // The memo is only valid for this pass's dot positions — never leave it on.
+    _connCache = null;
+  }
 }
 
 function getExtent(id, _seen) {
   if (typeof id === 'number') return { from: id, to: id };
   if (id === null || id === undefined) return { from: 0, to: 0 };
-  if (id.startsWith('p')) {
+  if (DA_STATE.isPropRef(id)) {
     const idx = parseInt(id.slice(1), 10);
     return { from: idx, to: idx };
   }
-  if (id.startsWith('b')) {
-    if (!_seen) _seen = new Set();
-    if (_seen.has(id)) return { from: 0, to: 0 };
-    _seen.add(id);
-    const bIdx = parseInt(id.slice(1), 10);
-    const b = DA_STATE.brackets[bIdx];
-    if (!b) return { from: 0, to: 0 };
-    const eFrom = getExtent(b.from, _seen);
-    const eTo = getExtent(b.to, _seen);
-    return { from: Math.min(eFrom.from, eTo.from), to: Math.max(eFrom.to, eTo.to) };
-  }
-  return { from: 0, to: 0 };
+  // Anything that isn't 'pN' is a bracket id.
+  if (!_seen) _seen = new Set();
+  if (_seen.has(id)) return { from: 0, to: 0 };
+  _seen.add(id);
+  const b = DA_STATE.bracketById(id);
+  if (!b) return { from: 0, to: 0 };
+  const eFrom = getExtent(b.from, _seen);
+  const eTo = getExtent(b.to, _seen);
+  return { from: Math.min(eFrom.from, eTo.from), to: Math.max(eFrom.to, eTo.to) };
 }
 
 function getBracketExtent(bracketIdx) {
@@ -1182,15 +1186,14 @@ function getBracketExtent(bracketIdx) {
 // full extent of a sub-bracket endpoint.
 function getRepresentativeRange(id, _seen) {
   if (id === null || id === undefined) return { from: 0, to: 0 };
-  if (typeof id === 'number' || id.startsWith('p')) {
+  if (typeof id === 'number' || DA_STATE.isPropRef(id)) {
     const idx = typeof id === 'number' ? id : parseInt(id.slice(1), 10);
     return { from: idx, to: idx };
   }
-  const bIdx = parseInt(id.slice(1), 10);
   if (!_seen) _seen = new Set();
-  if (_seen.has(bIdx)) return { from: 0, to: 0 };
-  _seen.add(bIdx);
-  const b = DA_STATE.brackets[bIdx];
+  if (_seen.has(id)) return { from: 0, to: 0 };
+  _seen.add(id);
+  const b = DA_STATE.bracketById(id);
   if (!b) return { from: 0, to: 0 };
   const labels = getBracketLabels(b.type, b.labelsSwapped, b.dominanceFlipped);
   const hasStarTop = (labels.top && labels.top.includes('*')) || labels.single === '*';
@@ -1201,72 +1204,67 @@ function getRepresentativeRange(id, _seen) {
     return getRepresentativeRange(b.to, _seen);
   } else {
     // Coordinate or ambiguous — expose the full extent of this sub-bracket
-    return getBracketExtent(bIdx);
+    return getBracketExtent(DA_STATE.bracketIndexById(id));
   }
 }
 
 function getConnectionPoints(fromId, toId, dotPositions, excludeBracketIdx = -1, _seen) {
+  const _cacheKey = _connCache ? `${fromId}|${toId}` : null;
+  if (_cacheKey && _connCache.has(_cacheKey)) return _connCache.get(_cacheKey);
+
   // Guard against cyclic bracket references (a bracket reachable from itself via
   // from/to). getExtent/getRepresentativeRange already carry such guards; without
   // one here a cycle recurses forever and the whole diagram dies on render.
   if (!_seen) _seen = new Set();
 
-  const extentFrom = getExtent(fromId);
-  const extentTo = getExtent(toId);
-  const totalFrom = Math.min(extentFrom.from, extentTo.from);
-  const totalTo = Math.max(extentFrom.to, extentTo.to);
-
   // Helper to get Y coordinate for a point
-  const getY = (id, bracketIdx) => {
-    if (typeof id === 'number' || id.startsWith('p')) {
+  const getY = (id) => {
+    if (typeof id === 'number' || DA_STATE.isPropRef(id)) {
       const idx = typeof id === 'number' ? id : parseInt(id.slice(1), 10);
       return dotPositions[idx]?.midY || 0;
     }
-    if (id.startsWith('b')) {
-      const bIdx = parseInt(id.slice(1), 10);
-      if (_seen.has(bIdx)) return 0; // cycle — bail
-      _seen.add(bIdx);
-      const b = DA_STATE.brackets[bIdx];
-      if (!b) return 0; // SAFETY
-      const points = getConnectionPoints(b.from, b.to, dotPositions, bIdx, _seen);
-      
-      // NEW: Check for stars to determine connection point
-      const labels = getBracketLabels(b.type, b.labelsSwapped, b.dominanceFlipped);
-      if (labels.single) return (points.topY + points.bottomY) / 2;
-      
-      if (labels.top && labels.top.includes('*')) {
-        return points.topY;
-      }
-      if (labels.bottom && labels.bottom.includes('*')) {
-        return points.bottomY;
-      }
-      
-      return (points.topY + points.bottomY) / 2;
+    // Bracket id
+    if (_seen.has(id)) return 0; // cycle — bail
+    _seen.add(id);
+    const b = DA_STATE.bracketById(id);
+    if (!b) return 0; // SAFETY
+    const points = getConnectionPoints(b.from, b.to, dotPositions, -1, _seen);
+
+    // Check for stars to determine connection point
+    const labels = getBracketLabels(b.type, b.labelsSwapped, b.dominanceFlipped);
+    if (labels.single) return (points.topY + points.bottomY) / 2;
+
+    if (labels.top && labels.top.includes('*')) {
+      return points.topY;
     }
-    return 0;
+    if (labels.bottom && labels.bottom.includes('*')) {
+      return points.bottomY;
+    }
+
+    return (points.topY + points.bottomY) / 2;
   };
 
   // Helper to get X coordinate for a point
   const getX = (id) => {
-    if (typeof id === 'number' || id.startsWith('p')) {
+    if (typeof id === 'number' || DA_STATE.isPropRef(id)) {
       const idx = typeof id === 'number' ? id : parseInt(id.slice(1), 10);
       return dotPositions[idx]?.left || 0;
     }
-    if (id.startsWith('b')) {
-      const bIdx = parseInt(id.slice(1), 10);
-      // Point at the connection-node, mirrored to the right gutter in RTL (the
-      // node offset flips sign just like in renderBrackets: -15 LTR, +15 RTL).
-      return _mirrorGutterX(getBracketX(bIdx)) + (DA_STATE.isRTL ? 15 : -15);
-    }
-    return 0;
+    // Bracket id: point at the connection-node, mirrored to the right gutter in
+    // RTL (the node offset flips sign just like in renderBrackets: -15 LTR, +15 RTL).
+    const bIdx = DA_STATE.bracketIndexById(id);
+    if (bIdx === -1) return 0;
+    return _mirrorGutterX(getBracketX(bIdx)) + (DA_STATE.isRTL ? 15 : -15);
   };
 
-  return {
-    topY: getY(fromId, excludeBracketIdx),
+  const result = {
+    topY: getY(fromId),
     topLeft: getX(fromId),
-    bottomY: getY(toId, excludeBracketIdx),
+    bottomY: getY(toId),
     bottomLeft: getX(toId)
   };
+  if (_cacheKey) _connCache.set(_cacheKey, result);
+  return result;
 }
 
 function getPointExtent(id) {

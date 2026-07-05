@@ -13,7 +13,7 @@ const DA_EXPORT = {
     // back left-to-right with the wrong font.
     const propsEl = document.getElementById('propositions');
     return {
-      version: 1,
+      version: 2, // v2: brackets referenced by stable id (see normalizeBracketData)
       passageRef: DA_STATE.passageRef,
       isRTL: !!DA_STATE.isRTL,
       isHebrew: !!propsEl?.classList.contains('hebrew-text'),
@@ -69,14 +69,11 @@ const DA_EXPORT = {
       
       // Hide UI toolbars and buttons in export
       clonedDoc.querySelectorAll(`
-        .workspace-toolbar, 
-        .sidebar-toggle-btn, 
-        .cloud-sync-btn, 
-        .proposition-controls, 
-        .proposition-handle, 
-        .connection-node, 
-        .bracket-hitbox, 
-        .bracket-comment-icon
+        .workspace-toolbar,
+        .sidebar-toggle-btn,
+        .cloud-sync-btn,
+        .connection-node,
+        .bracket-hitbox
       `).forEach(el => {
         el.style.display = 'none';
       });

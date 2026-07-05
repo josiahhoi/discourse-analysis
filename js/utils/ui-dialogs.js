@@ -7,7 +7,7 @@
  */
 
 function saveState() {
-  const propositionsContainer = document.getElementById('propositionsContainer');
+  const propositionsContainer = document.getElementById('propositions');
   const state = {
     scroll: { x: window.scrollX, y: window.scrollY, scrollables: [] },
     focus: null
@@ -45,8 +45,7 @@ function saveState() {
 
 function restoreState(state) {
   if (!state) return;
-  const propositionsContainer = document.getElementById('propositionsContainer');
-  
+
   // Restore scroll
   window.scrollTo(state.scroll.x, state.scroll.y);
   (state.scroll.scrollables || []).forEach(({ el, scrollLeft, scrollTop }) => {
@@ -118,12 +117,16 @@ function openSettings() {
     if (modal) {
         modal.style.display = 'flex';
         if (window.DA_NOTATION) DA_NOTATION.renderEditor();
+        modal._releaseFocus = manageDialogFocus(modal);
     }
 }
 
 function closeSettings() {
     const modal = document.getElementById('settingsModal');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+        modal.style.display = 'none';
+        if (modal._releaseFocus) { modal._releaseFocus(); modal._releaseFocus = null; }
+    }
 }
 
 /**
@@ -149,6 +152,7 @@ function maybeShowWelcome() {
     const close = () => {
         try { localStorage.setItem(DA_CONSTANTS.WELCOME_SEEN_KEY, 'true'); } catch (_) { }
         modal.style.display = 'none';
+        if (modal._releaseFocus) { modal._releaseFocus(); modal._releaseFocus = null; }
     };
 
     const save = () => {
@@ -187,7 +191,7 @@ function maybeShowWelcome() {
     });
 
     modal.style.display = 'flex';
-    input.focus();
+    modal._releaseFocus = manageDialogFocus(modal, { initialFocus: input });
 }
 
 function openReferenceGuide() {
@@ -195,12 +199,16 @@ function openReferenceGuide() {
     if (modal) {
         populateReferenceGuide();
         modal.style.display = 'flex';
+        modal._releaseFocus = manageDialogFocus(modal);
     }
 }
 
 function closeReferenceGuide() {
     const modal = document.getElementById('referenceModal');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+        modal.style.display = 'none';
+        if (modal._releaseFocus) { modal._releaseFocus(); modal._releaseFocus = null; }
+    }
 }
 
 function populateReferenceGuide() {
@@ -353,8 +361,8 @@ function startNewBracket() {
   const copyrightLabel = document.getElementById('copyrightLabel');
   if (copyrightLabel) copyrightLabel.textContent = '(ESV)';
   
-  const propositionsContainer = document.getElementById('propositionsContainer');
-  if (propositionsContainer) propositionsContainer.classList.remove('greek-text');
+  const propositionsContainer = document.getElementById('propositions');
+  if (propositionsContainer) propositionsContainer.classList.remove('greek-text', 'hebrew-text');
   
   if (window.renderAll) window.renderAll();
   

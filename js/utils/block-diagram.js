@@ -227,7 +227,11 @@
           }
           const fragEl = document.createElement('span');
           fragEl.className = 'bd-label-frag';
-          fragEl.style.color = DA_CONSTANTS.RELATIONSHIP_COLORS[frag.type]
+          // Resolve through the active notation profile so recolors apply here
+          // just like they do to the brackets.
+          fragEl.style.color = (window.DA_PROFILES
+            ? DA_PROFILES.getColor(frag.type)
+            : DA_CONSTANTS.RELATIONSHIP_COLORS[frag.type])
             || DA_CONSTANTS.RELATIONSHIP_COLORS.unspecified;
           fragEl.textContent = frag.text;
           lab.appendChild(fragEl);

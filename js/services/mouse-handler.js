@@ -113,9 +113,8 @@ window.DA_MOUSE = {
         let end = Math.min(preEnd.toString().length, fullText.length);
         
         if (start >= end) return;
-        
-        const anchorRect = range.getBoundingClientRect();
-        DA_UI.showTextContextMenu(propIndex, start, end, e.clientY, e.clientX, anchorRect);
+
+        DA_UI.showTextContextMenu(propIndex, start, end, e.clientY, e.clientX);
       });
     }
 
@@ -123,20 +122,8 @@ window.DA_MOUSE = {
       bracketCanvas.addEventListener('click', (e) => {
         const node = e.target.closest('.connection-node');
         if (node) {
-          const bIdx = node.dataset.bracketIdx;
-          DA_EDITOR.handleDotClick(`b${bIdx}`, e.clientX, e.clientY);
-          return;
-        }
-
-        const commentIcon = e.target.closest('.bracket-comment-icon');
-        if (commentIcon) {
-          const bIdx = parseInt(commentIcon.dataset.index, 10);
-          const b = DA_STATE.brackets[bIdx];
-          if (b) {
-            const { topY, bottomY } = DA_RENDERER.getConnectionPoints(b.from, b.to, DA_STATE.dotPositions, bIdx);
-            const x = DA_RENDERER.getBracketX(bIdx);
-            DA_UI.showCommentPopoverForBracket(bIdx, (topY + bottomY) / 2, x);
-          }
+          const b = DA_STATE.brackets[parseInt(node.dataset.bracketIdx, 10)];
+          if (b) DA_EDITOR.handleDotClick(b.id, e.clientX, e.clientY);
           return;
         }
 
@@ -205,29 +192,10 @@ window.DA_MOUSE = {
       const comment = DA_STATE.comments.find(c => c.id === commentId);
       if (!comment) return;
 
-      if (e.target.closest('.delete-comment-btn')) {
-        if (confirm('Delete this comment?')) {
-          DA_STATE.pushUndo('delete comment');
-          DA_STATE.comments = DA_STATE.comments.filter(c => c.id !== commentId);
-          if (window.renderAll) window.renderAll();
-        }
-        return;
-      }
-
       if (e.target.closest('.send-reply-btn') || e.target.closest('.reply-input')) {
         if (e.target.closest('.send-reply-btn')) {
           const input = card.querySelector('.reply-input');
-          const text = input?.value?.trim();
-          if (text) {
-            DA_STATE.pushUndo('add reply');
-            comment.replies = comment.replies || [];
-            comment.replies.push({
-              author: localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || 'Anonymous',
-              text,
-              timestamp: Date.now()
-            });
-            if (window.renderAll) window.renderAll();
-          }
+          DA_UI.addReplyToComment(comment, input?.value);
         }
         return;
       }
@@ -241,19 +209,13 @@ window.DA_MOUSE = {
           DA_UI.showCommentPopoverForText(comment.target.propIndex, comment.target.start, comment.target.end, comment.id);
         }
       } else if (comment.type === 'bracket') {
-        const bracketIdx = comment.target.bracketIdx;
+        const bracketIdx = DA_STATE.bracketIndexById(comment.target.bracketId);
         const bracketGroup = document.querySelector(`.bracket-group[data-index="${bracketIdx}"]`);
         if (bracketGroup) {
           bracketGroup.scrollIntoView({ behavior: 'smooth', block: 'center' });
           bracketGroup.classList.add('bracket-hover');
           setTimeout(() => bracketGroup.classList.remove('bracket-hover'), 2000);
-
-            const b = DA_STATE.brackets[bracketIdx];
-            if (b) {
-              const { topY, bottomY } = DA_RENDERER.getConnectionPoints(b.from, b.to, DA_STATE.dotPositions, bracketIdx);
-              const x = DA_RENDERER.getBracketX(bracketIdx);
-              DA_UI.showCommentPopoverForBracket(bracketIdx, (topY + bottomY) / 2, x);
-            }
+          if (DA_STATE.brackets[bracketIdx]) DA_UI.showCommentPopoverForBracket(bracketIdx);
         }
       }
     });
@@ -261,19 +223,8 @@ window.DA_MOUSE = {
     commentsPreview.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && e.target.classList.contains('reply-input')) {
         const card = e.target.closest('.comments-preview-card');
-        const commentId = card.dataset.commentId;
-        const comment = DA_STATE.comments.find(c => c.id === commentId);
-        const text = e.target.value.trim();
-        if (comment && text) {
-          DA_STATE.pushUndo('add reply');
-          comment.replies = comment.replies || [];
-          comment.replies.push({
-            author: localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || 'Anonymous',
-            text,
-            timestamp: Date.now()
-          });
-          if (window.renderAll) window.renderAll();
-        }
+        const comment = DA_STATE.comments.find(c => c.id === card.dataset.commentId);
+        DA_UI.addReplyToComment(comment, e.target.value);
       }
     });
   },

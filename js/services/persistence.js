@@ -64,72 +64,130 @@ function normalizeBracketData(data) {
   const rawBrackets = Array.isArray(data.brackets) ? data.brackets : (Array.isArray(data.arcs) ? data.arcs : []);
   if (rawBrackets.length === 0) return data;
 
-  // Only migrate if we find numeric 'from' or 'to' properties (legacy format)
-  const needsMigration = rawBrackets.some(b => typeof b.from === 'number' || typeof b.to === 'number');
-  if (!needsMigration) return data;
+  let brackets = rawBrackets.map((b) => ({ ...b }));
+  let comments = (Array.isArray(data.comments) ? data.comments : [])
+    .map((c) => ({ ...c, target: c.target ? { ...c.target } : c.target }));
 
-  // 1. Prepare indexed brackets to track original order for comment mapping
-  const indexedBrackets = rawBrackets.map((b, i) => ({ ...b, _originalIdx: i }));
-  
-  // 2. Sort by span width (inner-most first) to reconstruct the logical hierarchy
-  // Narrower brackets must be processed first so they can be "owned" by wider ones.
-  indexedBrackets.sort((a, b) => {
-    const widthA = (a.to || 0) - (a.from || 0);
-    const widthB = (b.to || 0) - (b.from || 0);
-    return widthA - widthB || a._originalIdx - b._originalIdx;
-  });
+  // ── Stage 1: legacy numeric from/to (the original flat format) ─────────────
+  // Reconstruct the nested hierarchy from proposition-index spans.
+  const needsNumericMigration = brackets.some(b => typeof b.from === 'number' || typeof b.to === 'number');
+  if (needsNumericMigration) {
+    // 1. Prepare indexed brackets to track original order for comment mapping
+    const indexedBrackets = brackets.map((b, i) => ({ ...b, _originalIdx: i }));
 
-  // 3. Track what currently "owns" each proposition index
-  let owners = data.propositions.map((_, i) => `p${i}`);
-  const newBrackets = [];
-  const oldToNewIdx = {};
-
-  indexedBrackets.forEach((oldB, newIdx) => {
-    const fromIdx = oldB.from || 0;
-    const toIdx = oldB.to || 0;
-    
-    // The logical targets are whatever currently owns these indices at this point in the assembly
-    const newFrom = owners[fromIdx];
-    const newTo = owners[toIdx];
-    
-    const id = oldB.id || String(Date.now() + newIdx);
-    const { _originalIdx, ...cleanB } = oldB;
-    
-    newBrackets.push({
-      ...cleanB,
-      id,
-      from: newFrom,
-      to: newTo,
-      dominanceFlipped: !!oldB.dominanceFlipped,
-      labelsSwapped: !!oldB.labelsSwapped
+    // 2. Sort by span width (inner-most first) to reconstruct the logical hierarchy
+    // Narrower brackets must be processed first so they can be "owned" by wider ones.
+    indexedBrackets.sort((a, b) => {
+      const widthA = (a.to || 0) - (a.from || 0);
+      const widthB = (b.to || 0) - (b.from || 0);
+      return widthA - widthB || a._originalIdx - b._originalIdx;
     });
-    
-    oldToNewIdx[_originalIdx] = newIdx;
-    
-    // Update the ownership map: this range is now covered by the new bracket
-    const bracketRef = `b${newIdx}`;
-    for (let k = fromIdx; k <= toIdx; k++) {
-      owners[k] = bracketRef;
+
+    // 3. Track what currently "owns" each proposition index
+    let owners = data.propositions.map((_, i) => `p${i}`);
+    const newBrackets = [];
+    const oldToNewIdx = {};
+
+    indexedBrackets.forEach((oldB, newIdx) => {
+      const fromIdx = oldB.from || 0;
+      const toIdx = oldB.to || 0;
+
+      // The logical targets are whatever currently owns these indices at this point in the assembly
+      const newFrom = owners[fromIdx];
+      const newTo = owners[toIdx];
+
+      const { _originalIdx, ...cleanB } = oldB;
+
+      newBrackets.push({
+        ...cleanB,
+        from: newFrom,
+        to: newTo,
+        dominanceFlipped: !!oldB.dominanceFlipped,
+        labelsSwapped: !!oldB.labelsSwapped
+      });
+
+      oldToNewIdx[_originalIdx] = newIdx;
+
+      // Update the ownership map: this range is now covered by the new bracket.
+      // ('bN' index refs here are temporary — stage 2 converts them to ids.)
+      const bracketRef = `b${newIdx}`;
+      for (let k = fromIdx; k <= toIdx; k++) {
+        owners[k] = bracketRef;
+      }
+    });
+
+    // 4. Remap comment targets to the re-sorted bracket order (still by index;
+    // stage 2 converts indices to ids).
+    comments = comments.map(c => {
+      if (!c.target) return c;
+      let target = { ...c.target };
+      const oldIdx = target.bracketIdx !== undefined ? target.bracketIdx : target.arcIdx;
+      if (oldIdx !== undefined && oldToNewIdx[oldIdx] !== undefined) {
+        target.bracketIdx = oldToNewIdx[oldIdx];
+        delete target.arcIdx;
+      }
+      return { ...c, target };
+    });
+
+    brackets = newBrackets;
+  }
+
+  // ── Stage 2: positional references → stable ids ────────────────────────────
+  // Give every bracket a unique id, then convert every positional reference —
+  // 'bN' in from/to, comment target.bracketIdx/arcIdx, numeric highlight keys —
+  // to that id. After this, nothing in the file refers to a bracket by position,
+  // so add/delete/reorder never needs renumbering again.
+
+  // 2a. Unique ids ('pN'-shaped or duplicate ids are regenerated).
+  const seenIds = new Set();
+  brackets.forEach((b) => {
+    if (typeof b.id !== 'string' || !b.id || /^p\d+$/.test(b.id) || seenIds.has(b.id)) {
+      do { b.id = DA_STATE.newBracketId(); } while (seenIds.has(b.id));
     }
+    seenIds.add(b.id);
   });
 
-  // 4. Update comment targets to match the new bracket indices
-  const newComments = (Array.isArray(data.comments) ? data.comments : []).map(c => {
+  // 2b. from/to: 'bN' (index) → id. Refs that are already ids pass through.
+  const idxToId = (ref) => {
+    if (typeof ref === 'string') {
+      const m = /^b(\d+)$/.exec(ref);
+      if (m && brackets[+m[1]]) return brackets[+m[1]].id;
+    }
+    return ref;
+  };
+  brackets.forEach((b) => { b.from = idxToId(b.from); b.to = idxToId(b.to); });
+
+  // 2c. Comment targets: bracketIdx/arcIdx → bracketId.
+  comments = comments.map((c) => {
     if (!c.target) return c;
-    let target = { ...c.target };
+    const target = { ...c.target };
     const oldIdx = target.bracketIdx !== undefined ? target.bracketIdx : target.arcIdx;
-    if (oldIdx !== undefined && oldToNewIdx[oldIdx] !== undefined) {
-      target.bracketIdx = oldToNewIdx[oldIdx];
+    if (oldIdx !== undefined) {
+      if (brackets[oldIdx]) target.bracketId = brackets[oldIdx].id;
+      delete target.bracketIdx;
       delete target.arcIdx;
     }
     return { ...c, target };
   });
 
-  return { 
-    ...data, 
-    brackets: newBrackets, 
-    comments: newComments,
-    version: 1 // Normalize to current version
+  // 2d. Highlights: numeric index keys → id keys. Id keys pass through if they
+  // resolve; anything else is dropped (it pointed at a bracket that's gone).
+  const highlights = {};
+  const rawHighlights = (data.bracketHighlights && typeof data.bracketHighlights === 'object') ? data.bracketHighlights : {};
+  Object.entries(rawHighlights).forEach(([k, v]) => {
+    if (/^\d+$/.test(k)) {
+      if (brackets[+k]) highlights[brackets[+k].id] = v;
+    } else if (seenIds.has(k)) {
+      highlights[k] = v;
+    }
+  });
+
+  return {
+    ...data,
+    brackets,
+    comments,
+    bracketHighlights: highlights,
+    version: 2 // stable-id reference format
   };
 }
 
@@ -165,14 +223,13 @@ function importBracket(data) {
     brackets: (Array.isArray(data.brackets) ? data.brackets : (Array.isArray(data.arcs) ? data.arcs : [])).map((a) => ({ ...a })),
     formatTags: Array.isArray(data.formatTags) ? data.formatTags.map((t) => ({ ...t })) : [],
     wordArrows: Array.isArray(data.wordArrows) ? data.wordArrows.map((w) => ({ ...w })) : [],
-    comments: Array.isArray(data.comments) ? data.comments.map((c) => {
-        let target = { ...(c.target || {}) };
-        if (target.arcIdx !== undefined) {
-          target.bracketIdx = target.arcIdx;
-          delete target.arcIdx;
-        }
-        return { ...c, target, replies: Array.isArray(c.replies) ? c.replies.map((r) => ({ ...r })) : [] };
-    }) : [],
+    // Legacy comment targets (bracketIdx/arcIdx) were already converted to
+    // stable bracketId by normalizeBracketData above — just deep-copy here.
+    comments: Array.isArray(data.comments) ? data.comments.map((c) => ({
+        ...c,
+        target: { ...(c.target || {}) },
+        replies: Array.isArray(c.replies) ? c.replies.map((r) => ({ ...r })) : []
+    })) : [],
     indentation: Array.isArray(data.indentation) ? data.indentation.slice() : [],
     bracketHighlights: (data.bracketHighlights && typeof data.bracketHighlights === 'object') ? Object.assign({}, data.bracketHighlights) : {},
     undoStack: [],
@@ -606,7 +663,7 @@ function initDragAndDrop() {
         dropZone.classList.add('drag-over');
     });
     dropZone.addEventListener('dragleave', (e) => {
-        if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over');
+        if (!dropZone.contains(/** @type {Node} */ (e.relatedTarget))) dropZone.classList.remove('drag-over');
     });
     dropZone.addEventListener('drop', async (e) => {
         e.preventDefault();

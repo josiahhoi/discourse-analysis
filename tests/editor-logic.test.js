@@ -74,13 +74,14 @@ test('split: splitting a bracketed proposition inserts a child bracket', () => {
   });
   sb.DA_EDITOR.splitPropositionAtOffset(0, 2);
   // The two halves of prop 0 get their own bracket, and the original bracket now
-  // points at that new bracket instead of the bare proposition.
+  // points at that new bracket (by its stable id) instead of the bare proposition.
   assert.equal(sb.DA_STATE.brackets.length, 2);
   assert.deepEqual(
     { from: sb.DA_STATE.brackets[1].from, to: sb.DA_STATE.brackets[1].to },
     { from: 'p0', to: 'p1' }
   );
-  assert.equal(sb.DA_STATE.brackets[0].from, 'b1');
+  assert.ok(sb.DA_STATE.brackets[1].id, 'auto-created bracket has an id');
+  assert.equal(sb.DA_STATE.brackets[0].from, sb.DA_STATE.brackets[1].id);
   assert.equal(sb.DA_STATE.brackets[0].to, 'p2');
 });
 

@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "checkJs": true,
+    "allowJs": true,
+    "noEmit": true,
+    "strict": false,
+    "skipLibCheck": true
+  },
+  "include": ["app.js", "main.js", "preload.js", "js/**/*.js", "types/**/*.d.ts"],
+  "exclude": ["js/vendor", "node_modules", "dist", "scratch", "tests"]
+}

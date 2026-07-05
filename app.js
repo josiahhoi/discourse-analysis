@@ -3,7 +3,6 @@
 const propositionsContainer = document.getElementById('propositions');
 const bracketCanvas = document.getElementById('bracketCanvas');
 const wordArrowsSvg = document.getElementById('wordArrowsSvg');
-const versionSelect = document.getElementById('versionSelect');
 const passageInput = document.getElementById('passageInput');
 const fetchBtn = document.getElementById('fetchBtn');
 if (fetchBtn) {
@@ -11,8 +10,17 @@ if (fetchBtn) {
 }
 initDelegatedListeners();
 const passageRefEl = document.getElementById('passageRef');
-const apiKeyInput = document.getElementById('apiKey');
-const apiKeyRow = document.getElementById('apiKeyRow');
+// The header ref is contenteditable ("Click to edit passage reference"), so sync
+// edits back into state — otherwise saves/exports/filenames keep the old ref.
+if (passageRefEl) {
+  passageRefEl.addEventListener('input', () => {
+    DA_STATE.passageRef = passageRefEl.textContent.trim();
+  });
+  passageRefEl.addEventListener('keydown', (e) => {
+    // A single-line field: Enter commits (blur) instead of inserting a newline.
+    if (e.key === 'Enter') { e.preventDefault(); passageRefEl.blur(); }
+  });
+}
 const themeToggle = document.getElementById('themeToggle');
 const toggleCommentsBtn = document.getElementById('toggleCommentsBtn');
 
@@ -26,9 +34,7 @@ const importFileInput = document.getElementById('importFileInput');
 const projectSettingsBtn = document.getElementById('projectSettingsBtn');
 const undoDivideBtn = document.getElementById('undoDivideBtn');
 const textEditModeBtn = document.getElementById('textEditModeBtn');
-const commentModeBtn = document.getElementById('commentModeBtn');
 const arrowModeBtn = document.getElementById('arrowModeBtn');
-const openFileBtn = document.getElementById('openFileBtn');
 const openMenuBtn = document.getElementById('openMenuBtn');
 const reviewerNameInput = document.getElementById('reviewerName');
 const closeSettingsBtn = document.getElementById('closeSettingsBtn');
@@ -165,9 +171,6 @@ if (clearBracketsBtn) clearBracketsBtn.addEventListener('click', () => {
     DA_UI.showStatus('All brackets cleared.', 'success');
   }
 });
-if (openFileBtn && importFileInput) {
-  openFileBtn.addEventListener('click', () => importFileInput.click());
-}
 if (importFileInput) {
   importFileInput.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
@@ -393,16 +396,9 @@ DA_CLOUD.registerCloudRenderCallbacks({
 });
 
 document.addEventListener('DOMContentLoaded', () => {
-  const startBtn = document.getElementById('startCloudBtn');
-  const stopBtn = document.getElementById('stopCloudBtn');
-  const joinBtn = document.getElementById('joinCloudBtn');
-  const copyBtn = document.getElementById('copyCloudUrlBtn');
-  const joinInput = document.getElementById('joinCloudId');
-
+  // Cloud sync is driven from the Export menu (toggle) and the header badge
+  // (manual Sync button + click-to-copy project code).
   const manualSyncBtn = document.getElementById('manualSyncBtn');
-  if (startBtn) startBtn.addEventListener('click', DA_CLOUD.startCloudSync);
-  if (stopBtn) stopBtn.addEventListener('click', DA_CLOUD.stopCloudSync);
-  if (joinBtn) joinBtn.addEventListener('click', () => DA_CLOUD.joinCloudSync(joinInput.value.trim().toUpperCase()));
   if (manualSyncBtn) {
     manualSyncBtn.addEventListener('click', async () => {
       try {
@@ -417,11 +413,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
-  if (copyBtn) copyBtn.addEventListener('click', () => {
-    const url = window.location.href;
-    navigator.clipboard.writeText(url).then(() => DA_UI.showStatus('Link copied!', 'success'));
-  });
-
   // Click the project code to copy it to the clipboard.
   const headerProjectId = document.getElementById('headerProjectId');
   if (headerProjectId) {
@@ -457,7 +448,7 @@ document.addEventListener('DOMContentLoaded', () => {
         DA_CLOUD.joinCloudSync(projectFromUrl);
       } else {
         // Drop the stale param so future reloads don't keep prompting.
-        const url = new URL(window.location);
+        const url = new URL(window.location.href);
         url.searchParams.delete('project');
         window.history.replaceState({}, '', url);
       }

@@ -47,7 +47,7 @@ function renderCommentPreviews() {
       const snippet = text.substring(comment.target.start, comment.target.end);
       targetDesc = `${fullRef}: "${snippet}"`;
     } else {
-      const bIdx = comment.target.bracketIdx;
+      const bIdx = DA_STATE.bracketIndexById(comment.target.bracketId);
       const b = DA_STATE.brackets[bIdx];
       const extent = getBracketExtent(bIdx);
       const v1 = computeVerseDisplay(extent.from) || '?';
@@ -108,8 +108,8 @@ function renderCommentPreviews() {
         document.querySelectorAll(`mark.comment-highlight[data-comment-id="${newId}"]`)
           .forEach(el => el.classList.add('comment-highlight-card-hover'));
       } else {
-        const bracketIdx = comment.target?.bracketIdx;
-        if (bracketIdx !== undefined) {
+        const bracketIdx = DA_STATE.bracketIndexById(comment.target?.bracketId);
+        if (bracketIdx !== -1) {
           const group = document.querySelector(`.bracket-group[data-index="${bracketIdx}"]`);
           if (group) group.classList.add('comment-card-hover');
         }

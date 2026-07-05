@@ -60,34 +60,46 @@ window.DA_KEYBOARD = {
           return;
         }
 
-        // 2. Dismiss any active popovers
+        // 2. Dismiss any active popovers. Focus is trapped inside open dialogs
+        // (DA_UI.manageDialogFocus), so Escape must be able to close all of them.
         const labelPicker = document.getElementById('labelPicker');
         const bracketActions = document.getElementById('bracketActions');
         const commentPopover = document.getElementById('commentPopover');
+        const textContextMenu = document.getElementById('textContextMenu');
+        const exportMenu = document.getElementById('exportMenu');
+        const openPicker = document.getElementById('openPicker');
+        const customLabelDialog = document.querySelector('.custom-label-dialog');
         const settingsModal = document.getElementById('settingsModal');
-        
-        if (labelPicker || bracketActions || commentPopover || (settingsModal && settingsModal.style.display === 'flex')) {
+        const settingsOpen = settingsModal && settingsModal.style.display === 'flex';
+        const referenceModal = document.getElementById('referenceModal');
+        const referenceOpen = referenceModal && referenceModal.style.display === 'flex';
+
+        if (labelPicker || bracketActions || commentPopover || textContextMenu
+            || exportMenu || openPicker || customLabelDialog || settingsOpen || referenceOpen) {
+          // The custom-label dialog sits on top of the label picker — close only
+          // the dialog first; a second Escape closes the picker underneath.
+          if (customLabelDialog) { customLabelDialog.remove(); return; }
           if (labelPicker) labelPicker.remove();
           if (bracketActions) {
             bracketActions.remove();
             DA_UI.clearPropositionHighlights();
           }
           if (commentPopover) commentPopover.remove();
-          if (settingsModal) DA_UI.closeSettings();
+          if (textContextMenu) textContextMenu.remove();
+          if (exportMenu) exportMenu.remove();
+          if (openPicker) openPicker.remove();
+          if (settingsOpen) DA_UI.closeSettings();
+          if (referenceOpen) DA_UI.closeReferenceGuide();
           return;
         }
 
-        // 3. Exit active modes (Text Edit, Arrow, or Comment)
+        // 3. Exit active modes (Text Edit or Arrow)
         if (DA_STATE.textEditMode) {
           document.getElementById('textEditModeBtn')?.click();
           return;
         }
         if (DA_STATE.arrowMode) {
           document.getElementById('arrowModeBtn')?.click();
-          return;
-        }
-        if (DA_STATE.commentMode) {
-          document.getElementById('commentModeBtn')?.click();
           return;
         }
 
@@ -274,9 +286,6 @@ window.DA_KEYBOARD = {
 
             if (preText.length === 0 && i > 0) {
               e.preventDefault();
-
-              const prevBlock = container.querySelector(`.proposition-block[data-index="${i - 1}"]`);
-              const prevTextSpan = prevBlock?.querySelector('.proposition-text');
 
               // Commit this block's current text before merging — edits otherwise
               // only commit on focusout, so a merge would run on stale text.

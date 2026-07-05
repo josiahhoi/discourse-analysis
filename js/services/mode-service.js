@@ -37,7 +37,6 @@ function toggleArrowMode(forceState) {
 
     if (DA_STATE.arrowMode) {
         if (DA_STATE.textEditMode) toggleTextEditMode();
-        DA_STATE.commentMode = false;
         DA_UI.showStatus('Arrow mode on. Click a word to start.', 'success');
     } else {
         if (forceState === undefined) DA_UI.showStatus('Arrow mode off.', 'success');

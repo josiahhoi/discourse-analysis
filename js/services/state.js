@@ -16,7 +16,6 @@ window.DA_STATE = {
   undoStack: [],
   comments: [],
   isRenderingPropositions: false,
-  commentMode: false,
   textEditMode: false,
   formatTags: [],
   arrowMode: false,
@@ -28,7 +27,14 @@ window.DA_STATE = {
   activeCommentTarget: null,
   bracketHighlights: {},
   customLabels: [], // Session/Project-specific labels
-  savedCustomLabels: JSON.parse(localStorage.getItem('da_custom_labels') || '[]'), // User's personal bank
+  // User's personal bank. Guarded: this runs at module load, so a corrupted
+  // localStorage value must not throw and take DA_STATE (the whole app) down.
+  savedCustomLabels: (function () {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('da_custom_labels') || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) { return []; }
+  })(),
 
   activeProjectId: null,
   cloudUnsubscribe: null,
@@ -48,6 +54,32 @@ window.DA_STATE = {
   shiftTargetIndex: null,
   shiftTargetPosition: 'end', // 'start' or 'end'
   
+  // ── Bracket identity ────────────────────────────────────────────────────
+  // Brackets are referenced by STABLE ID, never by array position. A reference
+  // (bracket.from / bracket.to / firstBracketPoint) is either 'pN' — the
+  // proposition at index N — or a bracket's id. Because ids never change,
+  // deleting or reordering brackets requires no renumbering of references,
+  // comments, or highlights. (Legacy 'bN' index refs are converted on load by
+  // DA_PERSISTENCE.normalizeBracketData.)
+
+  /** Generate a unique bracket id. 'br' prefix guarantees it can't parse as 'pN'. */
+  newBracketId: function () {
+    return 'br' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  },
+
+  /** True if the reference points at a proposition ('pN'), false if a bracket id. */
+  isPropRef: function (ref) {
+    return typeof ref === 'string' && /^p\d+$/.test(ref);
+  },
+
+  bracketById: function (id) {
+    return window.DA_STATE.brackets.find((b) => b && b.id === id) || null;
+  },
+
+  bracketIndexById: function (id) {
+    return window.DA_STATE.brackets.findIndex((b) => b && b.id === id);
+  },
+
   // Helpers
   updateState: function(newData) {
     Object.assign(window.DA_STATE, newData);

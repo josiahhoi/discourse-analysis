@@ -35,7 +35,7 @@ async function startCloudSync() {
     initCloudSync(projectId);
     DA_UI.updateCloudUI(true, projectId);
     
-    const url = new URL(window.location);
+    const url = new URL(window.location.href);
     url.searchParams.set('project', projectId);
     window.history.pushState({}, '', url);
     
@@ -62,7 +62,7 @@ async function joinCloudSync(projectId) {
     initCloudSync(projectId);
     DA_UI.updateCloudUI(true, projectId);
     
-    const url = new URL(window.location);
+    const url = new URL(window.location.href);
     url.searchParams.set('project', projectId);
     window.history.pushState({}, '', url);
     
@@ -184,7 +184,7 @@ function stopCloudSync() {
   // We keep DA_STATE.activeProjectId so it can be resumed later
   DA_UI.updateCloudUI(false);
   
-  const url = new URL(window.location);
+  const url = new URL(window.location.href);
   url.searchParams.delete('project');
   window.history.pushState({}, '', url);
   

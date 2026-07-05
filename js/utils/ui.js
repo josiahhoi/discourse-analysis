@@ -94,9 +94,96 @@ function clearPropositionHighlights() {
 }
 
 function getCommentForBracket(bracketIdx) {
-  return DA_STATE.comments.find(c => c.type === 'bracket' && c.target?.bracketIdx === bracketIdx);
+  const b = DA_STATE.brackets[bracketIdx];
+  if (!b) return undefined;
+  return DA_STATE.comments.find(c => c.type === 'bracket' && c.target?.bracketId === b.id);
 }
 
+/**
+ * Append a reply (authored by the current reviewer) to a comment and re-render.
+ * Shared by the comment popover and the sidebar's reply inputs.
+ * Returns true if the reply was added.
+ */
+function addReplyToComment(comment, text) {
+  const trimmed = (text || '').trim();
+  if (!comment || !trimmed) return false;
+  DA_STATE.pushUndo('add reply');
+  comment.replies = comment.replies || [];
+  comment.replies.push({
+    author: localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || 'Anonymous',
+    text: trimmed,
+    timestamp: Date.now()
+  });
+  if (window.renderAll) window.renderAll();
+  return true;
+}
+
+
+/**
+ * Focus management for popovers/dialogs (accessibility):
+ *  - moves focus into the dialog on open (prefers a text field, else the first
+ *    focusable control, else the dialog itself),
+ *  - keeps Tab / Shift+Tab cycling inside the dialog instead of escaping to the
+ *    page behind it,
+ *  - restores focus to the element that opened the dialog when it closes —
+ *    but only when focus would otherwise be dropped on <body> (a click-outside
+ *    dismissal that landed on another control keeps that control's focus).
+ *
+ * Removal-based dialogs (popovers built with .remove()) are released
+ * automatically via a MutationObserver on the parent. Display-toggled modals
+ * must call the returned release() from their close path.
+ */
+function manageDialogFocus(dialog, opts = {}) {
+  let opener = document.activeElement;
+  if (!(opener instanceof HTMLElement) || opener === document.body) opener = null;
+
+  const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), '
+    + 'select:not([disabled]), textarea:not([disabled]), '
+    + '[tabindex]:not([tabindex="-1"]), [contenteditable="true"]';
+  const isVisible = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  const focusables = () => Array.from(dialog.querySelectorAll(FOCUSABLE)).filter(isVisible);
+
+  // The dialog itself is a programmatic focus target when it has no controls.
+  if (!dialog.hasAttribute('tabindex')) dialog.setAttribute('tabindex', '-1');
+  const initial = opts.initialFocus
+    || focusables().find((el) => el.matches('textarea, input, select'))
+    || focusables()[0]
+    || dialog;
+  initial.focus();
+
+  const onKeydown = (e) => {
+    if (e.key !== 'Tab') return;
+    const list = focusables();
+    if (list.length === 0) { e.preventDefault(); dialog.focus(); return; }
+    const first = list[0];
+    const last = list[list.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey && (active === first || active === dialog)) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault(); first.focus();
+    }
+  };
+  dialog.addEventListener('keydown', onKeydown);
+
+  let observer = null;
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    dialog.removeEventListener('keydown', onKeydown);
+    if (observer) observer.disconnect();
+    const active = document.activeElement;
+    const focusWasLost = !active || active === document.body || dialog.contains(active);
+    if (opener && opener.isConnected && focusWasLost) opener.focus();
+  };
+
+  if (dialog.parentNode) {
+    observer = new MutationObserver(() => { if (!dialog.isConnected) release(); });
+    observer.observe(dialog.parentNode, { childList: true });
+  }
+  return release;
+}
 
 function clampToViewport(el) {
   const r = el.getBoundingClientRect();
@@ -241,5 +328,5 @@ function makeCommentPopoverDraggableAndResizable(popover) {
 
 
 window.DA_UI = Object.assign(window.DA_UI || {}, {
-  showStatus, updateCloudUI, escapeHtml, renderCommentText, clampToViewport, makePopupDraggable, makeFixedDraggable, setupClickOutside, clearPropositionHighlights, getCommentForBracket, makeCommentPopoverDraggableAndResizable
+  showStatus, updateCloudUI, escapeHtml, renderCommentText, applyFormatting, clampToViewport, makePopupDraggable, makeFixedDraggable, setupClickOutside, clearPropositionHighlights, getCommentForBracket, addReplyToComment, makeCommentPopoverDraggableAndResizable, manageDialogFocus
 });
