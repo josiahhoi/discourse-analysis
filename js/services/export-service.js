@@ -13,13 +13,14 @@ const DA_EXPORT = {
     // back left-to-right with the wrong font.
     const propsEl = document.getElementById('propositions');
     return {
-      version: 2, // v2: brackets referenced by stable id (see normalizeBracketData)
+      version: 3, // v3: structured verseBreaks; v2: stable bracket ids (see normalizeBracketData)
       passageRef: DA_STATE.passageRef,
       isRTL: !!DA_STATE.isRTL,
       isHebrew: !!propsEl?.classList.contains('hebrew-text'),
       isGreek: !!propsEl?.classList.contains('greek-text'),
       propositions: DA_STATE.propositions,
       verseRefs: DA_STATE.verseRefs,
+      verseBreaks: DA_STATE.verseBreaks.map((a) => (a || []).slice()),
       brackets: DA_STATE.brackets.map((a) => ({ ...a })),
       formatTags: DA_STATE.formatTags.map((t) => ({ ...t })),
       wordArrows: DA_STATE.wordArrows.map((w) => ({ ...w })),

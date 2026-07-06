@@ -233,6 +233,7 @@ async function fetchPassage() {
 
     DA_STATE.propositions = result.propositions;
     DA_STATE.verseRefs = result.verseRefs;
+    DA_STATE.verseBreaks = result.propositions.map(() => []);
     DA_STATE.passageRef = result.passageRef;
     
     if (copyrightLabel) copyrightLabel.textContent = result.copyright;
@@ -327,6 +328,7 @@ if (importBtn) importBtn.addEventListener('click', () => {
     DA_STATE.propositions = [raw.replace(/\[\d+(?::\d+)?\]\s*/g, '').trim() || raw];
     DA_STATE.verseRefs = [startVerse];
   }
+  DA_STATE.verseBreaks = DA_STATE.propositions.map(() => []);
   DA_STATE.passageRef = passageRefInput?.value?.trim() || 'Imported text';
   if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
   const copyrightLabel = document.getElementById('copyrightLabel');

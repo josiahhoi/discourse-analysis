@@ -139,6 +139,10 @@ function renderPropositions() {
 
   while (DA_STATE.verseRefs.length < DA_STATE.propositions.length) DA_STATE.verseRefs.push(String(DA_STATE.verseRefs.length + 1));
   if (DA_STATE.verseRefs.length > DA_STATE.propositions.length) DA_STATE.verseRefs.length = DA_STATE.propositions.length;
+  // verseBreaks is parallel to propositions, like verseRefs above.
+  if (!Array.isArray(DA_STATE.verseBreaks)) DA_STATE.verseBreaks = [];
+  while (DA_STATE.verseBreaks.length < DA_STATE.propositions.length) DA_STATE.verseBreaks.push([]);
+  if (DA_STATE.verseBreaks.length > DA_STATE.propositions.length) DA_STATE.verseBreaks.length = DA_STATE.propositions.length;
 
   // Attach delegated listeners once
   if (!_delegatedListenersAttached) {
@@ -314,6 +318,14 @@ function remapPropositionAnchors(i, oldText, newText) {
       c.target.end = map(c.target.end);
     }
   });
+  // Verse boundaries ride along with the same diff-shift, then are cleaned:
+  // dropped if the edit pushed them out of range, deduped if two collapsed.
+  const vb = DA_STATE.verseBreaks && DA_STATE.verseBreaks[i];
+  if (vb && vb.length) {
+    DA_STATE.verseBreaks[i] = [...new Set(vb.map(map))]
+      .filter((b) => b > 0 && b < nLen)
+      .sort((a, b) => a - b);
+  }
 }
 
 function attachPropositionDelegatedListeners(container) {

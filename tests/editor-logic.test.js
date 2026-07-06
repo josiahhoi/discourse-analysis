@@ -11,8 +11,6 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { createSandbox, load } = require('./helpers/harness');
 
-const ZW = '​'; // zero-width marker the app inserts at verse transitions
-
 function setup(stateOverrides = {}) {
   const sb = createSandbox();
   load(sb, 'js/services/state.js');
@@ -46,11 +44,22 @@ test('split: no-op at the very start, very end, or whitespace-only tail', () => 
   assert.deepEqual(sb.DA_STATE.propositions, ['hello   ']);
 });
 
-test('split: at a verse-transition marker renumbers the two halves', () => {
-  const sb = setup({ propositions: [`first${ZW}second`], verseRefs: ['1-2'], indentation: [0] });
-  sb.DA_EDITOR.splitPropositionAtOffset(0, 5); // cursor adjacent to the marker
+test('split: at a recorded verse boundary renumbers the two halves', () => {
+  // "first second" merged from verses 1+2: verse 2 begins at offset 6.
+  const sb = setup({ propositions: ['first second'], verseRefs: ['1-2'], verseBreaks: [[6]], indentation: [0] });
+  sb.DA_EDITOR.splitPropositionAtOffset(0, 5); // cursor within ±2 of the boundary → snaps
   assert.deepEqual(sb.DA_STATE.propositions, ['first', 'second']);
   assert.deepEqual(sb.DA_STATE.verseRefs, ['1', '2']);
+  assert.deepEqual(sb.DA_STATE.verseBreaks, [[], []], 'boundary consumed by the split');
+});
+
+test('split: inside a verse of a merged range interpolates the refs', () => {
+  // verses 1-2 merged; verse 2 begins at 13. Split far from the boundary.
+  const sb = setup({ propositions: ['aaaa bbb cccc ddd eee'], verseRefs: ['1-2'], verseBreaks: [[14]], indentation: [0] });
+  sb.DA_EDITOR.splitPropositionAtOffset(0, 5); // inside verse 1
+  assert.deepEqual(sb.DA_STATE.verseRefs, ['1', '1-2']);
+  // the boundary moves to the second half, shifted into its coordinates
+  assert.deepEqual(sb.DA_STATE.verseBreaks, [[], [9]]);
 });
 
 test('split: shifts pN bracket refs after the split point', () => {
@@ -121,11 +130,30 @@ test('merge: joins a proposition into the one above it', () => {
   assert.deepEqual(sb.DA_STATE.verseRefs, ['5']);
 });
 
-test('merge: across a verse boundary keeps a marker and a combined ref', () => {
-  const sb = setup({ propositions: ['first', 'second'], verseRefs: ['1', '2'], indentation: [0, 0] });
+test('merge: across a verse boundary joins with a space and records the boundary', () => {
+  const sb = setup({ propositions: ['first', 'second'], verseRefs: ['1', '2'], verseBreaks: [[], []], indentation: [0, 0] });
   sb.DA_EDITOR.mergePropositions(1);
-  assert.equal(sb.DA_STATE.propositions[0], `first${ZW}second`);
+  assert.equal(sb.DA_STATE.propositions[0], 'first second', 'visible space, no invisible marker');
   assert.deepEqual(sb.DA_STATE.verseRefs, ['1-2']);
+  assert.deepEqual(sb.DA_STATE.verseBreaks, [[6]], 'verse 2 begins at offset 6');
+});
+
+test('merge → split round-trips the verse boundary exactly', () => {
+  const sb = setup({ propositions: ['first', 'second'], verseRefs: ['1', '2'], verseBreaks: [[], []], indentation: [0, 0] });
+  sb.DA_EDITOR.mergePropositions(1);
+  sb.DA_EDITOR.splitPropositionAtOffset(0, 6); // exactly at the recorded boundary
+  assert.deepEqual(sb.DA_STATE.propositions, ['first', 'second']);
+  assert.deepEqual(sb.DA_STATE.verseRefs, ['1', '2']);
+  assert.deepEqual(sb.DA_STATE.verseBreaks, [[], []]);
+});
+
+test('merging three verses accumulates two boundaries; both survive a re-merge shift', () => {
+  const sb = setup({ propositions: ['aa', 'bb', 'cc'], verseRefs: ['1', '2', '3'], verseBreaks: [[], [], []], indentation: [0, 0, 0] });
+  sb.DA_EDITOR.mergePropositions(1); // 'aa bb' breaks [3]
+  sb.DA_EDITOR.mergePropositions(1); // 'aa bb cc' breaks [3, 6]
+  assert.equal(sb.DA_STATE.propositions[0], 'aa bb cc');
+  assert.deepEqual(sb.DA_STATE.verseRefs, ['1-3']);
+  assert.deepEqual(sb.DA_STATE.verseBreaks, [[3, 6]]);
 });
 
 test('merge: no-op on the first proposition', () => {

@@ -341,6 +341,7 @@ function startNewBracket() {
     passageRef: '—',
     propositions: [],
     verseRefs: [],
+    verseBreaks: [],
     brackets: [],
     formatTags: [],
     wordArrows: [],
@@ -388,6 +389,9 @@ function startNewBracket() {
 }
 
 function parsePastedText(raw, defaultStartVerse = '1') {
+  // Strip zero-width characters (legacy verse markers, BOM, joiners) — verse
+  // boundaries are structured data now, never in-band characters.
+  raw = String(raw).replace(/[\u200B\u200C\u200D\uFEFF]/g, '');
   const verseParts = raw.split(/(?=\[\d+(?::\d+)?\])/);
   const props = [];
   const refs = [];

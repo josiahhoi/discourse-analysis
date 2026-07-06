@@ -109,6 +109,9 @@ function parsePassageReference(query) {
 }
 
 function parseBollsText(rawText) {
+  // Strip zero-width characters from source text (legacy verse markers, BOM,
+  // joiners) — verse boundaries are structured data now, never in-band chars.
+  rawText = String(rawText).replace(/[\u200B\u200C\u200D\uFEFF]/g, '');
   const verseParts = rawText.split(/(?=\[\d+\])/);
   const propositions = [];
   const verseRefs = [];

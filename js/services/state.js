@@ -7,6 +7,14 @@ window.DA_STATE = {
   passageRef: '',
   propositions: [],
   verseRefs: [],
+  // Structured verse boundaries: verseBreaks[i] is a sorted list of character
+  // offsets into propositions[i] where a LATER verse begins (empty for most
+  // lines). With verseRefs[i] === '3-5', verse 3 starts at 0, verse 4 at
+  // verseBreaks[i][0], verse 5 at verseBreaks[i][1]. This replaces the old
+  // scheme of hiding an invisible \u200B marker inside the text itself, which
+  // any ordinary retype/paste could silently destroy. Legacy files are
+  // migrated on load (DA_PERSISTENCE.normalizeBracketData).
+  verseBreaks: [],
   brackets: [],
   bracketSelectStep: 0,
   bracketFrom: null,
@@ -98,6 +106,7 @@ window.DA_STATE = {
       _debounceKey: debounceKey,
       propositions: s.propositions.slice(),
       verseRefs: s.verseRefs.slice(),
+      verseBreaks: s.verseBreaks.map(a => (a || []).slice()),
       brackets: s.brackets.map(a => ({ ...a })),
       formatTags: s.formatTags.map(t => ({ ...t })),
       wordArrows: s.wordArrows.map(w => ({ ...w })),
@@ -119,6 +128,7 @@ window.DA_STATE = {
     const s = window.DA_STATE;
     s.propositions = snapshot.propositions;
     s.verseRefs = snapshot.verseRefs;
+    s.verseBreaks = snapshot.verseBreaks || [];
     s.brackets = snapshot.brackets;
     s.formatTags = snapshot.formatTags;
     s.wordArrows = snapshot.wordArrows;

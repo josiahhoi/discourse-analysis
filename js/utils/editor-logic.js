@@ -10,7 +10,10 @@ function extractFormatTags(textSpan, propIndex) {
   const tags = [];
   function traverse(node) {
     if (node.nodeType === Node.TEXT_NODE) {
-      text += node.textContent;
+      // Strip zero-width characters (legacy verse markers, BOM, joiners) so
+      // pasted text can't smuggle invisible state back into the model. Offsets
+      // are computed from this accumulated text, so tags stay consistent.
+      text += node.textContent.replace(/[\u200B\u200C\u200D\uFEFF]/g, '');
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       if (node.tagName === 'BR') text += '\n';
       else if (node.tagName === 'DIV' && text.length > 0 && !text.endsWith('\n')) text += '\n';
@@ -44,29 +47,27 @@ function splitPropositionAtOffset(i, offset) {
   const startRef = partsRef[0];
   const endRef = partsRef[partsRef.length - 1];
 
-  // Count markers with fuzziness (±2 characters)
-  const nearbyStart = Math.max(0, offset - 2);
-  const nearbyEnd = Math.min(text.length, offset + 2);
-  const nearbyText = text.slice(nearbyStart, nearbyEnd);
-  
-  let markersBefore = (text.slice(0, offset).match(/\u200B/g) || []).length;
-  let isCleanBreak = false;
-  let markerIndexInText = -1;
-  
-  if (nearbyText.includes('\u200B')) {
-    isCleanBreak = true;
-    markerIndexInText = text.indexOf('\u200B', nearbyStart);
-    markersBefore = (text.slice(0, markerIndexInText + 1).match(/\u200B/g) || []).length;
-  }
+  // Verse boundaries are structured data (verseBreaks[i]: offsets where a later
+  // verse begins), not characters hidden in the text. A cursor within ±2 chars
+  // of a recorded boundary snaps to it — the split then falls exactly at the
+  // verse transition and renumbering is exact (same fuzziness the old invisible
+  // markers had).
+  const breaks = (DA_STATE.verseBreaks[i] || []).slice().sort((a, b) => a - b);
+  const snapped = breaks.find(b => Math.abs(b - offset) <= 2);
+  const isCleanBreak = snapped !== undefined;
+
+  // How many verse boundaries lie at/before the split point — drives the verse
+  // renumbering below (same semantics as the old marker count).
+  const markersBefore = isCleanBreak
+    ? breaks.indexOf(snapped) + 1
+    : breaks.filter(b => b <= offset).length;
+
+  // Where the second half's raw slice begins.
+  const splitAt = isCleanBreak ? snapped : offset;
 
   // Set the final text for both parts
-  if (isCleanBreak) {
-    DA_STATE.propositions[i] = text.slice(0, markerIndexInText).trimEnd();
-    DA_STATE.propositions.splice(i + 1, 0, text.slice(markerIndexInText + 1).trimStart());
-  } else {
-    DA_STATE.propositions[i] = text.slice(0, offset).trimEnd();
-    DA_STATE.propositions.splice(i + 1, 0, text.slice(offset).trimStart());
-  }
+  DA_STATE.propositions[i] = text.slice(0, splitAt).trimEnd();
+  DA_STATE.propositions.splice(i + 1, 0, text.slice(splitAt).trimStart());
 
   const interpolateRef = (base, offset) => {
     const num = parseInt(base, 10);
@@ -137,10 +138,21 @@ function splitPropositionAtOffset(i, offset) {
   // leading whitespace). Using plain `offset` here is what caused anchors to drift
   // right by the trimmed-whitespace length. `firstLen` is the length of the
   // (trimEnd'd) first half, used to clamp anchors that fall in its trimmed tail.
-  const secondStart = isCleanBreak ? (markerIndexInText + 1) : offset;
+  const secondStart = splitAt;
   const _rawSecond = text.slice(secondStart);
   const secondCut = secondStart + (_rawSecond.length - _rawSecond.trimStart().length);
   const firstLen = DA_STATE.propositions[i].length;
+
+  // Distribute the verse boundaries between the halves. A snapped boundary is
+  // consumed by the split itself (it becomes the seam between the two lines);
+  // earlier ones stay with the first half, later ones move to the second half
+  // shifted into its coordinate space. Out-of-range results are dropped.
+  const secondLen = DA_STATE.propositions[i + 1].length;
+  DA_STATE.verseBreaks[i] = breaks.filter(b => b < secondStart && b > 0 && b < firstLen);
+  DA_STATE.verseBreaks.splice(i + 1, 0, breaks
+    .filter(b => b >= secondStart)
+    .map(b => b - secondCut)
+    .filter(b => b > 0 && b < secondLen));
 
   // Adjust word arrows
   DA_STATE.wordArrows.forEach(wa => {
@@ -228,14 +240,33 @@ function mergePropositions(i) {
   const endA = refA.split('-').pop();
   const startB = refB.split('-')[0];
   
-  // Join with a single character (zero-width marker at a verse transition, else a
-  // space). Keep prevText intact \u2014 only trim currText's leading whitespace and the
-  // combined trailing whitespace. Trimming the *front* of the combined string (as a
-  // plain .trim() did) would drop prevText's leading whitespace and silently shift
-  // all of prop i-1's existing anchors; not trimming the front keeps them valid.
-  const joiner = (endA && startB && endA !== startB) ? '\u200B' : ' ';
+  // Join with a single visible space. Keep prevText intact \u2014 only trim
+  // currText's leading whitespace and the combined trailing whitespace. Trimming
+  // the *front* of the combined string (as a plain .trim() did) would drop
+  // prevText's leading whitespace and silently shift all of prop i-1's existing
+  // anchors; not trimming the front keeps them valid.
+  //
+  // When the join crosses a verse boundary, that boundary is recorded as
+  // structured data in verseBreaks (the offset where currText's verse begins in
+  // the merged string) \u2014 previously an invisible \u200B character was hidden in
+  // the text here, which any retype could silently destroy. Bonus: merged
+  // verses are now separated by a real space instead of being jammed together.
+  const isVerseTransition = !!(endA && startB && endA !== startB);
   const _currLeadingWS = currText.length - currText.replace(/^\s+/, '').length;
-  DA_STATE.propositions[i - 1] = (prevText + joiner + currText.replace(/^\s+/, '')).replace(/\s+$/, '');
+  DA_STATE.propositions[i - 1] = (prevText + ' ' + currText.replace(/^\s+/, '')).replace(/\s+$/, '');
+
+  // currText's content begins here in the merged string (see prevLen below).
+  const _currStartsAt = prevText.length + 1;
+  const mergedBreaks = (DA_STATE.verseBreaks[i - 1] || []).slice();
+  if (isVerseTransition) mergedBreaks.push(_currStartsAt);
+  (DA_STATE.verseBreaks[i] || []).forEach((b) => {
+    mergedBreaks.push(b + _currStartsAt - _currLeadingWS);
+  });
+  const _mergedLen = DA_STATE.propositions[i - 1].length;
+  DA_STATE.verseBreaks[i - 1] = [...new Set(mergedBreaks)]
+    .filter((b) => b > 0 && b < _mergedLen)
+    .sort((a, b) => a - b);
+  DA_STATE.verseBreaks.splice(i, 1);
   
   if (refA && refB && refA !== refB) {
     const partsA = refA.split('-');
@@ -285,9 +316,9 @@ function mergePropositions(i) {
   }
   
   // Where currText's content now begins in the merged string: prevText is kept
-  // whole, plus the 1-char joiner, minus the leading whitespace we trimmed off
-  // currText (so anchors that were after that whitespace land correctly).
-  const prevLen = prevText.length + joiner.length - _currLeadingWS;
+  // whole, plus the 1-char space joiner, minus the leading whitespace we trimmed
+  // off currText (so anchors that were after that whitespace land correctly).
+  const prevLen = _currStartsAt - _currLeadingWS;
 
   // Adjust word arrows
   DA_STATE.wordArrows.forEach(wa => {

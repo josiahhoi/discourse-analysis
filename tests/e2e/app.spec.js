@@ -413,6 +413,53 @@ test('New bracket forgets the remembered cloud project and old undo/redo history
   expect(errors).toEqual([]);
 });
 
+test('verse boundaries: merge joins with a visible space, survives export/import, re-split renumbers', async ({ page }) => {
+  const errors = collectErrors(page);
+  await importPassage(page); // verse 1 + verse 2
+
+  // Merge verse 2 up into verse 1 with a real Backspace at the start of line 2.
+  await setCaret(page, 1, 0);
+  await page.keyboard.press('Backspace');
+  await expect(page.locator('.proposition-block')).toHaveCount(1);
+
+  const merged = await page.evaluate(() => ({
+    text: window.DA_STATE.propositions[0],
+    refs: window.DA_STATE.verseRefs.slice(),
+    breaks: window.DA_STATE.verseBreaks.map(a => a.slice()),
+  }));
+  expect(merged.text).toBe('In the beginning God created the heavens And the earth was without form');
+  expect(merged.text).not.toContain('\u200B'); // no invisible characters in content
+  expect(merged.refs).toEqual(['1-2']);
+  expect(merged.breaks).toEqual([[41]]); // "And..." (verse 2) begins at offset 41
+
+  // The boundary survives a real export → re-import round trip.
+  await page.locator('#exportMenuBtn').click();
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#exportMenu [data-action="json"]').click();
+  const filePath = await (await downloadPromise).path();
+  await page.goto('/');
+  await page.locator('#importFileInput').setInputFiles(filePath);
+  await expect(page.locator('.proposition-block')).toHaveCount(1);
+  const reimported = await page.evaluate(() => window.DA_STATE.verseBreaks.map(a => a.slice()));
+  expect(reimported).toEqual([[41]]);
+
+  // Re-split at the recorded boundary (Enter with the caret on "And") — the
+  // original verse numbering comes back exactly.
+  await setCaret(page, 0, 41);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.proposition-block')).toHaveCount(2);
+  const after = await page.evaluate(() => ({
+    props: window.DA_STATE.propositions.slice(),
+    refs: window.DA_STATE.verseRefs.slice(),
+    breaks: window.DA_STATE.verseBreaks.map(a => a.slice()),
+  }));
+  expect(after.props).toEqual(['In the beginning God created the heavens', 'And the earth was without form']);
+  expect(after.refs).toEqual(['1', '2']);
+  expect(after.breaks).toEqual([[], []]);
+
+  expect(errors).toEqual([]);
+});
+
 test('Escape cancels an in-progress bracket selection', async ({ page }) => {
   const errors = collectErrors(page);
   await importPassage(page);

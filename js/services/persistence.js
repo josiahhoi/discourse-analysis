@@ -44,6 +44,68 @@ function normalizeBracketData(data) {
     data = { ...data, verseRefs: data.verseRefs.map(normalizeVerseRef) };
   }
 
+  // ── Verse boundaries: legacy invisible markers → structured verseBreaks ────
+  // Old files hid a zero-width \u200B character in the text wherever a merge
+  // crossed a verse boundary. Strip those out of the text, record each position
+  // in verseBreaks (offsets where a later verse begins), and shift every
+  // character-offset anchor on the affected lines (format tags, text comments,
+  // word arrows) left by the number of markers removed before it. Runs before
+  // the arrow clamp below so clamping sees the final text.
+  {
+    const MARKER = '\u200B';
+    const verseBreaks = Array.isArray(data.verseBreaks)
+      ? data.propositions.map((_, i) => (Array.isArray(data.verseBreaks[i]) ? data.verseBreaks[i].slice() : []))
+      : data.propositions.map(() => []);
+
+    const markerIdxs = []; // per prop: sorted old marker indices, or null
+    let anyMarkers = false;
+    const newProps = data.propositions.map((p, i) => {
+      if (typeof p !== 'string' || p.indexOf(MARKER) === -1) { markerIdxs.push(null); return p; }
+      anyMarkers = true;
+      const idxs = [];
+      let out = '';
+      for (let c = 0; c < p.length; c++) {
+        if (p[c] === MARKER) idxs.push(c);
+        else out += p[c];
+      }
+      markerIdxs.push(idxs);
+      // Marker at old index m (k-th marker) → the next verse's text starts at
+      // new offset m - k (k earlier markers were removed before it).
+      const collected = idxs.map((m, k) => m - k).filter((b) => b > 0 && b < out.length);
+      verseBreaks[i] = [...new Set([...verseBreaks[i], ...collected])].sort((a, b) => a - b);
+      return out;
+    });
+
+    if (anyMarkers) {
+      const shiftOffset = (propIdx, o) => {
+        const idxs = markerIdxs[propIdx];
+        if (!idxs || typeof o !== 'number') return o;
+        let d = 0;
+        for (const m of idxs) { if (m < o) d++; }
+        return o - d;
+      };
+      data = {
+        ...data,
+        propositions: newProps,
+        verseBreaks,
+        formatTags: (Array.isArray(data.formatTags) ? data.formatTags : []).map((f) => ({
+          ...f, start: shiftOffset(f.propIndex, f.start), end: shiftOffset(f.propIndex, f.end)
+        })),
+        comments: (Array.isArray(data.comments) ? data.comments : []).map((c) => {
+          if (c.type !== 'text' || !c.target) return c;
+          return { ...c, target: { ...c.target, start: shiftOffset(c.target.propIndex, c.target.start), end: shiftOffset(c.target.propIndex, c.target.end) } };
+        }),
+        wordArrows: (Array.isArray(data.wordArrows) ? data.wordArrows : []).map((wa) => ({
+          ...wa,
+          fromStart: shiftOffset(wa.fromProp, wa.fromStart), fromEnd: shiftOffset(wa.fromProp, wa.fromEnd),
+          toStart: shiftOffset(wa.toProp, wa.toStart), toEnd: shiftOffset(wa.toProp, wa.toEnd)
+        }))
+      };
+    } else {
+      data = { ...data, verseBreaks };
+    }
+  }
+
   // Heal arrow anchors that earlier offset-remapping may have stretched across
   // whitespace/blank lines — clamp each back to a single word so they render
   // sanely. Arrows are word-level; comments may span phrases so they're left.
@@ -187,7 +249,7 @@ function normalizeBracketData(data) {
     brackets,
     comments,
     bracketHighlights: highlights,
-    version: 2 // stable-id reference format
+    version: 3 // v3: structured verseBreaks; v2: stable-id references
   };
 }
 
@@ -220,6 +282,10 @@ function importBracket(data) {
     verseRefs: Array.isArray(data.verseRefs) && data.verseRefs.length === data.propositions.length
       ? data.verseRefs.slice()
       : data.propositions.map((_, i) => String(i + 1)),
+    // normalizeBracketData above guarantees verseBreaks exists and is aligned.
+    verseBreaks: Array.isArray(data.verseBreaks)
+      ? data.propositions.map((_, i) => (Array.isArray(data.verseBreaks[i]) ? data.verseBreaks[i].slice() : []))
+      : data.propositions.map(() => []),
     brackets: (Array.isArray(data.brackets) ? data.brackets : (Array.isArray(data.arcs) ? data.arcs : [])).map((a) => ({ ...a })),
     formatTags: Array.isArray(data.formatTags) ? data.formatTags.map((t) => ({ ...t })) : [],
     wordArrows: Array.isArray(data.wordArrows) ? data.wordArrows.map((w) => ({ ...w })) : [],

@@ -400,7 +400,12 @@ window.DA_KEYBOARD = {
 
               // Commit this block's current text before merging — edits otherwise
               // only commit on focusout, so a merge would run on stale text.
+              // Remap offset anchors (arrows/comments/verse boundaries) onto the
+              // new text first, exactly as the focusout commit does.
               const _c = DA_EDITOR.extractFormatTags(textSpan, i);
+              if (_c.text !== DA_STATE.propositions[i]) {
+                remapPropositionAnchors(i, DA_STATE.propositions[i], _c.text);
+              }
               DA_STATE.propositions[i] = _c.text;
               DA_STATE.formatTags = DA_STATE.formatTags.filter(f => f.propIndex !== i).concat(_c.tags);
 
@@ -490,6 +495,11 @@ window.DA_KEYBOARD = {
           // only commit on focusout, so the split would run on stale text (and the
           // length guard could even make Enter silently do nothing).
           const _c = DA_EDITOR.extractFormatTags(textSpan, i);
+          if (_c.text !== DA_STATE.propositions[i]) {
+            // Remap offset anchors (arrows/comments/verse boundaries) onto the
+            // uncommitted text before splitting against it.
+            remapPropositionAnchors(i, DA_STATE.propositions[i], _c.text);
+          }
           DA_STATE.propositions[i] = _c.text;
           DA_STATE.formatTags = DA_STATE.formatTags.filter(f => f.propIndex !== i).concat(_c.tags);
           DA_EDITOR.splitPropositionAtOffset(i, offset);

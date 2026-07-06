@@ -44,10 +44,18 @@ From the full code review (July 2026). Organized by effort. Check items off as t
   reference, comment, and highlight. Now brackets are referenced by a permanent ID
   that never changes, and the renumbering passes are deleted. Old files migrate
   automatically on load (`normalizeBracketData`).
-- [ ] **Separate content from presentation in the text model** — indentation is stored as
-  literal 8-space runs and verse breaks as invisible `​` characters *inside* the
-  text. Store "text / verse ref / indent level" as separate fields instead, so
-  formatting can't be corrupted by editing.
+- [x] **Separate verse boundaries from text content** — verse breaks are now structured
+  data (`verseBreaks[i]`: offsets where a later verse begins) instead of invisible
+  `​` characters hidden inside the text. Old files migrate on load (markers
+  stripped, positions recorded, all offset anchors shifted); merged verses now join
+  with a visible space; boundaries follow edits and are cleanly dropped (not
+  corrupted) by a full retype; incoming fetched/pasted text is sanitized of
+  zero-width characters. Save format is v3.
+  Deliberately NOT changed: Tab-in-Text-Edit still inserts literal spaces for
+  intra-line poetry layout — those are visible, WYSIWYG content with none of the
+  invisible-marker corruption risk; restructuring them into per-line indent fields
+  would break the character-offset anchor model and belongs to the
+  contenteditable-replacement project below.
 - [ ] **Move off `contenteditable` + `execCommand`** — the text editor is built on browser
   APIs that are officially deprecated. Follows naturally after the text-model work.
 - [ ] **Real cloud auth** — the profile password and project codes are checked in the app,

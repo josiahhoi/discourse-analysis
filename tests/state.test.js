@@ -69,6 +69,16 @@ test('undo stack is capped at 50 entries', () => {
   assert.equal(sb.DA_STATE.undoStack.length, 50);
 });
 
+test('undo/redo snapshots deep-copy verseBreaks', () => {
+  const sb = setup({ propositions: ['ab cd'], verseRefs: ['1-2'], verseBreaks: [[3]] });
+  sb.DA_STATE.pushUndo('edit');
+  sb.DA_STATE.verseBreaks[0].push(99); // mutate AFTER the snapshot
+  sb.DA_STATE.undo();
+  assert.deepEqual(sb.DA_STATE.verseBreaks, [[3]], 'undo restored the boundary list');
+  sb.DA_STATE.redo();
+  assert.deepEqual(sb.DA_STATE.verseBreaks, [[3, 99]], 'redo restored the mutated list');
+});
+
 test('redo restores the state undo just left, and returns the action name', () => {
   const sb = setup({ propositions: ['a'], verseRefs: ['1'] });
   sb.DA_STATE.pushUndo('edit');

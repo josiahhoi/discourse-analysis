@@ -72,7 +72,7 @@ test('migrates legacy numeric brackets into nested pN/id refs', () => {
   );
   assert.equal(out.brackets[1].from, out.brackets[0].id);
   assert.equal(out.brackets[1].to, 'p2');
-  assert.equal(out.version, 2);
+  assert.equal(out.version, 3);
 });
 
 test('converts positional bN refs, comment bracketIdx, and highlight keys to ids', () => {
@@ -116,4 +116,35 @@ test('returns non-bracket data unchanged (no propositions array)', () => {
   const sb = setup();
   const input = { foo: 'bar' };
   assert.equal(sb.DA_PERSISTENCE.normalizeBracketData(input), input);
+});
+
+
+test('migrates legacy zero-width verse markers into verseBreaks and shifts anchors', () => {
+  const sb = setup();
+  const ZW = '\u200B';
+  // Old marker-coordinate layout: 'first' [0,5), ZW@5, 'second' [6,12), ZW@12,
+  // 'third' [13,18). Stripped layout: 'first' [0,5), 'second' [5,11), 'third' [11,16).
+  const out = sb.DA_PERSISTENCE.normalizeBracketData({
+    propositions: [`first${ZW}second${ZW}third`],
+    verseRefs: ['1-3'],
+    formatTags: [{ type: 'bold', propIndex: 0, start: 13, end: 18 }], // 'third'
+    comments: [{ id: 'c1', type: 'text', target: { propIndex: 0, start: 6, end: 12 }, text: 'x' }], // 'second'
+    wordArrows: [{ fromProp: 0, fromStart: 0, fromEnd: 5, toProp: 0, toStart: 13, toEnd: 18 }],
+  });
+  assert.equal(out.propositions[0], 'firstsecondthird', 'markers stripped');
+  assert.deepEqual(out.verseBreaks, [[5, 11]], 'verse 2 at 5, verse 3 at 11');
+  assert.deepEqual([out.formatTags[0].start, out.formatTags[0].end], [11, 16], 'bold shifted by 2 markers');
+  assert.deepEqual([out.comments[0].target.start, out.comments[0].target.end], [5, 11], 'comment shifted by 1 marker');
+  assert.deepEqual([out.wordArrows[0].toStart, out.wordArrows[0].toEnd], [11, 16], 'arrow anchor shifted');
+});
+
+test('files with structured verseBreaks pass through unchanged', () => {
+  const sb = setup();
+  const out = sb.DA_PERSISTENCE.normalizeBracketData({
+    propositions: ['first second'],
+    verseRefs: ['1-2'],
+    verseBreaks: [[6]],
+  });
+  assert.deepEqual(out.verseBreaks, [[6]]);
+  assert.equal(out.propositions[0], 'first second');
 });

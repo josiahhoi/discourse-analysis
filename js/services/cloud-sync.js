@@ -190,6 +190,7 @@ function handleCloudData(data) {
 
   DA_STATE.propositions = data.propositions || [];
   DA_STATE.verseRefs = data.verseRefs || [];
+  DA_STATE.verseBreaks = data.verseBreaks || []; // renderer pads to length
   DA_STATE.brackets = data.brackets || [];
   DA_STATE.formatTags = data.formatTags || [];
   DA_STATE.wordArrows = data.wordArrows || [];
