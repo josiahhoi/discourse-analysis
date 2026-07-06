@@ -521,7 +521,7 @@ function showExportMenu(e) {
     <div class="menu-item" data-action="json">Download Project JSON</div>
     <div class="menu-item" data-action="copy-json">Copy Project Data (JSON)</div>
     <hr>
-    <div class="menu-item" data-action="cloud-toggle">${DA_STATE.cloudUnsubscribe ? 'Turn Cloud Sync OFF' : 'Turn Cloud Sync ON'}</div>
+    <div class="menu-item" data-action="cloud-toggle">${DA_CLOUD.isLive() ? 'Turn Cloud Sync OFF' : 'Turn Cloud Sync ON'}</div>
   `;
 
   document.body.appendChild(menu);
@@ -564,7 +564,7 @@ function showExportMenu(e) {
           navigator.clipboard.writeText(data).then(() => showStatus('Project data copied!', 'success'));
       }
       if (action === 'cloud-toggle') {
-          if (DA_STATE.cloudUnsubscribe) {
+          if (DA_CLOUD.isLive()) {
               DA_CLOUD.stopCloudSync();
           } else {
               DA_CLOUD.startCloudSync();

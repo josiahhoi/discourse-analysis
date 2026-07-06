@@ -145,6 +145,48 @@ test('undo: Ctrl+Z reverts a split', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test('redo: Ctrl+Y restores an undone split; the Redo button and Ctrl+Shift+Z also work', async ({ page }) => {
+  const errors = collectErrors(page);
+  await importPassage(page);
+
+  const text = 'In the beginning God created the heavens';
+  await setCaret(page, 0, text.indexOf('God'));
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.proposition-block')).toHaveCount(3);
+
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('.proposition-block')).toHaveCount(2);
+
+  await page.keyboard.press('Control+y');
+  await expect(page.locator('.proposition-block')).toHaveCount(3);
+  await expect(page.locator('.proposition-block').nth(0)).toContainText('In the beginning');
+  await expect(page.locator('.proposition-block').nth(1)).toContainText('God created the heavens');
+
+  // The Redo button does the same thing as the shortcut (test via undo/redo again).
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('.proposition-block')).toHaveCount(2);
+  await page.locator('#redoBtn').click();
+  await expect(page.locator('.proposition-block')).toHaveCount(3);
+
+  // Ctrl+Shift+Z is the alternate redo chord.
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('.proposition-block')).toHaveCount(2);
+  await page.keyboard.press('Control+Shift+Z');
+  await expect(page.locator('.proposition-block')).toHaveCount(3);
+
+  // A new action after an undo clears the redo branch — Redo has nothing left.
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('.proposition-block')).toHaveCount(2);
+  const secondLineText = 'And the earth was without form';
+  await setCaret(page, 1, secondLineText.indexOf('earth'));
+  await page.keyboard.press('Enter'); // a genuinely different split — new branch
+  await expect(page.locator('.proposition-block')).toHaveCount(3);
+  await page.locator('#redoBtn').click();
+  await expect(page.locator('.status.info')).toContainText('Nothing to redo');
+
+  expect(errors).toEqual([]);
+});
+
 /** Color a word (global offsets) via the real right-click → swatch menu. */
 async function colorWord(page, lineIndex, start, end, colorHex) {
   await page.evaluate(({ lineIndex, start, end }) => {
@@ -220,6 +262,153 @@ test('relationship picker: type-to-filter narrows, cross-profile terms match, En
   await page.keyboard.press('Enter');
   await expect(page.locator('#labelPicker')).toHaveCount(0);
   await expect(page.locator('.bracket-group.action-result')).toHaveCount(1);
+
+  expect(errors).toEqual([]);
+});
+
+test('keyboard-only bracket creation: focus dot → Enter → ArrowDown → Enter → type → Enter', async ({ page }) => {
+  const errors = collectErrors(page);
+  await importPassage(page);
+
+  // Land on the first dot (Tab order includes it now), then do the whole flow
+  // without the mouse.
+  await page.locator('.prop-dot').nth(0).focus();
+  await page.keyboard.press('Enter'); // first point selected
+  await expect(page.locator('.proposition-block').nth(0)).toHaveClass(/selected-for-bracket/);
+
+  await page.keyboard.press('ArrowDown'); // jump to the next line's dot
+  await expect(page.locator('.prop-dot').nth(1)).toBeFocused();
+
+  await page.keyboard.press('Enter'); // second point → picker opens, search focused
+  await expect(page.locator('#labelPicker .picker-search')).toBeFocused();
+  await page.keyboard.type('ground');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.bracket-group.ground')).toHaveCount(1);
+
+  // The bracket's line is itself a keyboard target: Enter reopens the picker.
+  await page.locator('.bracket-hitbox[tabindex]').first().focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#labelPicker')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  expect(errors).toEqual([]);
+});
+
+test('mode shortcuts: T/A/B/C toggle, Escape exits, typing is never hijacked', async ({ page }) => {
+  const errors = collectErrors(page);
+  await importPassage(page);
+  await page.locator('#passageInput').blur(); // make sure nothing has focus
+
+  // T toggles Text Edit; Escape exits.
+  await page.keyboard.press('t');
+  await expect(page.locator('#textEditModeBtn')).toHaveClass(/active/);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#textEditModeBtn')).not.toHaveClass(/active/);
+
+  // B toggles Block Diagram; Escape returns to bracket view.
+  await page.keyboard.press('b');
+  await expect(page.locator('.bracket-canvas-wrapper')).toHaveClass(/block-diagram-active/);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.bracket-canvas-wrapper')).not.toHaveClass(/block-diagram-active/);
+
+  // C toggles the comments panel; Escape hides it.
+  await page.keyboard.press('c');
+  await expect(page.locator('#commentsPreview')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#commentsPreview')).toBeHidden();
+
+  // Typing guard: "t" typed into the passage-reference field stays a "t".
+  await page.locator('#passageInput').fill('');
+  await page.locator('#passageInput').type('t');
+  await expect(page.locator('#passageInput')).toHaveValue('t');
+  await expect(page.locator('#textEditModeBtn')).not.toHaveClass(/active/);
+
+  // C with selected text opens the comment popover instead of toggling the panel.
+  await page.evaluate(() => {
+    const span = document.querySelectorAll('.proposition-block .proposition-text')[0];
+    span.focus();
+    window.DA_EDITOR.setSelectionByGlobalOffset(span, 7, 16); // "beginning"
+  });
+  await page.keyboard.press('c');
+  await expect(page.locator('#commentPopover')).toBeVisible();
+  await expect(page.locator('#commentPopover .popover-title')).toContainText('beginning');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#commentPopover')).toHaveCount(0);
+
+  expect(errors).toEqual([]);
+});
+
+test('startup recovery: only the cloud banner shows when both a draft and a project code exist', async ({ page }) => {
+  const errors = collectErrors(page);
+  // Seed a local draft, then load WITH a cloud project code. Previously this
+  // stacked a native "reconnect?" confirm on top of the draft banner.
+  await page.addInitScript(() => {
+    localStorage.setItem('biblebracket_draft', JSON.stringify({
+      passageRef: 'Draft Passage', propositions: ['saved line'], verseRefs: ['1'],
+    }));
+  });
+  await page.goto('/?project=ABC123');
+
+  const banners = page.locator('.draft-recovery-banner');
+  await expect(banners).toHaveCount(1);
+  await expect(banners).toContainText('cloud project ABC123');
+  await expect(page.locator('[data-action="restore"]')).toHaveCount(0); // no draft banner
+
+  // "Start Fresh" is one-and-done: drops the param, no second prompt appears.
+  await page.locator('[data-action="dismiss"]').click();
+  await expect(page.locator('.draft-recovery-banner')).toHaveCount(0);
+  expect(new URL(page.url()).searchParams.get('project')).toBeNull();
+
+  expect(errors).toEqual([]);
+});
+
+test('startup recovery: the draft banner shows when there is no cloud project', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('biblebracket_draft', JSON.stringify({
+      passageRef: 'Draft Passage', propositions: ['saved line'], verseRefs: ['1'],
+    }));
+  });
+  await page.goto('/');
+
+  const banners = page.locator('.draft-recovery-banner');
+  await expect(banners).toHaveCount(1);
+  await expect(banners).toContainText('Unsaved work');
+
+  expect(errors).toEqual([]);
+});
+
+test('New bracket forgets the remembered cloud project and old undo/redo history', async ({ page }) => {
+  const errors = collectErrors(page);
+  await importPassage(page);
+
+  // Simulate a remembered (stopped) cloud session + some undo/redo history.
+  await page.evaluate(() => { window.DA_STATE.activeProjectId = 'OLD999'; });
+  const text = 'In the beginning God created the heavens';
+  await setCaret(page, 0, text.indexOf('God'));
+  await page.keyboard.press('Enter'); // split (undoable)
+  await page.keyboard.press('Control+z'); // undo → redoStack now holds the split
+  await expect(page.locator('.proposition-block')).toHaveCount(2);
+
+  // New → Discard current work.
+  await page.locator('#newBracketBtn').click();
+  await page.locator('.new-bracket-dialog [data-action="discard"]').click();
+  await expect(page.locator('.proposition-block')).toHaveCount(0);
+
+  // No spurious "Cloud Sync stopped" toast for a non-live session.
+  await expect(page.locator('.status')).toHaveText(/New bracket started/);
+
+  const state = await page.evaluate(() => ({
+    activeProjectId: window.DA_STATE.activeProjectId,
+    redoLen: window.DA_STATE.redoStack.length,
+    undoLen: window.DA_STATE.undoStack.length,
+  }));
+  // The old project id is forgotten — "Turn Cloud Sync ON" later can't offer to
+  // resume (and overwrite) the previous project with this new bracket.
+  expect(state.activeProjectId).toBeNull();
+  // And redo can't resurrect the previous passage into the fresh workspace.
+  expect(state.redoLen).toBe(0);
+  expect(state.undoLen).toBe(0);
 
   expect(errors).toEqual([]);
 });

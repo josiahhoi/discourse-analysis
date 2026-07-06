@@ -11,8 +11,8 @@ function toggleTextEditMode() {
 
     if (btn) {
         btn.title = DA_STATE.textEditMode
-            ? 'Text edit mode on: edit text directly, use Tab for indent, Enter for newlines.'
-            : 'Toggle text edit mode: edit text freely with newlines and indentation.';
+            ? 'Text edit mode on: edit text directly, use Tab for indent, Enter for newlines. (T or Esc to exit)'
+            : 'Toggle text edit mode: edit text freely with newlines and indentation. (T)';
     }
 
     if (DA_STATE.textEditMode) {

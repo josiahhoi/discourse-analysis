@@ -57,6 +57,13 @@
             <div class="shortcut-item"><span>Right-Click Text</span> <span>Comment / Color Code</span></div>
             <div class="shortcut-item"><kbd>Ctrl</kbd>+<kbd>S</kbd> <span>Quick Save</span></div>
             <div class="shortcut-item"><kbd>Ctrl</kbd>+<kbd>Z</kbd> <span>Undo</span></div>
+            <div class="shortcut-item"><kbd>Ctrl</kbd>+<kbd>Y</kbd> <span>Redo (or Ctrl+Shift+Z)</span></div>
+            <div class="shortcut-item"><kbd>T</kbd> <span>Text Edit mode</span></div>
+            <div class="shortcut-item"><kbd>A</kbd> <span>Arrow mode</span></div>
+            <div class="shortcut-item"><kbd>B</kbd> <span>Block Diagram</span></div>
+            <div class="shortcut-item"><kbd>C</kbd> <span>Comments (panel, or comment on selected text)</span></div>
+            <div class="shortcut-item"><kbd>Esc</kbd> <span>Exit mode / close dialog</span></div>
+            <div class="shortcut-item"><kbd>Tab</kbd>/<kbd>↑↓</kbd>+<kbd>Enter</kbd> <span>Brackets by keyboard (via the dots)</span></div>
             <div class="shortcut-item"><span>Drop File</span> <span>Import JSON/PNG/PDF</span></div>
             <hr>
             <div class="save-load-row">
@@ -69,7 +76,7 @@
           <label>View</label>
           <div class="save-load-row">
             <button id="themeToggle" type="button" class="secondary" title="Switch between Light and Dark mode">Light Mode</button>
-            <button id="toggleCommentsBtn" type="button" class="secondary" title="Show or hide comments on brackets">Show Comments</button>
+            <button id="toggleCommentsBtn" type="button" class="secondary" aria-keyshortcuts="c" title="Show or hide comments on brackets (C)">Show Comments (C)</button>
           </div>
         </div>
 
@@ -128,11 +135,12 @@
             </div>
           </div>
           <div class="workspace-toolbar" id="workspaceToolbar">
-            <button id="textEditModeBtn" type="button" class="toolbar-btn" title="Toggle text edit mode: edit text freely with newlines and indentation.">Text Edit</button>
-            <button id="arrowModeBtn" type="button" class="toolbar-btn" title="Toggle arrow mode: draw word-to-word arrows.">Add Arrows</button>
-            <button id="blockDiagramBtn" type="button" class="toolbar-btn" title="Toggle block diagram view: show structure with indentation instead of brackets (read-only).">Block Diagram</button>
+            <button id="textEditModeBtn" type="button" class="toolbar-btn" aria-keyshortcuts="t" title="Toggle text edit mode: edit text freely with newlines and indentation. (T)">Text Edit (T)</button>
+            <button id="arrowModeBtn" type="button" class="toolbar-btn" aria-keyshortcuts="a" title="Toggle arrow mode: draw word-to-word arrows. (A)">Add Arrows (A)</button>
+            <button id="blockDiagramBtn" type="button" class="toolbar-btn" aria-keyshortcuts="b" title="Toggle block diagram view: show structure with indentation instead of brackets (read-only). (B)">Block Diagram (B)</button>
             <div class="toolbar-divider"></div>
-            <button id="undoDivideBtn" type="button" class="toolbar-btn undo-action-btn" title="Undo last action">Undo</button>
+            <button id="undoDivideBtn" type="button" class="toolbar-btn undo-action-btn" aria-keyshortcuts="Control+Z" title="Undo last action (Ctrl/Cmd+Z)">Undo</button>
+            <button id="redoBtn" type="button" class="toolbar-btn undo-action-btn" aria-keyshortcuts="Control+Y" title="Redo last undone action (Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z)">Redo</button>
           </div>
           <div class="passage-header-right">
             <span id="passageAuthor" class="passage-author" aria-label="Page author"></span>

@@ -16,9 +16,11 @@ function showCommentPopover(config) {
     DA_STATE.activeCommentTarget = null;
   }
 
-  // Set active target for highlighting while popover is open
-  DA_STATE.activeCommentTarget = isBracket 
-    ? { type: 'bracket', bracketIdx } 
+  // Set active target for highlighting while popover is open. Bracket targets
+  // use the stable id (not the array index) so the highlight can't drift to a
+  // different bracket if the array is reordered mid-popover (e.g. cloud update).
+  DA_STATE.activeCommentTarget = isBracket
+    ? { type: 'bracket', bracketId: DA_STATE.brackets[bracketIdx]?.id }
     : { type: 'text', propIndex, start, end };
   if (window.renderAll) window.renderAll();
 

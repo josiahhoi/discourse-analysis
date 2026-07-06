@@ -14,6 +14,7 @@ window.DA_STATE = {
   connectBracketToBracketIdx: null,
   _connectCancelListener: null,
   undoStack: [],
+  redoStack: [],
   comments: [],
   isRenderingPropositions: false,
   textEditMode: false,
@@ -86,21 +87,13 @@ window.DA_STATE = {
   },
   
   lastUndoTime: 0,
-  
-  pushUndo: function(action, debounceKey = '') {
+
+  /** Deep-copy the current persistent state into a labeled snapshot. Shared by
+   *  pushUndo (before an action) and undo/redo (to capture the state being
+   *  left, so the opposite operation can bring it back). */
+  _snapshot: function(action, debounceKey) {
     const s = window.DA_STATE;
-    const now = Date.now();
-
-    // Debounce rapid identical actions keyed on both action name and affected index
-    if (s.undoStack.length > 0) {
-      const lastSnapshot = s.undoStack[s.undoStack.length - 1];
-      if (lastSnapshot.action === action && lastSnapshot._debounceKey === debounceKey && now - s.lastUndoTime < 1000) {
-        s.lastUndoTime = now;
-        return;
-      }
-    }
-
-    s.undoStack.push({
+    return {
       action,
       _debounceKey: debounceKey,
       propositions: s.propositions.slice(),
@@ -118,23 +111,12 @@ window.DA_STATE = {
       customLabels: s.customLabels.map(cl => ({ ...cl })),
       bracketSelectStep: s.bracketSelectStep,
       firstBracketPoint: s.firstBracketPoint
-    });
-    if (s.undoStack.length > 50) s.undoStack.shift();
-    s.lastUndoTime = now;
-
-    // Any undoable action means local state now differs from the cloud copy.
-    // (Debounced repeats return early above, but the flag was already set by the
-    // first call and stays set until the next successful sync, so that's fine.)
-    s.cloudDirty = true;
-    if (window.DA_CLOUD && DA_CLOUD.updateSyncUI) DA_CLOUD.updateSyncUI();
+    };
   },
 
-  undo: function() {
+  /** Apply a snapshot's fields onto live state. Shared by undo and redo. */
+  _restore: function(snapshot) {
     const s = window.DA_STATE;
-    if (s.undoStack.length === 0) return null;
-    const snapshot = s.undoStack.pop();
-
-    // Restore state
     s.propositions = snapshot.propositions;
     s.verseRefs = snapshot.verseRefs;
     s.brackets = snapshot.brackets;
@@ -146,7 +128,62 @@ window.DA_STATE = {
     s.customLabels = snapshot.customLabels || [];
     s.bracketSelectStep = snapshot.bracketSelectStep ?? 0;
     s.firstBracketPoint = snapshot.firstBracketPoint ?? null;
+  },
 
+  pushUndo: function(action, debounceKey = '') {
+    const s = window.DA_STATE;
+    const now = Date.now();
+
+    // Debounce rapid identical actions keyed on both action name and affected index
+    if (s.undoStack.length > 0) {
+      const lastSnapshot = s.undoStack[s.undoStack.length - 1];
+      if (lastSnapshot.action === action && lastSnapshot._debounceKey === debounceKey && now - s.lastUndoTime < 1000) {
+        s.lastUndoTime = now;
+        return;
+      }
+    }
+
+    s.undoStack.push(s._snapshot(action, debounceKey));
+    if (s.undoStack.length > 50) s.undoStack.shift();
+    s.lastUndoTime = now;
+
+    // A fresh action starts a new branch of history — any steps reachable by
+    // redo belonged to the branch we just left, so they're discarded (matches
+    // standard undo/redo behavior in other editors).
+    if (s.redoStack.length) s.redoStack = [];
+
+    // Any undoable action means local state now differs from the cloud copy —
+    // tell the session service (live → live-dirty; no-op when not live).
+    // Fallback for isolated tests where the cloud module isn't loaded.
+    if (window.DA_CLOUD && DA_CLOUD.markDirty) DA_CLOUD.markDirty();
+    else s.cloudDirty = true;
+  },
+
+  undo: function() {
+    const s = window.DA_STATE;
+    if (s.undoStack.length === 0) return null;
+    const snapshot = s.undoStack.pop();
+
+    // Capture the state being left (tagged with the action about to be undone)
+    // so redo can bring it back.
+    s.redoStack.push(s._snapshot(snapshot.action, snapshot._debounceKey));
+    if (s.redoStack.length > 50) s.redoStack.shift();
+
+    s._restore(snapshot);
+    return snapshot.action;
+  },
+
+  redo: function() {
+    const s = window.DA_STATE;
+    if (s.redoStack.length === 0) return null;
+    const snapshot = s.redoStack.pop();
+
+    // Capture the state being left back onto the undo stack, so a subsequent
+    // undo can reverse this redo.
+    s.undoStack.push(s._snapshot(snapshot.action, snapshot._debounceKey));
+    if (s.undoStack.length > 50) s.undoStack.shift();
+
+    s._restore(snapshot);
     return snapshot.action;
   }
 };

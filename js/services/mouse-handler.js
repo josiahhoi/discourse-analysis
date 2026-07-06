@@ -86,35 +86,10 @@ window.DA_MOUSE = {
       });
 
       propositionsContainer.addEventListener('contextmenu', (e) => {
-        const sel = window.getSelection();
-        if (!sel.rangeCount || sel.isCollapsed) return;
-        
-        const range = sel.getRangeAt(0);
-        let startNode = range.startContainer;
-        if (startNode.nodeType === Node.TEXT_NODE) startNode = startNode.parentElement;
-        
-        const textSpan = startNode.closest?.('.proposition-text');
-        if (!textSpan) return;
-        
+        const target = DA_UI.getPropositionSelection();
+        if (!target) return;
         e.preventDefault();
-        
-        const block = textSpan.closest('.proposition-block');
-        const propIndex = parseInt(block.dataset.index, 10);
-        
-        const preStart = document.createRange();
-        preStart.setStart(textSpan, 0);
-        preStart.setEnd(range.startContainer, range.startOffset);
-        const start = preStart.toString().length;
-        
-        const preEnd = document.createRange();
-        preEnd.setStart(textSpan, 0);
-        preEnd.setEnd(range.endContainer, range.endOffset);
-        const fullText = textSpan.textContent || '';
-        let end = Math.min(preEnd.toString().length, fullText.length);
-        
-        if (start >= end) return;
-
-        DA_UI.showTextContextMenu(propIndex, start, end, e.clientY, e.clientX);
+        DA_UI.showTextContextMenu(target.propIndex, target.start, target.end, e.clientY, e.clientX);
       });
     }
 
@@ -141,6 +116,32 @@ window.DA_MOUSE = {
           e.preventDefault();
           const bIdx = parseInt(group.dataset.index, 10);
           DA_UI.showBracketActions(bIdx, e.clientY, e.clientX);
+        }
+      });
+
+      // Keyboard activation for the focusable SVG targets (connection nodes and
+      // bracket lines get tabindex/role=button in renderBrackets): Enter/Space
+      // does what a click does.
+      bracketCanvas.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+
+        const node = e.target.closest?.('.connection-node');
+        if (node) {
+          e.preventDefault();
+          const b = DA_STATE.brackets[parseInt(node.dataset.bracketIdx, 10)];
+          if (b) {
+            const rect = node.getBoundingClientRect();
+            DA_EDITOR.handleDotClick(b.id, rect.left + rect.width / 2, rect.top + rect.height / 2);
+          }
+          return;
+        }
+
+        const hit = e.target.closest?.('.bracket-hitbox');
+        if (hit) {
+          e.preventDefault();
+          const bIdx = parseInt(hit.dataset.index, 10);
+          const rect = hit.getBoundingClientRect();
+          DA_UI.showLabelPicker(bIdx, rect.top + rect.height / 2, rect.right + 40);
         }
       });
     }

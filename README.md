@@ -38,14 +38,24 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 
 ### Desktop (Recommended)
 1. Download the latest release for your platform from the `dist/` folder or the Releases page.
-   - **Windows**: `Discourse Analysis 2.9.3 x64 Portable.exe` (No installation required)
-   - **macOS**: `Discourse Analysis-2.9.3-arm64-mac.zip`
+   - **Windows**: `Discourse Analysis 3.0.0 x64 Portable.exe` (No installation required)
+   - **macOS**: `Discourse Analysis-3.0.0-arm64-mac.zip`
 2. Run the application directly.
 
+### ESV text source
+Selecting **ESV** tries the official Crossway API first and quietly falls back to
+the keyless [bolls.life](https://bolls.life) source when no key is available (the
+status toast says "via Bolls" when that happens). The official API is
+**desktop-and-developer only**: the key lives in a `.env` file next to the app
+source (copy `.env.example`, get a free key at
+[api.esv.org](https://api.esv.org/account/create-application/)) and is read by the
+Electron main process so it never reaches the browser page. There is no in-app
+key field, and the web build always uses the Bolls fallback — it has no server
+that could hold the secret.
+
 ### Web / Development
-1. Open `index.html` in a modern browser.
-2. For ESV fetching, get a free API key at [api.esv.org](https://api.esv.org/account/create-application/).
-3. Enter your API key in the settings (stored in browser `localStorage` only).
+1. Serve the folder statically (e.g. `node tests/e2e/serve.js`) or open `index.html` in a modern browser.
+2. ESV/NASB text comes from the Bolls fallback automatically — no key needed.
 
 ## Usage
 

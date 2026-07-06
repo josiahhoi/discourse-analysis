@@ -331,10 +331,11 @@ function handleNewBracket() {
 }
 
 function startNewBracket() {
-  // If cloud sync is active, turn it off for the new project
-  if (window.DA_CLOUD && window.DA_CLOUD.stopCloudSync) {
-    window.DA_CLOUD.stopCloudSync();
-  }
+  // A new bracket replaces the document: exit any live session AND forget the
+  // remembered project id, in one service call (see cloud-sync.js). Carrying
+  // the id forward would let a later "Turn Cloud Sync ON" offer to resume —
+  // and overwrite — the OLD project with the new content.
+  if (window.DA_CLOUD) DA_CLOUD.resetSessionForNewContent();
 
   DA_STATE.updateState({
     passageRef: '—',
@@ -346,6 +347,7 @@ function startNewBracket() {
     comments: [],
     indentation: [],
     undoStack: [],
+    redoStack: [],
     bracketSelectStep: 0,
 
     firstBracketPoint: null,

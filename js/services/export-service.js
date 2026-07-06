@@ -30,7 +30,7 @@ const DA_EXPORT = {
       })),
       copyrightLabel: document.getElementById('copyrightLabel')?.textContent || '',
       pageAuthor: (document.getElementById('pageAuthor')?.value || '').trim(),
-      activeProjectId: DA_STATE.activeProjectId || null,
+      activeProjectId: (window.DA_CLOUD && DA_CLOUD.getProjectId) ? DA_CLOUD.getProjectId() : (DA_STATE.activeProjectId || null),
       customLabels: (DA_STATE.customLabels || []).map(cl => ({ ...cl })),
       indentation: DA_STATE.indentation.slice(),
       bracketHighlights: Object.assign({}, DA_STATE.bracketHighlights),

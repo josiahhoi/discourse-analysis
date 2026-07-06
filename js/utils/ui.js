@@ -5,9 +5,13 @@
 function showStatus(message, type = 'info') {
     const existing = document.querySelector('.status');
     if (existing) existing.remove();
-  
+
     const el = document.createElement('div');
     el.className = `status ${type}`;
+    // Announce to screen readers — the toast narrates multi-step flows
+    // ("Select second node to create bracket") and mode toggles.
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
     el.textContent = message;
     document.body.appendChild(el);
   
@@ -91,6 +95,40 @@ function clearPropositionHighlights() {
   document.querySelectorAll('.proposition-block').forEach(block => {
     block.classList.remove('highlight', 'searching');
   });
+}
+
+/**
+ * If the current DOM selection is a non-collapsed range inside a proposition,
+ * return it as { propIndex, start, end } character offsets — the shape comment
+ * targets use. Shared by the right-click text menu and the "C" shortcut.
+ */
+function getPropositionSelection() {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || sel.isCollapsed) return null;
+
+  const range = sel.getRangeAt(0);
+  let startNode = range.startContainer;
+  if (startNode.nodeType === Node.TEXT_NODE) startNode = startNode.parentElement;
+
+  const textSpan = startNode.closest?.('.proposition-text');
+  if (!textSpan) return null;
+
+  const block = textSpan.closest('.proposition-block');
+  const propIndex = parseInt(block.dataset.index, 10);
+
+  const preStart = document.createRange();
+  preStart.setStart(textSpan, 0);
+  preStart.setEnd(range.startContainer, range.startOffset);
+  const start = preStart.toString().length;
+
+  const preEnd = document.createRange();
+  preEnd.setStart(textSpan, 0);
+  preEnd.setEnd(range.endContainer, range.endOffset);
+  const fullText = textSpan.textContent || '';
+  const end = Math.min(preEnd.toString().length, fullText.length);
+
+  if (start >= end) return null;
+  return { propIndex, start, end };
 }
 
 function getCommentForBracket(bracketIdx) {
@@ -328,5 +366,5 @@ function makeCommentPopoverDraggableAndResizable(popover) {
 
 
 window.DA_UI = Object.assign(window.DA_UI || {}, {
-  showStatus, updateCloudUI, escapeHtml, renderCommentText, applyFormatting, clampToViewport, makePopupDraggable, makeFixedDraggable, setupClickOutside, clearPropositionHighlights, getCommentForBracket, addReplyToComment, makeCommentPopoverDraggableAndResizable, manageDialogFocus
+  showStatus, updateCloudUI, escapeHtml, renderCommentText, applyFormatting, clampToViewport, makePopupDraggable, makeFixedDraggable, setupClickOutside, clearPropositionHighlights, getCommentForBracket, getPropositionSelection, addReplyToComment, makeCommentPopoverDraggableAndResizable, manageDialogFocus
 });

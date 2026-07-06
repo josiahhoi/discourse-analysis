@@ -210,9 +210,9 @@ function importBracket(data) {
   // Legacy migration
   data = normalizeBracketData(data);
 
-  // Loading a different project exits any active live cloud session, so the old
-  // project's listener/URL/badge don't linger and overwrite the loaded data.
-  if (DA_STATE.cloudUnsubscribe && window.DA_CLOUD) DA_CLOUD.stopCloudSync();
+  // Loading a different project replaces the document: exit any live session
+  // and forget the previous project id, in one service call (see cloud-sync.js).
+  if (window.DA_CLOUD) DA_CLOUD.resetSessionForNewContent();
 
   DA_STATE.updateState({
     passageRef: data.passageRef || 'Imported bracket',
@@ -233,10 +233,14 @@ function importBracket(data) {
     indentation: Array.isArray(data.indentation) ? data.indentation.slice() : [],
     bracketHighlights: (data.bracketHighlights && typeof data.bracketHighlights === 'object') ? Object.assign({}, data.bracketHighlights) : {},
     undoStack: [],
+    redoStack: [],
     bracketSelectStep: 0,
-    firstBracketPoint: null,
-    activeProjectId: data.activeProjectId || null
+    firstBracketPoint: null
   });
+
+  // The file may carry the project id it was shared under — remember it (state
+  // 'remembered') so "Turn Cloud Sync ON" can offer to resume that project.
+  if (window.DA_CLOUD && data.activeProjectId) DA_CLOUD.adoptRememberedProject(data.activeProjectId);
 
   const passageRefEl = document.getElementById('passageRef');
   if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
@@ -468,6 +472,60 @@ function initDraftRecovery() {
     banner.querySelector('[data-action="dismiss"]').addEventListener('click', () => {
       banner.remove();
       clearDraft();
+    });
+}
+
+/**
+ * Single startup recovery prompt. A returning user could otherwise face two
+ * dialogs at once — a cloud "reconnect?" and a local "restore draft?". Since
+ * reconnecting loads the authoritative cloud copy (making the local mirror
+ * moot), cloud reconnect takes priority: when a project code is present in the
+ * URL we show ONLY the cloud banner; otherwise we fall back to draft recovery.
+ * Both use the same non-blocking banner style (the cloud path was previously a
+ * jarring native confirm()).
+ */
+function initStartupRecovery(projectFromUrl) {
+    if (projectFromUrl) {
+        showCloudReconnectBanner(projectFromUrl);
+    } else {
+        initDraftRecovery();
+    }
+}
+
+function showCloudReconnectBanner(projectId) {
+    const wrapper = document.querySelector('.bracket-canvas-wrapper') || document.body;
+    const banner = document.createElement('div');
+    banner.className = 'draft-recovery-banner';
+    banner.setAttribute('role', 'dialog');
+    banner.setAttribute('aria-label', 'Reconnect to cloud project');
+    banner.innerHTML = `
+      <span class="draft-recovery-text">🌐 You were connected to cloud project <strong>${DA_UI.escapeHtml(projectId)}</strong>. Reconnect?</span>
+      <div class="draft-recovery-actions">
+        <button type="button" data-action="reconnect">Reconnect</button>
+        <button type="button" data-action="dismiss" class="secondary">Start Fresh</button>
+      </div>
+    `;
+    wrapper.prepend(banner);
+
+    // Drop the stale ?project= param so a later reload doesn't re-prompt.
+    const dropProjectParam = () => {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('project');
+        window.history.replaceState({}, '', url);
+    };
+
+    banner.querySelector('[data-action="reconnect"]').addEventListener('click', () => {
+        banner.remove();
+        DA_UI.showStatus(`Loading project ${projectId}…`, 'info');
+        if (window.DA_CLOUD) DA_CLOUD.joinCloudSync(projectId);
+    });
+    banner.querySelector('[data-action="dismiss"]').addEventListener('click', () => {
+        banner.remove();
+        dropProjectParam();
+        // "Start Fresh" is one-and-done: no second draft prompt. The local draft
+        // is just this cloud session's autosaved mirror, so re-offering it would
+        // be a redundant second popup. It stays in localStorage — a param-free
+        // reload can still surface it — but we don't chain another prompt here.
     });
 }
 
@@ -703,6 +761,7 @@ function initDragAndDrop() {
 
 window.DA_PERSISTENCE = {
     normalizeBracketData, saveDraft, clearDraft, getDraft, importBracket, initMagicPaste, initDraftRecovery,
+    initStartupRecovery, showCloudReconnectBanner,
     addToRecent, renderRecentList, getExportFilename, attachFilenameObservers,
     injectPngMetadata, extractPngMetadata, extractPdfMetadata, processDNA, saveBracket, exportBracket, initDragAndDrop
 };

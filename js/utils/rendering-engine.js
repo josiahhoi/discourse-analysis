@@ -483,6 +483,10 @@ function createPropositionBlock(text, i, verseDisplay, highlightEntries) {
   const dot = document.createElement('div');
   dot.className = 'prop-dot';
   dot.dataset.index = i;
+  // Keyboard target: Tab (or ArrowUp/Down between dots) + Enter/Space acts
+  // like a click. aria-label is kept current in updatePropositionBlock.
+  dot.tabIndex = 0;
+  dot.setAttribute('role', 'button');
   block.appendChild(dot);
 
   const refSpan = document.createElement('span');
@@ -503,7 +507,11 @@ function createPropositionBlock(text, i, verseDisplay, highlightEntries) {
 function updatePropositionBlock(block, text, i, verseDisplay, highlightEntries) {
   block.dataset.index = i;
   const dot = block.querySelector('.prop-dot');
-  if (dot) dot.dataset.index = i;
+  if (dot) {
+    dot.dataset.index = i;
+    const vd = verseDisplay !== undefined ? verseDisplay : computeVerseDisplay(i);
+    dot.setAttribute('aria-label', `Verse ${vd || i + 1}: select for bracket`);
+  }
 
   const isDirectPropSelection = DA_STATE.firstBracketPoint === `p${i}`;
   let isRangeSelected = isDirectPropSelection;
@@ -849,6 +857,20 @@ function getBracketX(bracketIdx) {
 function renderBrackets() {
   const svg = document.getElementById('bracketCanvas');
   if (!svg) return;
+
+  // Keyboard-focus continuity: the SVG is rebuilt from scratch each pass, which
+  // would silently drop focus (e.g. mid keyboard bracket-creation on a
+  // connection node). Remember which bracket's node/line held focus and restore
+  // it onto the rebuilt element at the end.
+  let _refocus = null;
+  const _active = document.activeElement;
+  if (_active && svg.contains(_active)) {
+    const _kind = _active.classList.contains('connection-node') ? 'node'
+      : _active.classList.contains('bracket-hitbox') ? 'line' : null;
+    const _idx = parseInt(_kind === 'node' ? _active.dataset.bracketIdx : _active.dataset.index, 10);
+    if (_kind && DA_STATE.brackets[_idx]) _refocus = { kind: _kind, id: DA_STATE.brackets[_idx].id };
+  }
+
   svg.innerHTML = '';
   if (DA_STATE.brackets.length === 0) return;
   
@@ -904,6 +926,8 @@ function renderBrackets() {
   // over bracket pairs; recomputing recursive extents inside those loops is
   // what made deep nestings quadratic-to-cubic per frame.
   const _extents = DA_STATE.brackets.map((_, idx) => getBracketExtent(idx));
+  // Verse displays for aria-labels, one suffix computation per pass.
+  const _verseMap = precomputeVerseSuffixes(DA_STATE.verseRefs);
 
   // --- RTL mirroring ---
   // In right-to-left mode the bracket gutter is on the right, so every *computed*
@@ -1004,7 +1028,7 @@ function renderBrackets() {
 
     // Create Group for Hovering and Selection
     const isBracketSelected = DA_STATE.firstBracketPoint === bracket.id;
-    const isActiveTarget = DA_STATE.activeCommentTarget && DA_STATE.activeCommentTarget.type === 'bracket' && DA_STATE.activeCommentTarget.bracketIdx === i;
+    const isActiveTarget = DA_STATE.activeCommentTarget && DA_STATE.activeCommentTarget.type === 'bracket' && DA_STATE.activeCommentTarget.bracketId === bracket.id;
     const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     const color = (window.DA_PROFILES ? DA_PROFILES.getColor(bracket.type) : DA_CONSTANTS.RELATIONSHIP_COLORS[bracket.type]) || DA_CONSTANTS.RELATIONSHIP_COLORS.unspecified;
     group.setAttribute('style', `--bracket-color: ${color};`);
@@ -1042,11 +1066,20 @@ function renderBrackets() {
       class: 'bracket-line'
     }));
 
-    // Hitbox
+    // Hitbox. The vertical one doubles as the bracket's keyboard target
+    // (Enter opens the label picker via the canvas keydown handler); the arm
+    // hitboxes below stay mouse-only so each bracket is a single tab stop.
+    const _ext = _extents[i];
+    const _typeName = window.DA_PROFILES ? DA_PROFILES.getName(bracket.type) : bracket.type;
+    const _spokenType = (!_typeName || _typeName === '?') ? 'Unlabeled' : _typeName;
+    const _vLabel = `${_spokenType} bracket, verses ${_verseMap[_ext.from] || _ext.from + 1}–${_verseMap[_ext.to] || _ext.to + 1}. Press Enter to edit.`;
     group.appendChild(createSVG('line', {
       x1: x, y1: topY,
       x2: x, y2: ((bracket.isCollapsed && !isCollapsedCoord) ? topY : bottomY),
       class: 'bracket-hitbox',
+      tabindex: 0,
+      role: 'button',
+      'aria-label': _vLabel,
       dataset: { index: i }
     }));
 
@@ -1105,6 +1138,9 @@ function renderBrackets() {
       cy: nodeY,
       r: 5,
       class: `${(DA_STATE.bracketSelectStep === 1 && DA_STATE.firstBracketPoint === bracket.id) ? 'connection-node active-node' : 'connection-node'} ${bracket.isCollapsed ? 'collapsed' : ''} ${_hiddenNodeIdx.has(i) ? 'series-absorbed' : ''}`,
+      tabindex: 0,
+      role: 'button',
+      'aria-label': `${_spokenType} bracket node: select for bracket`,
       dataset: { bracketIdx: i }
     }));
 
@@ -1156,6 +1192,17 @@ function renderBrackets() {
   } finally {
     // The memo is only valid for this pass's dot positions — never leave it on.
     _connCache = null;
+  }
+
+  // Restore keyboard focus onto the rebuilt element (see top of function).
+  if (_refocus) {
+    const bIdx = DA_STATE.bracketIndexById(_refocus.id);
+    if (bIdx !== -1) {
+      const el = _refocus.kind === 'node'
+        ? svg.querySelector(`.connection-node[data-bracket-idx="${bIdx}"]`)
+        : svg.querySelector(`.bracket-hitbox[tabindex][data-index="${bIdx}"]`);
+      if (el) el.focus();
+    }
   }
 }
 

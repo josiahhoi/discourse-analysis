@@ -22,7 +22,7 @@ const APP_GLOBALS = {
   DA_EDITOR: 'readonly', DA_RENDERER: 'readonly', DA_EXPORT: 'readonly',
   DA_KEYBOARD: 'readonly', DA_MOUSE: 'readonly', DA_BLOCK: 'readonly',
   // app.js
-  undoLastAction: 'readonly', fetchPassage: 'readonly',
+  undoLastAction: 'readonly', redoLastAction: 'readonly', fetchPassage: 'readonly',
   // window.* aliases set in app.js / state.js
   renderAll: 'readonly', saveBracket: 'readonly', pushUndo: 'readonly',
   scheduleVisualUpdate: 'readonly', updateBracketPositions: 'readonly',
@@ -76,6 +76,7 @@ const APP_GLOBALS = {
   getExportFilename: 'readonly', getBookAbbreviation: 'readonly',
   updateFilenamePlaceholder: 'readonly', attachFilenameObservers: 'readonly',
   initMagicPaste: 'readonly', initDraftRecovery: 'readonly',
+  initStartupRecovery: 'readonly', showCloudReconnectBanner: 'readonly',
   injectPngMetadata: 'readonly', extractPngMetadata: 'readonly',
   extractPdfMetadata: 'readonly', processDNA: 'readonly', crc32: 'readonly',
   exportBracket: 'readonly', initDragAndDrop: 'readonly',

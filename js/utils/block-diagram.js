@@ -250,7 +250,7 @@
     const btn = document.getElementById('blockDiagramBtn');
     if (btn) {
       btn.classList.toggle('active', _active);
-      btn.textContent = _active ? 'Bracket View' : 'Block Diagram';
+      btn.textContent = _active ? 'Bracket View (B)' : 'Block Diagram (B)';
     }
     if (_active) {
       render();

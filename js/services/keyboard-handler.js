@@ -34,7 +34,36 @@ window.DA_KEYBOARD = {
         e.preventDefault();
         if (typeof undoLastAction === 'function') undoLastAction();
       }
-      
+
+      // Redo: Ctrl/Cmd+Y, or Ctrl/Cmd+Shift+Z (e.key is 'Z' — uppercase — when
+      // Shift is held, so this never collides with the plain-Z undo check above).
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'Z' && e.shiftKey))) {
+        const el = document.activeElement;
+        const block = el && el.closest ? el.closest('.proposition-block') : null;
+
+        if (block) {
+          // Mirrors the undo guard above: don't hijack native field-level redo
+          // while there's an uncommitted edit sitting in this field.
+          const i = parseInt(block.dataset.index, 10);
+          const span = block.querySelector('.proposition-text');
+          let hasUncommitted = false;
+          if (span && !isNaN(i) && window.DA_EDITOR && DA_EDITOR.extractFormatTags) {
+            hasUncommitted = DA_EDITOR.extractFormatTags(span, i).text !== DA_STATE.propositions[i];
+          }
+          if (hasUncommitted) return;
+          e.preventDefault();
+          if (el.blur) el.blur();
+          if (typeof redoLastAction === 'function') redoLastAction();
+          return;
+        }
+
+        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
+          return;
+        }
+        e.preventDefault();
+        if (typeof redoLastAction === 'function') redoLastAction();
+      }
+
       // Save
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
@@ -108,6 +137,66 @@ window.DA_KEYBOARD = {
           if (window.renderAll) window.renderAll();
           return;
         }
+
+        // 4. Exit the Block Diagram view, then hide the comments panel — one
+        // layer per press, mirroring the T/A/B/C toggles.
+        if (window.DA_BLOCK && DA_BLOCK.isActive()) {
+          DA_BLOCK.setActive(false);
+          return;
+        }
+        if (DA_STATE.showCommentsEnabled) {
+          document.getElementById('toggleCommentsBtn')?.click();
+          return;
+        }
+      }
+
+      // Single-letter mode shortcuts: T (text edit), A (arrows), B (block
+      // diagram), C (comment selection / toggle comments panel). Only fire when
+      // the user isn't typing, no dialog is open, and no modifier is held —
+      // pressing T inside a text field must type a "t".
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[a-z]$/i.test(e.key)) {
+        const k = e.key.toLowerCase();
+        const el = document.activeElement;
+        const inDialog = el && el.closest
+          && el.closest('.label-picker, .context-menu, .comment-popover, .modal-overlay');
+        const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+
+        if (!inDialog) {
+          // C with a text selection opens the comment popover — even though
+          // focus sits in the (read-only outside Text Edit mode) proposition
+          // text. In Text Edit mode typing wins, so this is skipped there.
+          if (k === 'c' && !DA_STATE.textEditMode && window.DA_UI && DA_UI.getPropositionSelection) {
+            const target = DA_UI.getPropositionSelection();
+            if (target) {
+              e.preventDefault();
+              DA_UI.showCommentPopoverForText(target.propIndex, target.start, target.end);
+              return;
+            }
+          }
+
+          if (!typing) {
+            if (k === 't') {
+              e.preventDefault();
+              DA_MODES.toggleTextEditMode();
+              return;
+            }
+            if (k === 'a' && !DA_STATE.isRTL) { // arrows are disabled in RTL
+              e.preventDefault();
+              DA_MODES.toggleArrowMode();
+              return;
+            }
+            if (k === 'b' && window.DA_BLOCK) {
+              e.preventDefault();
+              DA_BLOCK.toggle();
+              return;
+            }
+            if (k === 'c') {
+              e.preventDefault();
+              document.getElementById('toggleCommentsBtn')?.click();
+              return;
+            }
+          }
+        }
       }
 
       // Delete/Backspace globally
@@ -134,6 +223,28 @@ window.DA_KEYBOARD = {
       if (!block) return;
       const i = parseInt(block.dataset.index, 10);
       const textSpan = block.querySelector('.proposition-text') || block;
+
+      // --- KEYBOARD BRACKET CREATION (focused dot) ---
+      // Dots are focusable buttons (tabindex/role set in the renderer).
+      // Enter/Space acts like a click; ArrowUp/Down jumps between dots without
+      // tabbing through the text in between. Runs before the split logic so
+      // Enter on a dot never splits a line.
+      if (e.target.classList && e.target.classList.contains('prop-dot')) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const rect = e.target.getBoundingClientRect();
+          DA_EDITOR.handleDotClick(`p${i}`, rect.left + rect.width / 2, rect.top + rect.height / 2);
+          return;
+        }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          const dots = Array.from(container.querySelectorAll('.proposition-block:not(.folded-hidden) .prop-dot'));
+          const pos = dots.indexOf(e.target);
+          const next = dots[pos + (e.key === 'ArrowDown' ? 1 : -1)];
+          if (next) next.focus();
+          return;
+        }
+      }
 
       const sel = window.getSelection();
       const hasSelection = sel && !sel.isCollapsed;

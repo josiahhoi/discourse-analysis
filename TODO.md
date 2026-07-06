@@ -21,10 +21,17 @@ From the full code review (July 2026). Organized by effort. Check items off as t
 
 ## Medium effort (about a day each)
 
-- [ ] **Redo support** — undo keeps full snapshots, so a redo stack is cheap to add.
-  Users who undo one step too far currently lose the work.
-- [ ] **Keyboard-accessible brackets** — bracket creation requires mouse-clicking 10px dots.
-  Add: Tab/arrow keys to move between lines, Enter to mark start/end of a bracket.
+- [x] **Redo support** — a redo stack mirrors the undo stack (undo/redo each hand a
+  snapshot to the other). Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z, plus a Redo button next to
+  Undo. A new edit after undoing discards the now-unreachable redo branch, matching
+  standard editor behavior.
+- [x] **Keyboard-accessible brackets + mode shortcuts** — dots, connection nodes, and
+  bracket lines are focusable buttons: Tab (or ↑/↓ between dots) + Enter/Space creates
+  brackets; Enter on a bracket line opens its label picker; focus survives SVG
+  rebuilds; status toasts are aria-live. Single-key shortcuts T/A/B/C toggle Text
+  Edit / Arrows / Block Diagram / Comments (C also comments on selected text), with
+  Escape backing out one layer at a time. Remaining for the ARIA task: the
+  right-click bracket menu is still mouse-only.
 - [x] **One end-to-end browser test (Playwright)** — `npm run test:e2e` drives real
   Chromium through import → split (Enter) → bracket (dot clicks) → label → comment →
   JSON download → re-import, plus undo and Escape flows. Covers the rendering/
@@ -47,6 +54,14 @@ From the full code review (July 2026). Organized by effort. Check items off as t
   not on the server, so the Firestore rules must allow public writes. If the userbase
   grows beyond people who trust each other: Firebase anonymous auth + server-side
   ownership rules.
+- [x] **Consolidate cloud-session state into one service** (from an external review) —
+  cloud-sync.js is now the sole owner of the session, exposed as an explicit state
+  machine (inactive / remembered / live / live-dirty) with one
+  `resetSessionForNewContent()` call for every content-replacing feature. Migrating
+  the call sites surfaced and fixed a third instance of the old bug class: pasting
+  raw text never detached a live session (the next cloud snapshot would clobber the
+  paste, or a manual Sync would overwrite the project). Unit-tested against a fake
+  Firestore.
 
 ## Lower priority (only if it becomes a real problem)
 

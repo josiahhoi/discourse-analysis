@@ -33,6 +33,7 @@ const importBtn = document.getElementById('importBtn');
 const importFileInput = document.getElementById('importFileInput');
 const projectSettingsBtn = document.getElementById('projectSettingsBtn');
 const undoDivideBtn = document.getElementById('undoDivideBtn');
+const redoBtn = document.getElementById('redoBtn');
 const textEditModeBtn = document.getElementById('textEditModeBtn');
 const arrowModeBtn = document.getElementById('arrowModeBtn');
 const openMenuBtn = document.getElementById('openMenuBtn');
@@ -114,6 +115,11 @@ if (undoDivideBtn) {
     undoLastAction();
   });
 }
+if (redoBtn) {
+  redoBtn.addEventListener('click', () => {
+    redoLastAction();
+  });
+}
 
 function undoLastAction() {
   const action = DA_STATE.undo();
@@ -122,6 +128,16 @@ function undoLastAction() {
     DA_UI.showStatus(`Undo: ${action}`, 'success');
   } else {
     DA_UI.showStatus('Nothing to undo', 'info');
+  }
+}
+
+function redoLastAction() {
+  const action = DA_STATE.redo();
+  if (action) {
+    renderAll();
+    DA_UI.showStatus(`Redo: ${action}`, 'success');
+  } else {
+    DA_UI.showStatus('Nothing to redo', 'info');
   }
 }
 
@@ -146,7 +162,7 @@ if (reviewerNameInput) {
 if (toggleCommentsBtn) {
   const updateToggleUI = () => {
     toggleCommentsBtn.classList.toggle('active', DA_STATE.showCommentsEnabled);
-    toggleCommentsBtn.textContent = DA_STATE.showCommentsEnabled ? 'Hide Comments' : 'Show Comments';
+    toggleCommentsBtn.textContent = DA_STATE.showCommentsEnabled ? 'Hide Comments (C)' : 'Show Comments (C)';
   };
   updateToggleUI();
   
@@ -211,13 +227,9 @@ async function fetchPassage() {
   try {
     const result = await DA_BIBLE.fetchPassageData(version, query);
 
-    // Loading a new passage exits any active live cloud session, so the old
-    // project's listener/URL/badge don't linger and clobber the new passage.
-    if (DA_STATE.cloudUnsubscribe && window.DA_CLOUD) DA_CLOUD.stopCloudSync();
-    // Drop the stored project ID too — this is new work, not a resume of the old
-    // project. Leaving it set would let a later sync write the new passage over
-    // the old project's cloud doc (stopCloudSync intentionally keeps it).
-    DA_STATE.activeProjectId = null;
+    // A new passage replaces the document: exit any live cloud session AND
+    // forget the remembered project id, in one service call (see cloud-sync.js).
+    if (window.DA_CLOUD) DA_CLOUD.resetSessionForNewContent();
 
     DA_STATE.propositions = result.propositions;
     DA_STATE.verseRefs = result.verseRefs;
@@ -238,6 +250,7 @@ async function fetchPassage() {
 
     clearAllFormatting();
     DA_STATE.undoStack = [];
+    DA_STATE.redoStack = [];
     renderAll();
     // Only ESV specifically has a primary/fallback split (api.esv.org → Bolls);
     // other versions are always Bolls, so don't call that a "fallback".
@@ -300,6 +313,12 @@ if (importBtn) importBtn.addEventListener('click', () => {
   const startVerseInput = document.getElementById('importStartVerse');
   const startVerse = (startVerseInput?.value?.trim() || '1').replace(/[^0-9a-z:]/gi, '') || '1';
 
+  // Pasted text replaces the document — same session rule as fetch/import.
+  // (This branch previously skipped it: with a live session attached, the next
+  // incoming cloud snapshot would clobber the pasted text, or a manual Sync
+  // would overwrite the cloud project with it.)
+  if (window.DA_CLOUD) DA_CLOUD.resetSessionForNewContent();
+
   const parsed = DA_UI.parsePastedText(raw, startVerse);
   if (parsed.propositions.length > 0) {
     DA_STATE.propositions = parsed.propositions;
@@ -316,6 +335,7 @@ if (importBtn) importBtn.addEventListener('click', () => {
   
   clearAllFormatting();
   DA_STATE.undoStack = [];
+  DA_STATE.redoStack = [];
   renderAll();
   DA_UI.showStatus('Imported. Double-click to split a line, single-click to edit. Click the dots to create brackets.', 'success');
 });
@@ -431,38 +451,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Check URL for existing project. A project ID lingers in the URL after a
-  // session, so on reload we confirm before rejoining — otherwise the user gets
-  // silently reconnected to a stale/old project they didn't ask for.
+  // A project ID lingers in the URL after a session. Rather than silently
+  // rejoining a stale project, we prompt — but only ONE startup prompt shows:
+  // a cloud "reconnect?" (when a project code is in the URL) takes priority over
+  // the local "restore draft?" banner, since reconnecting loads the cloud copy
+  // anyway. See DA_PERSISTENCE.initStartupRecovery.
   const urlParams = new URLSearchParams(window.location.search);
   const projectFromUrl = urlParams.get('project');
-  if (projectFromUrl) {
-    // Small delay so the page paints before the confirm dialog appears.
-    setTimeout(() => {
-      const reconnect = confirm(
-        `Reconnect to cloud project ${projectFromUrl}?\n\n` +
-        `Click Cancel to start fresh — you can rejoin later from the cloud panel.`
-      );
-      if (reconnect) {
-        DA_UI.showStatus(`Loading project ${projectFromUrl}…`, 'info');
-        DA_CLOUD.joinCloudSync(projectFromUrl);
-      } else {
-        // Drop the stale param so future reloads don't keep prompting.
-        const url = new URL(window.location.href);
-        url.searchParams.delete('project');
-        window.history.replaceState({}, '', url);
-      }
-    }, 600);
-  }
-  
-  // First-run identity prompt. Skip it when reconnecting to a cloud project
-  // from the URL — that path has its own confirm dialog and sets the owner from
-  // the project, so we don't want two dialogs stacking on load.
+
+  // First-run identity prompt. Skip it when a cloud project is being offered —
+  // reconnecting sets the owner from the project, so we don't stack dialogs.
   if (!projectFromUrl) DA_UI.maybeShowWelcome();
 
-  // Initialize persistence and recovery services
+  // Initialize persistence and recovery services (one startup recovery prompt).
   DA_PERSISTENCE.renderRecentList();
-  DA_PERSISTENCE.initDraftRecovery();
+  DA_PERSISTENCE.initStartupRecovery(projectFromUrl);
   DA_PERSISTENCE.initDragAndDrop();
   DA_PERSISTENCE.initMagicPaste();
   DA_PERSISTENCE.attachFilenameObservers();

@@ -1632,6 +1632,17 @@ body {
   pointer-events: all;
 }
 
+/* Keyboard focus rings for the bracket-creation targets (dots, connection
+   nodes, bracket lines). :focus-visible = keyboard users only, so mouse
+   clicks don't flash outlines. */
+.prop-dot:focus-visible,
+.connection-node:focus-visible,
+.bracket-hitbox:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
 /* Draft recovery and magic paste banners */
 .draft-recovery-banner,
 .magic-paste-banner {
