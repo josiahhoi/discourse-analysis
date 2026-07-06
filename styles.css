@@ -738,6 +738,41 @@ body {
   gap: 0.25rem;
 }
 
+/* Type-to-filter box in the relationship picker */
+.picker-search-row {
+  padding: 0 0 0.4rem;
+}
+
+.picker-search {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.85rem;
+  box-sizing: border-box;
+}
+
+.picker-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Filtered-out picker entries/groups. !important so it beats the flex/grid
+   display rules on wrappers and groups. */
+.search-hidden {
+  display: none !important;
+}
+
+.picker-no-matches {
+  margin: 0;
+  padding: 0.6rem 0.4rem;
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--text-muted);
+}
+
 .picker-footer {
   margin-top: 0;
   border-top: 1px solid var(--border);

@@ -110,3 +110,55 @@ test('normalize coerces junk into a valid profile (default dominance on)', () =>
   assert.deepEqual(p.dominance.perType, {});
   assert.deepEqual(p.labels, {});
 });
+
+// ── Type-to-filter search (relationship picker) ──────────────────────────────
+
+test('searchNorm produces spaced and squashed lowercase variants', () => {
+  const sb = setup();
+  assert.deepEqual(sb.DA_PROFILES.searchNorm('Q/A*'), ['q a', 'qa']);
+  assert.deepEqual(sb.DA_PROFILES.searchNorm('  '), []);
+});
+
+test('search: another system\'s vocabulary finds the active profile\'s type', () => {
+  const sb = setup();
+  sb.DA_PROFILES.setActiveById('josiah'); // calls it Action-Result
+  const idx = sb.DA_PROFILES.searchIndexFor('action-result');
+  // Gurtner/Beale call it Cause-Effect — "cause" must hit the name blob.
+  assert.equal(sb.DA_PROFILES.matchesSearch(idx.nameBlob, 'cause'), true);
+  assert.equal(sb.DA_PROFILES.matchesSearch(idx.nameBlob, 'action'), true);
+  assert.match(idx.altHint, /Cause-Effect \(.*Gurtner/);
+
+  const purpose = sb.DA_PROFILES.searchIndexFor('action-purpose');
+  assert.equal(sb.DA_PROFILES.matchesSearch(purpose.nameBlob, 'means'), true, 'Means-End (Gurtner)');
+});
+
+test('search: alias sources contribute their names to the visible target', () => {
+  const sb = setup();
+  sb.DA_PROFILES.setActiveById('josiah'); // general-specific aliases to idea-explanation
+  const idx = sb.DA_PROFILES.searchIndexFor('idea-explanation');
+  assert.equal(sb.DA_PROFILES.matchesSearch(idx.nameBlob, 'general'), true);
+  assert.equal(sb.DA_PROFILES.matchesSearch(idx.nameBlob, 'fact'), true);
+});
+
+test('search: key words land in the keyword blob, not the name blob', () => {
+  const sb = setup();
+  const idx = sb.DA_PROFILES.searchIndexFor('ground');
+  assert.equal(sb.DA_PROFILES.matchesSearch(idx.keywordBlob, 'because'), true);
+  assert.equal(sb.DA_PROFILES.matchesSearch(idx.nameBlob, 'because'), false);
+  const inf = sb.DA_PROFILES.searchIndexFor('inference');
+  assert.equal(sb.DA_PROFILES.matchesSearch(inf.keywordBlob, 'therefore'), true);
+});
+
+test('search: custom cl_ labels are searchable by their name', () => {
+  const sb = setup();
+  sb.DA_STATE.customLabels = [{ id: 'cl_123', name: 'MyRel', label: 'MR/Top*' }];
+  const idx = sb.DA_PROFILES.searchIndexFor('cl_123');
+  assert.equal(sb.DA_PROFILES.matchesSearch(idx.nameBlob, 'myrel'), true);
+});
+
+test('search: an empty query matches everything', () => {
+  const sb = setup();
+  const idx = sb.DA_PROFILES.searchIndexFor('series');
+  assert.equal(sb.DA_PROFILES.matchesSearch(idx.nameBlob, ''), true);
+  assert.equal(sb.DA_PROFILES.matchesSearch(idx.nameBlob, '   '), true);
+});

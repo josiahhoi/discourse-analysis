@@ -294,6 +294,97 @@
     return p.dominance.default !== false;
   }
 
+  // ── Type-to-filter search (relationship picker) ────────────────────────────
+
+  /**
+   * Normalize text for picker search. Returns [spaced, squashed] lowercase
+   * variants ("Q/A*" → ["q a", "qa"]) so queries match with or without
+   * punctuation, or [] for empty/no-alphanumeric input.
+   */
+  function searchNorm(s) {
+    const spaced = String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    return spaced ? [spaced, spaced.replace(/ /g, '')] : [];
+  }
+
+  /**
+   * Search metadata for one relationship type, for the picker's filter box.
+   *  - nameBlob:    the type key + its name/abbr in the ACTIVE profile, the
+   *                 canonical defaults, and EVERY built-in profile — so typing
+   *                 another system's vocabulary ("cause", "means") still finds
+   *                 the active profile's equivalent button. Alias sources that
+   *                 display as this type (general-specific → idea-explanation)
+   *                 contribute their names too.
+   *  - keywordBlob: key words + definition text ("because" finds Ground).
+   *  - altHint:     "Also called …" tooltip text listing names other built-in
+   *                 systems use, so the cross-profile match is explainable.
+   * Blobs are newline-joined normalized terms; test with matchesSearch().
+   */
+  function searchIndexFor(type) {
+    const t = String(type).toLowerCase();
+    const nameTerms = new Set();
+    const kwTerms = new Set();
+    const add = (s, into) => searchNorm(s).forEach((v) => into.add(v));
+
+    add(t, nameTerms);
+    add(getName(t), nameTerms);
+    add(getAbbr(t), nameTerms);
+    add(DA_CONSTANTS.RELATIONSHIP_LABELS[t], nameTerms);
+    add(DA_CONSTANTS.BRACKET_LABELS[t], nameTerms);
+
+    if (t.startsWith('cl_')) {
+      const c = (DA_STATE.customLabels || []).find((cl) => cl.id === t)
+        || (DA_STATE.savedCustomLabels || []).find((cl) => cl.id === t);
+      if (c) { add(c.name, nameTerms); add(c.label, nameTerms); }
+    }
+
+    // The type itself plus any alias sources that currently display AS it.
+    const sourceTypes = [t];
+    Object.keys(ALIASES).forEach((src) => {
+      if (ALIASES[src] === t && effectiveType(src) === t) sourceTypes.push(src);
+    });
+
+    const activeName = getName(t);
+    const altByName = new Map(); // display name -> [profile names]
+    sourceTypes.forEach((src) => {
+      if (src !== t) {
+        add(src, nameTerms);
+        add(DA_CONSTANTS.RELATIONSHIP_LABELS[src], nameTerms);
+        add(DA_CONSTANTS.BRACKET_LABELS[src], nameTerms);
+      }
+      Object.values(builtins()).forEach((p) => {
+        const o = p.labels[src];
+        if (!o) return;
+        if (o.name) add(o.name, nameTerms);
+        if (o.abbr) add(o.abbr, nameTerms);
+        if (o.name && o.name !== activeName) {
+          if (!altByName.has(o.name)) altByName.set(o.name, []);
+          altByName.get(o.name).push(p.name);
+        }
+      });
+      const def = DA_CONSTANTS.RELATIONSHIP_DEFINITIONS[src];
+      if (def) { add(def.keywords, kwTerms); add(def.definition, kwTerms); }
+    });
+
+    const altHint = altByName.size
+      ? 'Also called ' + Array.from(altByName.entries())
+          .map(([n, ps]) => `${n.replace(/\s*\([^)]*\)\s*$/, '')} (${ps.join(', ')})`)
+          .join(', ')
+      : '';
+
+    return {
+      nameBlob: Array.from(nameTerms).join('\n'),
+      keywordBlob: Array.from(kwTerms).join('\n'),
+      altHint
+    };
+  }
+
+  /** True if the normalized query hits the given blob (spaced or squashed form). */
+  function matchesSearch(blob, rawQuery) {
+    const [spaced, squashed] = searchNorm(rawQuery);
+    if (!spaced) return true; // empty query matches everything
+    return blob.includes(spaced) || blob.includes(squashed);
+  }
+
   // ── Cloud sharing (free plan: public read, in-app password to write) ───────
   //
   // Profiles live in the Firestore `profiles` collection keyed by a normalized
@@ -389,6 +480,7 @@
     getActive, setActive, setActiveById,
     getAbbr, getName, getColor, isDominanceShown,
     effectiveType, isTwoArm, profileTypes, getVisibleTypes,
+    searchNorm, searchIndexFor, matchesSearch,
     nameKey, sha256Hex, publishToCloud, loadFromCloud,
     maybeApplyGurtnerProfile
   };

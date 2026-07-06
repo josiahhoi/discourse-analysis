@@ -103,7 +103,9 @@ interface EventTarget {
   isContentEditable: boolean;
 }
 interface Event {
-  // Drag events arrive as plain Event through generic addEventListener overloads.
+  // Drag/keyboard events arrive as plain Event through generic addEventListener
+  // overloads (listeners attached to querySelector() results).
   dataTransfer?: DataTransfer | null;
   relatedTarget?: EventTarget | null;
+  key?: string;
 }

@@ -183,6 +183,47 @@ test('color-coding two words keeps both colors (focusout does not wipe the first
   expect(errors).toEqual([]);
 });
 
+test('relationship picker: type-to-filter narrows, cross-profile terms match, Enter picks', async ({ page }) => {
+  const errors = collectErrors(page);
+  await importPassage(page);
+
+  // Open the picker by creating a bracket; focus lands in the search box.
+  await page.locator('.prop-dot').nth(0).click();
+  await page.locator('.prop-dot').nth(1).click();
+  await expect(page.locator('#labelPicker .picker-search')).toBeFocused();
+
+  const visibleButtons = page.locator('#labelPicker .picker-btn-wrapper:not(.search-hidden) button');
+
+  // "act" narrows to the Action-* family (multiple, but fewer than all ~18).
+  await page.keyboard.type('act');
+  const actCount = await visibleButtons.count();
+  expect(actCount).toBeGreaterThan(1);
+  expect(actCount).toBeLessThan(6);
+
+  // "cause" is Gurtner/Beale vocabulary — the active (Josiah) profile shows it
+  // as Action-Result, and the button carries an "Also called" tooltip.
+  await page.locator('#labelPicker .picker-search').fill('cause');
+  await expect(visibleButtons).toHaveCount(1);
+  await expect(visibleButtons.first()).toContainText('Action-Result');
+  await expect(visibleButtons.first()).toHaveAttribute('title', /Also called Cause-Effect/);
+
+  // A key word: "because" surfaces Ground (keyword-tier match).
+  await page.locator('#labelPicker .picker-search').fill('because');
+  await expect(visibleButtons.first()).toContainText('Ground');
+
+  // Nonsense shows the empty state; clearing restores everything.
+  await page.locator('#labelPicker .picker-search').fill('zzzz');
+  await expect(page.locator('#labelPicker .picker-no-matches')).toBeVisible();
+  await page.locator('#labelPicker .picker-search').fill('cause');
+
+  // Enter applies the top match.
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#labelPicker')).toHaveCount(0);
+  await expect(page.locator('.bracket-group.action-result')).toHaveCount(1);
+
+  expect(errors).toEqual([]);
+});
+
 test('Escape cancels an in-progress bracket selection', async ({ page }) => {
   const errors = collectErrors(page);
   await importPassage(page);

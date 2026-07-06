@@ -195,6 +195,9 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
         ${hasTwoLabels && showStars ? '<button class="tool-btn" data-action="flip-dominance" title="Switch Stars">★ Switch Stars</button>' : ''}
       </div>
     </div>
+    <div class="picker-search-row">
+      <input type="text" class="picker-search" placeholder="Type to filter… (e.g. 'act', 'cause', 'because')" aria-label="Filter relationships">
+    </div>
     <div class="relationship-picker-content"></div>
     <div class="picker-info-panel" style="display: none;">
       <strong class="info-name"></strong>
@@ -278,6 +281,15 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
       if (window.renderAll) window.renderAll();
       showStatus(`Label changed to ${labelText}`, 'success');
     });
+
+    // Search metadata for the type-to-filter box: names from every built-in
+    // profile (so "cause" finds Action-Result under Josiah), plus key words.
+    if (window.DA_PROFILES && DA_PROFILES.searchIndexFor) {
+      const idx = DA_PROFILES.searchIndexFor(typeKey);
+      wrapper.dataset.searchNames = idx.nameBlob;
+      wrapper.dataset.searchKeywords = idx.keywordBlob;
+      if (idx.altHint) btn.title = `${labelText} — ${idx.altHint}`;
+    }
 
     const defData = DA_CONSTANTS.RELATIONSHIP_DEFINITIONS?.[typeKey];
     if (defData) {
@@ -389,6 +401,59 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
     RELATIONSHIP_GROUPS_LIST.forEach(group => {
       const el = createGroup(group);
       if (el) content.appendChild(el);
+    });
+  }
+
+  // ── Type-to-filter ──────────────────────────────────────────────────────
+  // The search input is the picker's first focusable, so manageDialogFocus
+  // lands focus in it on open — "just start typing" works immediately.
+  // Name matches (any built-in profile's vocabulary) rank above key-word/
+  // definition matches: keyword hits only show when no name matches the query.
+  const searchRow = picker.querySelector('.picker-search-row');
+  const searchInput = picker.querySelector('.picker-search');
+  if (bracket.isJumpOver || !window.DA_PROFILES) {
+    // Two or three fixed choices (or no profile module) — no filter needed.
+    if (searchRow) searchRow.remove();
+  } else if (searchInput) {
+    const applyFilter = () => {
+      const q = searchInput.value;
+      const wrappers = Array.from(content.querySelectorAll('.picker-btn-wrapper'));
+      const hits = wrappers.map((w) => ({
+        w,
+        name: DA_PROFILES.matchesSearch(w.dataset.searchNames || '', q),
+        keyword: DA_PROFILES.matchesSearch(w.dataset.searchKeywords || '', q)
+      }));
+      const anyName = hits.some((h) => h.name);
+      hits.forEach((h) => {
+        const show = anyName ? h.name : h.keyword;
+        h.w.classList.toggle('search-hidden', !show);
+      });
+      // Hide groups/subgroups that filtered down to nothing.
+      content.querySelectorAll('.picker-subgroup').forEach((sg) => {
+        sg.classList.toggle('search-hidden', !sg.querySelector('.picker-btn-wrapper:not(.search-hidden)'));
+      });
+      content.querySelectorAll('.picker-group').forEach((g) => {
+        g.classList.toggle('search-hidden', !g.querySelector('.picker-btn-wrapper:not(.search-hidden)'));
+      });
+      // Empty-state note.
+      let note = content.querySelector('.picker-no-matches');
+      const none = !content.querySelector('.picker-btn-wrapper:not(.search-hidden)');
+      if (none && !note) {
+        note = document.createElement('p');
+        note.className = 'picker-no-matches';
+        note.textContent = 'No matches — try a name like "ground", another system\'s term like "cause", or a key word like "because".';
+        content.appendChild(note);
+      } else if (!none && note) {
+        note.remove();
+      }
+    };
+    searchInput.addEventListener('input', applyFilter);
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const first = content.querySelector('.picker-btn-wrapper:not(.search-hidden) button');
+        if (first) first.click();
+      }
     });
   }
 
