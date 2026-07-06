@@ -203,3 +203,130 @@ test('split + merge round-trips back to the original text', () => {
   assert.deepEqual(sb.DA_STATE.propositions, ['the quick brown fox']);
   assert.deepEqual(sb.DA_STATE.verseRefs, ['7']);
 });
+
+// ── deleteBracket: cascade to dependents ─────────────────────────────────────
+
+function setupWithConfirm(stateOverrides, confirmAnswer) {
+  const confirmCalls = [];
+  const sb = createSandbox({
+    confirm: (msg) => { confirmCalls.push(msg); return confirmAnswer; },
+  });
+  load(sb, 'js/services/state.js');
+  load(sb, 'js/utils/editor-logic.js');
+  Object.assign(sb.DA_STATE, stateOverrides);
+  return { sb, confirmCalls };
+}
+
+const nestedState = () => ({
+  propositions: ['v21', 'v22', 'v23'],
+  verseRefs: ['21', '22', '23'],
+  indentation: [0, 0, 0],
+  brackets: [
+    { id: 'brInner', from: 'p1', to: 'p2', type: 'action-manner' },
+    { id: 'brOuter', from: 'p0', to: 'brInner', type: 'negative-positive' },
+  ],
+  comments: [
+    { id: 'c1', type: 'bracket', target: { bracketId: 'brOuter' }, text: 'on outer', replies: [] },
+  ],
+  bracketHighlights: { brOuter: '#FFF9C4' },
+});
+
+test('deleteBracket: deleting a nested bracket cascades to the bracket built on it', () => {
+  const { sb, confirmCalls } = setupWithConfirm(nestedState(), true);
+  const removed = sb.DA_EDITOR.deleteBracket(0); // the inner bracket
+  assert.equal(removed, 2, 'inner + dependent outer');
+  assert.equal(sb.DA_STATE.brackets.length, 0, 'no orphaned/nonsense bracket remains');
+  assert.equal(confirmCalls.length, 1, 'user was asked first');
+  assert.match(confirmCalls[0], /1 larger bracket/);
+  assert.equal(sb.DA_STATE.comments.length, 0, 'outer bracket comment removed too');
+  assert.deepEqual(sb.DA_STATE.bracketHighlights, {}, 'outer highlight removed too');
+});
+
+test('deleteBracket: cancelling the confirm leaves everything untouched', () => {
+  const { sb } = setupWithConfirm(nestedState(), false);
+  const removed = sb.DA_EDITOR.deleteBracket(0);
+  assert.equal(removed, 0);
+  assert.equal(sb.DA_STATE.brackets.length, 2);
+  assert.equal(sb.DA_STATE.undoStack.length, 0, 'no undo entry for a cancelled delete');
+});
+
+test('deleteBracket: a standalone bracket deletes silently (no confirm)', () => {
+  const { sb, confirmCalls } = setupWithConfirm({
+    propositions: ['a', 'b'],
+    verseRefs: ['1', '2'],
+    indentation: [0, 0],
+    brackets: [{ id: 'brOnly', from: 'p0', to: 'p1', type: 'series' }],
+  }, true);
+  const removed = sb.DA_EDITOR.deleteBracket(0);
+  assert.equal(removed, 1);
+  assert.equal(confirmCalls.length, 0, 'no confirmation needed');
+  assert.equal(sb.DA_STATE.brackets.length, 0);
+});
+
+test('deleteBracket: deleting the OUTER bracket leaves the inner one intact', () => {
+  const { sb, confirmCalls } = setupWithConfirm(nestedState(), true);
+  const removed = sb.DA_EDITOR.deleteBracket(1); // the outer bracket
+  assert.equal(removed, 1);
+  assert.equal(confirmCalls.length, 0, 'nothing is built on the outer bracket');
+  assert.deepEqual(sb.DA_STATE.brackets.map(b => b.id), ['brInner']);
+});
+
+test('deleteBracket: undo restores the whole cascaded set', () => {
+  const { sb } = setupWithConfirm(nestedState(), true);
+  sb.DA_EDITOR.deleteBracket(0);
+  const action = sb.DA_STATE.undo();
+  assert.equal(action, 'delete brackets');
+  assert.deepEqual(sb.DA_STATE.brackets.map(b => b.id), ['brInner', 'brOuter']);
+  assert.equal(sb.DA_STATE.comments.length, 1);
+});
+
+// ── handleDotClick: from/to normalized to text order, not click order ────────
+
+function setupForDotClick(stateOverrides = {}) {
+  const sb = createSandbox({ DA_UI: { showStatus: () => {} } });
+  load(sb, 'js/services/state.js');
+  load(sb, 'js/utils/rendering-engine.js'); // real getPointExtent/getBracketExtent
+  load(sb, 'js/utils/editor-logic.js');
+  // renderAll() pulls in render-arrows.js/render-comments.js (DOM-only, not
+  // loaded here) via bare globals — stub it out, this test only cares about
+  // the resulting bracket data, not the DOM render.
+  sb.DA_RENDERER.renderAll = () => {};
+  Object.assign(sb.DA_STATE, {
+    propositions: ['first', 'second', 'third'],
+    verseRefs: ['1', '2', '3'],
+    indentation: [0, 0, 0],
+    brackets: [],
+    ...stateOverrides,
+  });
+  return sb;
+}
+
+test('handleDotClick: clicking the LATER line first still puts the earlier one on from/top', () => {
+  const sb = setupForDotClick();
+  sb.DA_EDITOR.handleDotClick('p1'); // click "second" first (later text)
+  sb.DA_EDITOR.handleDotClick('p0'); // click "first" second (earlier text)
+  assert.equal(sb.DA_STATE.brackets.length, 1);
+  assert.equal(sb.DA_STATE.brackets[0].from, 'p0', 'earlier proposition is from/top');
+  assert.equal(sb.DA_STATE.brackets[0].to, 'p1', 'later proposition is to/bottom');
+});
+
+test('handleDotClick: clicking in text order already gives the same result (no regression)', () => {
+  const sb = setupForDotClick();
+  sb.DA_EDITOR.handleDotClick('p0');
+  sb.DA_EDITOR.handleDotClick('p1');
+  assert.equal(sb.DA_STATE.brackets[0].from, 'p0');
+  assert.equal(sb.DA_STATE.brackets[0].to, 'p1');
+});
+
+test('handleDotClick: reversed click order also normalizes when attaching to a nested bracket node', () => {
+  // A bracket already spans p1-p2; connect p0 to that bracket's node, clicking
+  // the NODE first and the earlier proposition second.
+  const sb = setupForDotClick({
+    brackets: [{ id: 'brInner', from: 'p1', to: 'p2', type: 'series' }],
+  });
+  sb.DA_EDITOR.handleDotClick('brInner'); // click the nested bracket's node first
+  sb.DA_EDITOR.handleDotClick('p0');       // click the earlier line second
+  const outer = sb.DA_STATE.brackets.find(b => b.id !== 'brInner');
+  assert.equal(outer.from, 'p0', 'earlier proposition stays on from/top');
+  assert.equal(outer.to, 'brInner', 'the later nested unit stays on to/bottom');
+});

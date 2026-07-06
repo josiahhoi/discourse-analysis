@@ -26,6 +26,10 @@ function collectErrors(page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  // Block third-party requests (fonts, Firebase CDN, bible APIs): the app
+  // degrades gracefully without them, and a slow CDN otherwise hangs the page
+  // "load" event long enough to flake page.goto's timeout.
+  await page.route(/^https?:\/\/(?!localhost)/, (route) => route.abort());
   // Pre-seed identity so the first-run welcome modal doesn't appear, and pin
   // the theme so rendering is deterministic.
   await page.addInitScript(() => {
@@ -294,6 +298,32 @@ test('keyboard-only bracket creation: focus dot → Enter → ArrowDown → Ente
   expect(errors).toEqual([]);
 });
 
+test('bracket creation: clicking the later line first still puts the earlier one on top', async ({ page }) => {
+  const errors = collectErrors(page);
+  await importPassage(page); // line 0 = verse 1, line 1 = verse 2
+
+  // Click line 1's dot FIRST, then line 0's dot — reversed from text order.
+  await page.locator('.prop-dot').nth(1).click();
+  await page.locator('.prop-dot').nth(0).click();
+  await expect(page.locator('#labelPicker')).toBeVisible();
+  await page.locator('#labelPicker button.ground').click(); // Ground: "* / G"
+  await expect(page.locator('.bracket-group.ground')).toHaveCount(1);
+
+  // Ground's dominance star ("*") is the TOP label regardless of click order —
+  // it must sit above the "G" label, i.e. render for the earlier line (verse 1).
+  const labels = page.locator('.bracket-group.ground .bracket-label');
+  await expect(labels).toHaveCount(2);
+  const [topY, bottomY] = await labels.evaluateAll((els) =>
+    els.map((el) => parseFloat(el.getAttribute('y')))
+  );
+  const [topText, bottomText] = await labels.evaluateAll((els) => els.map((el) => el.textContent));
+  expect(topY).toBeLessThan(bottomY);
+  expect(topText).toContain('*');
+  expect(bottomText).toBe('G');
+
+  expect(errors).toEqual([]);
+});
+
 test('mode shortcuts: T/A/B/C toggle, Escape exits, typing is never hijacked', async ({ page }) => {
   const errors = collectErrors(page);
   await importPassage(page);
@@ -456,6 +486,47 @@ test('verse boundaries: merge joins with a visible space, survives export/import
   expect(after.props).toEqual(['In the beginning God created the heavens', 'And the earth was without form']);
   expect(after.refs).toEqual(['1', '2']);
   expect(after.breaks).toEqual([[], []]);
+
+  expect(errors).toEqual([]);
+});
+
+test('deleting a nested bracket cascades (with confirm) instead of leaving a nonsense bracket', async ({ page }) => {
+  const errors = collectErrors(page);
+  await importPassage(page);
+  // Third line so we can nest: split verse 2.
+  await setCaret(page, 1, 'And the earth'.length);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.proposition-block')).toHaveCount(3);
+
+  // Inner bracket: lines 2+3.
+  await page.locator('.prop-dot').nth(1).click();
+  await page.locator('.prop-dot').nth(2).click();
+  await page.locator('#labelPicker button.ground').click();
+  // Outer bracket: line 1 → the inner bracket's connection node.
+  await page.locator('.prop-dot').nth(0).click();
+  await page.locator('.connection-node').first().click({ force: true });
+  await page.locator('#labelPicker button.series').click();
+  await expect(page.locator('.bracket-group')).toHaveCount(2);
+
+  // Cancel first: everything stays.
+  page.once('dialog', (d) => d.dismiss());
+  await page.locator('.bracket-group.ground .bracket-hitbox').first().click({ force: true });
+  await page.locator('#labelPicker .delete-btn').click();
+  await expect(page.locator('.bracket-group')).toHaveCount(2);
+
+  // Accept: inner AND the outer built on it are both removed — no orphan.
+  page.once('dialog', (d) => {
+    expect(d.message()).toContain('1 larger bracket');
+    d.accept();
+  });
+  await page.locator('.bracket-group.ground .bracket-hitbox').first().click({ force: true });
+  await page.locator('#labelPicker .delete-btn').click();
+  await expect(page.locator('.bracket-group')).toHaveCount(0);
+  await expect(page.locator('.status')).toHaveText(/2 brackets removed/);
+
+  // Undo brings the whole structure back.
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('.bracket-group')).toHaveCount(2);
 
   expect(errors).toEqual([]);
 });

@@ -413,25 +413,64 @@ function setSelectionByGlobalOffset(el, start, end) {
   }
 }
 
+/**
+ * Delete a bracket, CASCADING to any brackets built on top of it.
+ *
+ * An outer bracket's endpoint refers to the inner bracket AS A UNIT ("v21
+ * relates to [v22–23]"); once that unit is dissolved there is no honest
+ * automatic answer for what the outer arm should point at — re-aiming it at
+ * one member silently changes the relationship's meaning and can even produce
+ * shapes the adjacency rule forbids at creation time (e.g. 21→23 skipping 22).
+ * So dependents are removed with it — think of brackets as a stack of cards:
+ * pull one from the middle and the ones resting on it come down. The user
+ * confirms first when dependents exist, and Undo restores everything.
+ *
+ * Returns the number of brackets deleted (0 if the user cancelled).
+ */
 function deleteBracket(bracketIdx) {
   const bToDelete = DA_STATE.brackets[bracketIdx];
-  if (!bToDelete) return;
+  if (!bToDelete) return 0;
 
-  DA_STATE.pushUndo('delete bracket');
+  // Transitive closure of brackets whose from/to chain rests on the doomed one.
+  const doomedIds = new Set([bToDelete.id]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    DA_STATE.brackets.forEach((b) => {
+      if (doomedIds.has(b.id)) return;
+      if (doomedIds.has(b.from) || doomedIds.has(b.to)) {
+        doomedIds.add(b.id);
+        grew = true;
+      }
+    });
+  }
 
-  // Any bracket pointing to THIS one (by id) should now point to its children.
-  // References are stable ids, so nothing else needs renumbering.
-  DA_STATE.brackets.forEach((b, i) => {
-    if (i === bracketIdx) return;
-    if (b.from === bToDelete.id) b.from = bToDelete.from;
-    if (b.to === bToDelete.id) b.to = bToDelete.to;
-  });
+  const dependents = doomedIds.size - 1;
+  if (dependents > 0) {
+    const ok = confirm(
+      `This bracket has ${dependents} larger bracket${dependents === 1 ? '' : 's'} built on it, ` +
+      `which can't stand without it.\n\nDelete all ${doomedIds.size} brackets? (Undo restores them.)`
+    );
+    if (!ok) return 0;
+  }
 
-  DA_STATE.brackets.splice(bracketIdx, 1);
-  DA_STATE.comments = DA_STATE.comments.filter((c) => c.type !== 'bracket' || c.target?.bracketId !== bToDelete.id);
-  delete DA_STATE.bracketHighlights[bToDelete.id];
+  DA_STATE.pushUndo(dependents > 0 ? 'delete brackets' : 'delete bracket');
+
+  DA_STATE.brackets = DA_STATE.brackets.filter((b) => !doomedIds.has(b.id));
+  DA_STATE.comments = DA_STATE.comments.filter((c) => c.type !== 'bracket' || !doomedIds.has(c.target?.bracketId));
+  doomedIds.forEach((id) => { delete DA_STATE.bracketHighlights[id]; });
+
+  // Clear transient references into the doomed set (mid "Connect to…" etc.).
+  if (doomedIds.has(DA_STATE.firstBracketPoint)) {
+    DA_STATE.firstBracketPoint = null;
+    DA_STATE.bracketSelectStep = 0;
+  }
+  if (DA_STATE.activeCommentTarget && doomedIds.has(DA_STATE.activeCommentTarget.bracketId)) {
+    DA_STATE.activeCommentTarget = null;
+  }
 
   if (window.DA_RENDERER) DA_RENDERER.renderAll();
+  return doomedIds.size;
 }
 
 function findBestAttachment(pId, proposedMin, proposedMax) {
@@ -576,10 +615,23 @@ function handleDotClick(pointId, x, y) {
 
     DA_STATE.pushUndo('add bracket');
 
+    // Assign from/to by TEXT order (earlier proposition first), not click
+    // order — from always renders on the top arm, so without this, whichever
+    // dot the user happened to click first would silently decide which half of
+    // the label lands on top (e.g. Ground's star). ext1/ext2 are already
+    // resolved above for the adjacency check, so reuse them. Ties (same start)
+    // fall back to .to, then to click order, so this never leaves from/to
+    // undefined for an unexpected shape.
+    let orderedFrom = finalP1, orderedTo = finalP2;
+    if (ext1.from > ext2.from || (ext1.from === ext2.from && ext1.to > ext2.to)) {
+      orderedFrom = finalP2;
+      orderedTo = finalP1;
+    }
+
     const newBracket = {
       id: DA_STATE.newBracketId(),
-      from: finalP1,
-      to: finalP2,
+      from: orderedFrom,
+      to: orderedTo,
       type: isSeriesJumpOver ? 'series' : (DA_STATE.currentRelationshipType || 'unspecified'),
       labelsSwapped: false,
       dominanceFlipped: false,

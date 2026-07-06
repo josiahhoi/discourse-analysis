@@ -602,6 +602,17 @@ body {
 .relationship-picker-fixed {
   position: fixed !important;
   z-index: 1000;
+  /* Never taller than the window: the relationship list scrolls internally so
+     the header tools and the footer (Delete Bracket) always stay reachable —
+     previously on short screens the footer could sit below the fold. */
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 24px);
+}
+
+.relationship-picker-fixed .relationship-picker-content {
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .label-picker button {

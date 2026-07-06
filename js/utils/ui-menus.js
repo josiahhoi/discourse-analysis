@@ -50,9 +50,11 @@ function showBracketActions(bracketIdx, centerY, centerX) {
 
   popover.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
     e.stopPropagation();
-    DA_EDITOR.deleteBracket(bracketIdx);
+    const removed = DA_EDITOR.deleteBracket(bracketIdx);
     clearAndDismiss();
-    showStatus('Bracket removed.', 'success');
+    if (removed > 0) {
+      showStatus(removed > 1 ? `${removed} brackets removed.` : 'Bracket removed.', 'success');
+    }
   });
 
   popover.querySelector('[data-action="fold"]').addEventListener('click', (e) => {
@@ -484,9 +486,11 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
 
   picker.querySelector('.delete-btn').addEventListener('click', (e) => {
     e.stopPropagation();
-    DA_EDITOR.deleteBracket(bracketIdx);
+    const removed = DA_EDITOR.deleteBracket(bracketIdx);
     picker.remove();
-    showStatus('Bracket removed.', 'success');
+    if (removed > 0) {
+      showStatus(removed > 1 ? `${removed} brackets removed.` : 'Bracket removed.', 'success');
+    }
   });
 
   picker.classList.add('relationship-picker-fixed');
