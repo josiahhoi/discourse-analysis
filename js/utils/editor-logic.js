@@ -1,6 +1,9 @@
 /**
- * Walks a contenteditable text span and extracts plain text + format tags (bold/underline).
- * Used by focusout handler and Ctrl+B/U shortcut to sync DOM formatting back to state.
+ * Walks a contenteditable text span and extracts plain text + format tags
+ * (bold / underline / color). Used by the focusout handler and Ctrl+B/U shortcut
+ * to sync DOM formatting back to state. Color must be captured here too:
+ * focusout rebuilds a line's formatTags entirely from this result, so any type
+ * not extracted is silently dropped on the next focus change.
  */
 function extractFormatTags(textSpan, propIndex) {
   let text = '';
@@ -15,10 +18,16 @@ function extractFormatTags(textSpan, propIndex) {
       node.childNodes.forEach(traverse);
       const end = text.length;
       if (start < end) {
-        let type = null;
-        if (node.tagName === 'B' || node.tagName === 'STRONG') type = 'bold';
-        else if (node.tagName === 'U') type = 'underline';
-        if (type) tags.push({ type, propIndex, start, end });
+        if (node.tagName === 'B' || node.tagName === 'STRONG') {
+          tags.push({ type: 'bold', propIndex, start, end });
+        } else if (node.tagName === 'U') {
+          tags.push({ type: 'underline', propIndex, start, end });
+        } else if (node.classList && node.classList.contains('color-text')) {
+          // Prefer the verbatim value stashed in data-color; fall back to the
+          // computed style for spans rendered before data-color existed.
+          const color = node.dataset.color || node.style.color;
+          if (color) tags.push({ type: 'color', color, propIndex, start, end });
+        }
       }
     }
   }

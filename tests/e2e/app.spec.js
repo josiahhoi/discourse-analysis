@@ -145,6 +145,44 @@ test('undo: Ctrl+Z reverts a split', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+/** Color a word (global offsets) via the real right-click → swatch menu. */
+async function colorWord(page, lineIndex, start, end, colorHex) {
+  await page.evaluate(({ lineIndex, start, end }) => {
+    const span = document.querySelectorAll('.proposition-block .proposition-text')[lineIndex];
+    span.focus();
+    // Multi-node-aware selection (the line may already contain colored spans).
+    window.DA_EDITOR.setSelectionByGlobalOffset(span, start, end);
+    const range = window.getSelection().getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    span.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true,
+      clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2,
+    }));
+  }, { lineIndex, start, end });
+  await page.locator(`#textContextMenu .color-swatch[data-color="${colorHex}"]`).click();
+}
+
+test('color-coding two words keeps both colors (focusout does not wipe the first)', async ({ page }) => {
+  const errors = collectErrors(page);
+  await importPassage(page);
+  // line 0: "In the beginning God created the heavens" — "God" at 17..20
+  // line 1: "And the earth was without form"          — "earth" at 8..13
+
+  await colorWord(page, 0, 17, 20, '#1E88E5'); // "God" blue
+  await expect(page.locator('.color-text')).toHaveText(['God']);
+
+  // Coloring a word on the OTHER line fires focusout on line 0 — the exact
+  // moment the first color used to be discarded.
+  await colorWord(page, 1, 8, 13, '#1E88E5'); // "earth" blue
+
+  // Both survive, and an extra focus round-trip doesn't drop them either.
+  await page.locator('.proposition-text').nth(0).click();
+  await page.locator('#passageRef').click();
+  await expect(page.locator('.color-text')).toHaveText(['God', 'earth']);
+
+  expect(errors).toEqual([]);
+});
+
 test('Escape cancels an in-progress bracket selection', async ({ page }) => {
   const errors = collectErrors(page);
   await importPassage(page);

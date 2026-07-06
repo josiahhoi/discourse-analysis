@@ -720,6 +720,10 @@ function appendChunk(textSpan, chunk, startPos, propIdx, activeTags, allTags) {
       const el = document.createElement('span');
       el.className = 'color-text';
       el.style.color = t.tag.color;
+      // Keep the original value (e.g. hex) so extractFormatTags can recover it
+      // verbatim on focusout — style.color reads back as rgb(), which would
+      // otherwise drift the stored color away from the swatch value.
+      el.dataset.color = t.tag.color;
       if (!wrapper) wrapper = currentInner = el;
       else { currentInner.appendChild(el); currentInner = el; }
     }

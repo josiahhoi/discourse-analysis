@@ -147,12 +147,15 @@ function showTextContextMenu(propIndex, start, end, centerY, centerX) {
       const color = btn.dataset.color;
       
       DA_STATE.pushUndo('color text');
-      
-      // Remove any overlapping color tags
-      DA_STATE.formatTags = DA_STATE.formatTags.filter(t => 
-        !(t.type === 'color' && t.propIndex === propIndex && t.start === start && t.end === end)
+
+      // Replace, don't layer: drop any existing color tag on this line whose
+      // range overlaps the selection (half-open [start, end) overlap test), then
+      // add the new one. This also drives "clear" — selecting a range and
+      // clearing removes every color touching it, instead of only an exact match.
+      DA_STATE.formatTags = DA_STATE.formatTags.filter(t =>
+        !(t.type === 'color' && t.propIndex === propIndex && t.start < end && start < t.end)
       );
-      
+
       if (color !== 'clear') {
         DA_STATE.formatTags.push({ propIndex, start, end, type: 'color', color });
       }
