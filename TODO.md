@@ -79,6 +79,24 @@ From the full code review (July 2026). Organized by effort. Check items off as t
   nested brackets): full render 486ms → 27ms, keystroke frame 481ms → 7ms (under the
   16ms/60fps budget). Full SVG rebuild per frame remains — revisit only if passages
   grow far beyond chapter length.
+- [ ] **Remaining per-keystroke render work** (July 2026 ultra review). Six further
+  savings inside the `scheduleVisualUpdate` frame — the 7ms benchmark above already
+  absorbs them, so these only matter if passages/brackets grow well past that scale:
+  - Bracket id refs resolve via `DA_STATE.bracketById()` (a linear `Array.find`) inside
+    the recursive extent walks → O(n²·depth) per frame. Fix: per-pass
+    `Map(id → {bracket, index})`, same pattern as `_connCache`.
+  - Extents are still computed twice per frame (once in `computeSlotAssignments`, again
+    in `renderBrackets`; `getCollapseInfo` re-derives more). Compute once per frame and
+    share across all three.
+  - `updatePropositionBlock` reads `textSpan.innerText` per block between innerHTML
+    writes — one forced reflow per proposition per render. Compare a cached
+    last-rendered signature instead (and `textContent` where a raw read suffices).
+  - `renderBrackets` calls `svg.getBoundingClientRect()` inside the per-dot map —
+    hoist one `containerRect` above the loop.
+  - `legHitsText` (render-arrows.js) caret-probes every 8px of every arrow leg per
+    frame; measure each line's occupied x-intervals once per pass and test by overlap.
+  - `renderCommentPreviews` re-runs `precomputeVerseSuffixes` per comment; hoist one
+    verse map per render (the `_verseMap` pattern `renderBrackets` already uses).
 - [ ] **Distribution polish** — code-sign/notarize the Mac build (Gatekeeper currently
   quarantines it), add auto-update, and an in-app field for the ESV API key (today the
   key only exists in the developer's local `.env`, so shipped builds always use the

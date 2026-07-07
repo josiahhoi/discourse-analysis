@@ -7,9 +7,11 @@ function _hexToRgba(hex, alpha) {
 
 // Relationship types that may be created by "jumping over" intermediate
 // propositions (flat multi-member units whose interior dots/nodes are hidden).
-const _JUMP_OVER_TYPES = new Set(
-  (window.DA_PROFILES && DA_PROFILES.JUMP_OVER_TYPES) || ['series', 'bilateral', 'double-ground']
-);
+// Read from the single canonical list in constants.js at use time — a
+// module-load snapshot here once drifted from the picker's copy.
+function _isJumpOverType(t) {
+  return DA_CONSTANTS.JUMP_OVER_TYPES.includes(t);
+}
 
 /**
  * Create an SVG text element with the given label, rendering stars in a larger
@@ -185,7 +187,7 @@ function renderPropositions() {
   const seriesMemberIndices = new Set();
   DA_STATE.brackets.forEach((b, idx) => {
     const t = b.type && b.type.toLowerCase();
-    if (b.isJumpOver && _JUMP_OVER_TYPES.has(t)) {
+    if (b.isJumpOver && _isJumpOverType(t)) {
       const ext = getBracketExtent(idx);
       for (let k = ext.from + 1; k <= ext.to - 1; k++) {
         seriesMemberIndices.add(k);
@@ -508,25 +510,35 @@ function computeHighlightEntries() {
  * text appears once, on the FIRST row where that verse begins — later rows of
  * the same verse get an empty cell. A merged '3-5' row shows verses 3–5 joined.
  */
+/**
+ * Expand a verse ref ('7', '3-5') into its verse-number strings; [] for empty
+ * or non-numeric refs (e.g. '3:14' from pasted markers, which can't map to
+ * Bolls verse numbers). The ONE ref-expansion rule shared by the parallel
+ * fetch filter (ui-menus.js showParallelDialog) and the cell mapper below —
+ * if these two ever disagree, the fetch keeps verses the renderer won't show.
+ */
+function versesInRef(ref) {
+  if (!ref) return [];
+  const parts = String(ref).split('-');
+  const startN = parseInt(parts[0], 10);
+  const endN = parseInt(parts[parts.length - 1], 10);
+  if (isNaN(startN) || isNaN(endN)) return [];
+  const out = [];
+  for (let v = startN; v <= endN; v++) out.push(String(v));
+  return out;
+}
+
 function computeParallelCells() {
   if (!DA_STATE.parallelLabel || !Object.keys(DA_STATE.parallelVerses || {}).length) return null;
 
   const seen = new Set();
   return DA_STATE.verseRefs.map((ref) => {
-    if (!ref) return '';
-    const parts = String(ref).split('-');
-    const startN = parseInt(parts[0], 10);
-    const endN = parseInt(parts[parts.length - 1], 10);
-    // Non-numeric refs (e.g. '3:14' from pasted markers) can't map to Bolls
-    // verse numbers — those rows just get an empty cell.
-    if (isNaN(startN) || isNaN(endN)) return '';
     const texts = [];
-    for (let v = startN; v <= endN; v++) {
-      const key = String(v);
-      if (seen.has(key)) continue;
+    versesInRef(ref).forEach((key) => {
+      if (seen.has(key)) return;
       seen.add(key);
       if (DA_STATE.parallelVerses[key]) texts.push(DA_STATE.parallelVerses[key]);
-    }
+    });
     return texts.join(' ');
   });
 }
@@ -925,6 +937,17 @@ function _zoom() {
   return (window.DA_UI && DA_UI.getZoomFactor) ? DA_UI.getZoomFactor() : 1;
 }
 
+/**
+ * Connection-node offset from the bracket spine (positive = right, so RTL
+ * flips the sign), zoom-scaled. The ONE definition of where a bracket's node
+ * sits — used by both the node renderer (renderBrackets) and arm targeting
+ * (getConnectionPoints.getX); keeping them in one place is what guarantees a
+ * parent's arm actually lands on the child's node circle at every zoom level.
+ */
+function _nodeOffset() {
+  return (DA_STATE.isRTL ? 15 : -15) * _zoom();
+}
+
 function getGutterPadding() {
   const { GAP, BRACKET_WIDTH, SLOT_WIDTH, BASE_PADDING } = DA_CONSTANTS.BRACKET_GEO;
   const z = _zoom();
@@ -1026,7 +1049,7 @@ function renderBrackets() {
                                                       // glued to the spine at high zoom
   const _labelDX = (_rtl ? -5 : 5) * _z;             // label sits toward the text
   const _labelAnchor = _rtl ? 'end' : 'start';
-  const _nodeDX = (_rtl ? 15 : -15) * _z;            // node sits away from the text
+  const _nodeDX = _nodeOffset();                     // node sits away from the text
   const _starDX = (_rtl ? 12 : -12) * _z;
   const _starAnchor = _rtl ? 'start' : 'end';
 
@@ -1037,7 +1060,7 @@ function renderBrackets() {
   const _hiddenNodeIdx = new Set();
   DA_STATE.brackets.forEach((s, sIdx) => {
     const _t = s.type && s.type.toLowerCase();
-    if (!s.isJumpOver || !_JUMP_OVER_TYPES.has(_t)) return;
+    if (!s.isJumpOver || !_isJumpOverType(_t)) return;
     const sExt = _extents[sIdx];
     const refs = new Set([s.from, s.to]);
     DA_STATE.brackets.forEach((b, bIdx) => {
@@ -1437,11 +1460,12 @@ function getConnectionPoints(fromId, toId, dotPositions, excludeBracketIdx = -1,
       const idx = typeof id === 'number' ? id : parseInt(id.slice(1), 10);
       return dotPositions[idx]?.left || 0;
     }
-    // Bracket id: point at the connection-node, mirrored to the right gutter in
-    // RTL (the node offset flips sign just like in renderBrackets: -15 LTR, +15 RTL).
+    // Bracket id: point at the connection-node, mirrored to the right gutter
+    // in RTL. _nodeOffset() is the same zoom-scaled offset renderBrackets
+    // draws the node circle at, so the arm lands on it at every zoom level.
     const bIdx = DA_STATE.bracketIndexById(id);
     if (bIdx === -1) return 0;
-    return _mirrorGutterX(getBracketX(bIdx)) + (DA_STATE.isRTL ? 15 : -15);
+    return _mirrorGutterX(getBracketX(bIdx)) + _nodeOffset();
   };
 
   const result = {
@@ -1465,6 +1489,6 @@ window.DA_RENDERER = Object.assign(window.DA_RENDERER || {}, {
     renderAll, renderPropositions, renderBrackets,
     computeSlotAssignments, getBracketX, getConnectionPoints,
     getPointExtent, getBracketExtent, getRepresentativeRange, getCollapseInfo, updateBracketPositions,
-    scheduleVisualUpdate, computeVerseDisplay, clampToWordAnchor, computeParallelCells,
+    scheduleVisualUpdate, computeVerseDisplay, clampToWordAnchor, computeParallelCells, versesInRef,
     getBracketSlots: () => ({ ..._slotForIdx })
 });

@@ -204,9 +204,13 @@ const DA_EXPORT = {
       // Restore original states
       DA_STATE.showCommentsEnabled = prevShowComments;
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
+      // Zoom FIRST, then render: applyZoom({ rerender: false }) re-applies the
+      // CSS text scale immediately, so the renderAll below must run at the
+      // restored zoom — otherwise the bracket geometry stays at the capture's
+      // 100% positions under rescaled text (a visibly misaligned diagram).
+      this.restoreZoomAfterCapture(prevZoom);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
-      this.restoreZoomAfterCapture(prevZoom);
 
       const dataUrl = canvas.toDataURL('image/png');
       const bracketData = this.buildBracketData();
@@ -235,9 +239,13 @@ const DA_EXPORT = {
       console.error('Export failed:', err);
       // Ensure restoration on failure
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
+      // Zoom FIRST, then render: applyZoom({ rerender: false }) re-applies the
+      // CSS text scale immediately, so the renderAll below must run at the
+      // restored zoom — otherwise the bracket geometry stays at the capture's
+      // 100% positions under rescaled text (a visibly misaligned diagram).
+      this.restoreZoomAfterCapture(prevZoom);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
-      this.restoreZoomAfterCapture(prevZoom);
       DA_UI.showStatus('Capture failed.', 'error');
     }
   },
@@ -264,9 +272,13 @@ const DA_EXPORT = {
 
       // Restore
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
+      // Zoom FIRST, then render: applyZoom({ rerender: false }) re-applies the
+      // CSS text scale immediately, so the renderAll below must run at the
+      // restored zoom — otherwise the bracket geometry stays at the capture's
+      // 100% positions under rescaled text (a visibly misaligned diagram).
+      this.restoreZoomAfterCapture(prevZoom);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
-      this.restoreZoomAfterCapture(prevZoom);
 
       const bracketData = this.buildBracketData();
       const rawBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
@@ -283,9 +295,13 @@ const DA_EXPORT = {
     } catch (err) {
       console.error(err);
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
+      // Zoom FIRST, then render: applyZoom({ rerender: false }) re-applies the
+      // CSS text scale immediately, so the renderAll below must run at the
+      // restored zoom — otherwise the bracket geometry stays at the capture's
+      // 100% positions under rescaled text (a visibly misaligned diagram).
+      this.restoreZoomAfterCapture(prevZoom);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
-      this.restoreZoomAfterCapture(prevZoom);
       DA_UI.showStatus('Save failed.', 'error');
     }
   },
@@ -315,9 +331,13 @@ const DA_EXPORT = {
 
       // Restore
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
+      // Zoom FIRST, then render: applyZoom({ rerender: false }) re-applies the
+      // CSS text scale immediately, so the renderAll below must run at the
+      // restored zoom — otherwise the bracket geometry stays at the capture's
+      // 100% positions under rescaled text (a visibly misaligned diagram).
+      this.restoreZoomAfterCapture(prevZoom);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
-      this.restoreZoomAfterCapture(prevZoom);
 
       const imgData = canvas.toDataURL('image/png');
       const { jsPDF } = jspdf;
@@ -347,9 +367,13 @@ const DA_EXPORT = {
     } catch (err) {
       console.error(err);
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
+      // Zoom FIRST, then render: applyZoom({ rerender: false }) re-applies the
+      // CSS text scale immediately, so the renderAll below must run at the
+      // restored zoom — otherwise the bracket geometry stays at the capture's
+      // 100% positions under rescaled text (a visibly misaligned diagram).
+      this.restoreZoomAfterCapture(prevZoom);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
-      this.restoreZoomAfterCapture(prevZoom);
       DA_UI.showStatus('PDF export failed.', 'error');
     }
   }

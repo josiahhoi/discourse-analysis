@@ -149,6 +149,58 @@ window.DA_STATE = {
     s.customLabels = snapshot.customLabels || [];
     s.bracketSelectStep = snapshot.bracketSelectStep ?? 0;
     s.firstBracketPoint = snapshot.firstBracketPoint ?? null;
+
+    // Restoring a snapshot changes local state exactly like an edit does, so a
+    // live cloud session must go live-dirty — otherwise the sync badge keeps
+    // saying "synced" after an undo/redo and the change is never pushed.
+    // (Same call + test fallback as pushUndo below.)
+    if (window.DA_CLOUD && DA_CLOUD.markDirty) DA_CLOUD.markDirty();
+    else s.cloudDirty = true;
+  },
+
+  /**
+   * Replace the document. Ends/forgets any cloud session, resets every
+   * per-document field to its empty default, then applies `overrides` (the new
+   * content). Every content-replacing feature — fetch passage, paste import,
+   * file import, New — goes through here, so a future transient field only
+   * ever needs to be added to this one list (previously four call sites each
+   * hand-maintained slightly different subsets of this reset).
+   */
+  resetForNewDocument: function(overrides) {
+    if (window.DA_CLOUD && DA_CLOUD.resetSessionForNewContent) DA_CLOUD.resetSessionForNewContent();
+    const s = window.DA_STATE;
+    Object.assign(s, {
+      passageRef: '',
+      propositions: [],
+      verseRefs: [],
+      verseBreaks: [],
+      brackets: [],
+      formatTags: [],
+      wordArrows: [],
+      comments: [],
+      indentation: [],
+      bracketHighlights: {},
+      customLabels: [],
+      undoStack: [],
+      redoStack: [],
+      bracketSelectStep: 0,
+      firstBracketPoint: null,
+      connectBracketToBracketIdx: null,
+      selectedArrowIdx: null,
+      pendingArrowStart: null,
+      activeCommentTarget: null,
+      parallelVerses: {},
+      parallelLabel: ''
+    }, overrides || {});
+    // verseBreaks is parallel to propositions — keep the invariant even when a
+    // caller only supplies propositions.
+    if (s.verseBreaks.length !== s.propositions.length) {
+      s.verseBreaks = s.propositions.map((_, i) => (Array.isArray(s.verseBreaks[i]) ? s.verseBreaks[i] : []));
+    }
+    // Leaving connect mode: the canvas may still carry the visual affordance.
+    if (typeof document !== 'undefined') {
+      document.getElementById('bracketCanvas')?.classList.remove('connect-mode');
+    }
   },
 
   pushUndo: function(action, debounceKey = '') {

@@ -99,8 +99,8 @@ const BRACKET_LABELS = {
   'action-result': 'Ac/Res*',
   'action-purpose': 'Ac/Pur*',
   conditional: 'If/Th*',
-  temporal: 'T/*',
-  locative: 'L/*',
+  temporal: '*/T',
+  locative: '*/L',
   'action-manner': 'Ac/Mn*',
   comparison: 'Cf/Cf',
   'negative-positive': '-/+',
@@ -167,6 +167,13 @@ const RELATIONSHIP_GROUPS_HIERARCHY = [
 ];
 
 const SINGLE_LABEL_TYPES = new Set(['series', 'alternative', 'bilateral', 'both-and', 'unspecified']);
+
+// Relationship types that may be created by "jumping over" intermediate
+// propositions (flat multi-member units whose interior dots/nodes are hidden).
+// SINGLE canonical list — profiles.js re-exports it, and the renderer
+// (rendering-engine.js) and picker (ui-menus.js) read it from here, so the
+// three copies that once drifted can't come back.
+const JUMP_OVER_TYPES = ['series', 'bilateral', 'double-ground'];
 
 const BRACKET_GEO = {
   GAP: 15,
@@ -247,7 +254,7 @@ const RELATIONSHIP_DEFINITIONS = {
 window.DA_CONSTANTS = {
     ESV_API, SBLGNT_BASE, SBLGNT_BOOKS, FULL_BOOK_NAMES, BOLLS_BOOKS,
     BRACKET_LABELS, RELATIONSHIP_LABELS, RELATIONSHIP_GROUPS_HIERARCHY,
-    SINGLE_LABEL_TYPES, BRACKET_GEO,
+    SINGLE_LABEL_TYPES, JUMP_OVER_TYPES, BRACKET_GEO,
     RELATIONSHIP_COLORS, RELATIONSHIP_DEFINITIONS,
     THEME_KEY, COMMENT_AUTHOR_KEY, REVIEWER_NAME_KEY, PAGE_AUTHOR_KEY, WELCOME_SEEN_KEY,
     ZOOM_KEY, ZOOM_LEVELS, ZOOM_DEFAULT

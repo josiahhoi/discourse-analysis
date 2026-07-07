@@ -229,15 +229,17 @@
     if (!name) return DA_UI.showStatus('Enter a profile name to publish.', 'error');
     if (!password) return DA_UI.showStatus('Enter a password to publish.', 'error');
 
-    // Publish the active profile under the typed name (forking a built-in into a
-    // named custom profile if needed).
+    // Publish the active profile under the typed name (forking a built-in into
+    // a named custom profile if needed). The fork is only made ACTIVE after the
+    // cloud accepts it — publishing to a taken name with the wrong password
+    // must not rename/fork the user's local profile as a side effect.
     const working = ensureWorking();
     working.name = name;
-    DA_PROFILES.setActive(working);
 
     DA_UI.showStatus(`Publishing "${name}"…`, 'info');
     try {
-      const created = await DA_PROFILES.publishToCloud(DA_PROFILES.getActive(), password);
+      const created = await DA_PROFILES.publishToCloud(working, password);
+      DA_PROFILES.setActive(working);
       const pw = document.getElementById('cloudProfilePassword');
       if (pw) pw.value = '';
       renderEditor();

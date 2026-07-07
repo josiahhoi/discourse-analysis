@@ -97,6 +97,7 @@ window.DA_KEYBOARD = {
         const commentPopover = document.getElementById('commentPopover');
         const textContextMenu = document.getElementById('textContextMenu');
         const exportMenu = document.getElementById('exportMenu');
+        const alternateViewsMenu = document.getElementById('alternateViewsMenu');
         const openPicker = document.getElementById('openPicker');
         const customLabelDialog = document.querySelector('.custom-label-dialog');
         const settingsModal = document.getElementById('settingsModal');
@@ -105,7 +106,7 @@ window.DA_KEYBOARD = {
         const referenceOpen = referenceModal && referenceModal.style.display === 'flex';
 
         if (labelPicker || bracketActions || arrowActions || commentPopover || textContextMenu
-            || exportMenu || openPicker || customLabelDialog || settingsOpen || referenceOpen) {
+            || exportMenu || alternateViewsMenu || openPicker || customLabelDialog || settingsOpen || referenceOpen) {
           // The custom-label dialog sits on top of the label picker — close only
           // the dialog first; a second Escape closes the picker underneath.
           if (customLabelDialog) { customLabelDialog.remove(); return; }
@@ -124,6 +125,7 @@ window.DA_KEYBOARD = {
           if (commentPopover) commentPopover.remove();
           if (textContextMenu) textContextMenu.remove();
           if (exportMenu) exportMenu.remove();
+          if (alternateViewsMenu) alternateViewsMenu.remove();
           if (openPicker) openPicker.remove();
           if (settingsOpen) DA_UI.closeSettings();
           if (referenceOpen) DA_UI.closeReferenceGuide();

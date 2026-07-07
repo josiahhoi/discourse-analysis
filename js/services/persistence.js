@@ -272,20 +272,20 @@ function importBracket(data) {
   // Legacy migration
   data = normalizeBracketData(data);
 
-  // Loading a different project replaces the document: exit any live session
-  // and forget the previous project id, in one service call (see cloud-sync.js).
-  if (window.DA_CLOUD) DA_CLOUD.resetSessionForNewContent();
-
-  DA_STATE.updateState({
+  // Loading a different project replaces the document: one shared reset ends/
+  // forgets the cloud session and clears every per-document field (undo/redo,
+  // parallel column, selections, …) before the file's content is applied.
+  DA_STATE.resetForNewDocument({
     passageRef: data.passageRef || 'Imported bracket',
     propositions: data.propositions.slice(),
     verseRefs: Array.isArray(data.verseRefs) && data.verseRefs.length === data.propositions.length
       ? data.verseRefs.slice()
       : data.propositions.map((_, i) => String(i + 1)),
-    // normalizeBracketData above guarantees verseBreaks exists and is aligned.
+    // normalizeBracketData above guarantees verseBreaks is aligned; the reset
+    // helper re-pads defensively either way.
     verseBreaks: Array.isArray(data.verseBreaks)
-      ? data.propositions.map((_, i) => (Array.isArray(data.verseBreaks[i]) ? data.verseBreaks[i].slice() : []))
-      : data.propositions.map(() => []),
+      ? data.verseBreaks.map((a) => (Array.isArray(a) ? a.slice() : []))
+      : [],
     brackets: (Array.isArray(data.brackets) ? data.brackets : (Array.isArray(data.arcs) ? data.arcs : [])).map((a) => ({ ...a })),
     formatTags: Array.isArray(data.formatTags) ? data.formatTags.map((t) => ({ ...t })) : [],
     wordArrows: Array.isArray(data.wordArrows) ? data.wordArrows.map((w) => ({ ...w })) : [],
@@ -298,13 +298,10 @@ function importBracket(data) {
     })) : [],
     indentation: Array.isArray(data.indentation) ? data.indentation.slice() : [],
     bracketHighlights: (data.bracketHighlights && typeof data.bracketHighlights === 'object') ? Object.assign({}, data.bracketHighlights) : {},
-    undoStack: [],
-    redoStack: [],
-    bracketSelectStep: 0,
-    firstBracketPoint: null,
-    // Parallel column is transient view state for the previous passage.
-    parallelVerses: {},
-    parallelLabel: ''
+    // Project-specific labels travel with the file. Intentionally NOT written
+    // to localStorage ('da_custom_labels') so imported labels don't silently
+    // enter the user's permanent bank.
+    customLabels: Array.isArray(data.customLabels) ? data.customLabels.map((cl) => ({ ...cl })) : []
   });
 
   // The file may carry the project id it was shared under — remember it (state
@@ -314,12 +311,6 @@ function importBracket(data) {
   const passageRefEl = document.getElementById('passageRef');
   if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
 
-  if (data.customLabels) {
-    DA_STATE.customLabels = data.customLabels;
-    // We intentionally do NOT update localStorage.setItem('da_custom_labels', ...) here
-    // so that imported labels don't automatically enter the user's permanent bank.
-  }
-  
   const pageAuthorInputEl = document.getElementById('pageAuthor');
   if (pageAuthorInputEl && data.pageAuthor != null) {
     pageAuthorInputEl.value = data.pageAuthor;

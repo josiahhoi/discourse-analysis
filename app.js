@@ -235,17 +235,14 @@ async function fetchPassage() {
   try {
     const result = await DA_BIBLE.fetchPassageData(version, query);
 
-    // A new passage replaces the document: exit any live cloud session AND
-    // forget the remembered project id, in one service call (see cloud-sync.js).
-    if (window.DA_CLOUD) DA_CLOUD.resetSessionForNewContent();
-
-    DA_STATE.propositions = result.propositions;
-    DA_STATE.verseRefs = result.verseRefs;
-    DA_STATE.verseBreaks = result.propositions.map(() => []);
-    // The parallel column is view state for the passage it was fetched for.
-    DA_STATE.parallelVerses = {};
-    DA_STATE.parallelLabel = '';
-    DA_STATE.passageRef = result.passageRef;
+    // A new passage replaces the document: one shared reset ends/forgets the
+    // cloud session and clears every per-document field (brackets, comments,
+    // undo/redo, parallel column, custom labels, …) before the new text lands.
+    DA_STATE.resetForNewDocument({
+      propositions: result.propositions,
+      verseRefs: result.verseRefs,
+      passageRef: result.passageRef
+    });
     
     if (copyrightLabel) copyrightLabel.textContent = result.copyright;
     
@@ -260,9 +257,6 @@ async function fetchPassage() {
 
     if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
 
-    clearAllFormatting();
-    DA_STATE.undoStack = [];
-    DA_STATE.redoStack = [];
     renderAll();
     // Only ESV specifically has a primary/fallback split (api.esv.org → Bolls);
     // other versions are always Bolls, so don't call that a "fallback".
@@ -325,32 +319,26 @@ if (importBtn) importBtn.addEventListener('click', () => {
   const startVerseInput = document.getElementById('importStartVerse');
   const startVerse = (startVerseInput?.value?.trim() || '1').replace(/[^0-9a-z:]/gi, '') || '1';
 
-  // Pasted text replaces the document — same session rule as fetch/import.
-  // (This branch previously skipped it: with a live session attached, the next
-  // incoming cloud snapshot would clobber the pasted text, or a manual Sync
-  // would overwrite the cloud project with it.)
-  if (window.DA_CLOUD) DA_CLOUD.resetSessionForNewContent();
-
   const parsed = DA_UI.parsePastedText(raw, startVerse);
-  if (parsed.propositions.length > 0) {
-    DA_STATE.propositions = parsed.propositions;
-    DA_STATE.verseRefs = parsed.verseRefs;
-  } else {
-    DA_STATE.propositions = [raw.replace(/\[\d+(?::\d+)?\]\s*/g, '').trim() || raw];
-    DA_STATE.verseRefs = [startVerse];
-  }
-  DA_STATE.verseBreaks = DA_STATE.propositions.map(() => []);
-  DA_STATE.parallelVerses = {};
-  DA_STATE.parallelLabel = '';
-  DA_STATE.passageRef = passageRefInput?.value?.trim() || 'Imported text';
+  const usedParsed = parsed.propositions.length > 0;
+
+  // Pasted text replaces the document: one shared reset ends/forgets the cloud
+  // session and clears every per-document field before the paste lands. (This
+  // branch once skipped the session reset — with a live session attached, the
+  // next cloud snapshot would clobber the paste, or a manual Sync would
+  // overwrite the cloud project with it.)
+  DA_STATE.resetForNewDocument({
+    propositions: usedParsed
+      ? parsed.propositions
+      : [raw.replace(/\[\d+(?::\d+)?\]\s*/g, '').trim() || raw],
+    verseRefs: usedParsed ? parsed.verseRefs : [startVerse],
+    passageRef: passageRefInput?.value?.trim() || 'Imported text'
+  });
   if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
   const copyrightLabel = document.getElementById('copyrightLabel');
   if (copyrightLabel) copyrightLabel.textContent = '';
   if (propositionsContainer) propositionsContainer.classList.remove('greek-text');
-  
-  clearAllFormatting();
-  DA_STATE.undoStack = [];
-  DA_STATE.redoStack = [];
+
   renderAll();
   DA_UI.showStatus('Imported. Double-click to split a line, single-click to edit. Click the dots to create brackets.', 'success');
 });

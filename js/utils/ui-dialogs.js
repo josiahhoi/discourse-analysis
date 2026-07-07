@@ -393,33 +393,13 @@ function handleNewBracket() {
 }
 
 function startNewBracket() {
-  // A new bracket replaces the document: exit any live session AND forget the
-  // remembered project id, in one service call (see cloud-sync.js). Carrying
-  // the id forward would let a later "Turn Cloud Sync ON" offer to resume —
-  // and overwrite — the OLD project with the new content.
-  if (window.DA_CLOUD) DA_CLOUD.resetSessionForNewContent();
-
-  DA_STATE.updateState({
+  // A new bracket replaces the document: one shared reset ends/forgets the
+  // cloud session (carrying the id forward would let a later "Turn Cloud Sync
+  // ON" resume — and overwrite — the OLD project with the new content) and
+  // clears every per-document field. Only the non-default bits are passed.
+  DA_STATE.resetForNewDocument({
     passageRef: '—',
-    propositions: [],
-    verseRefs: [],
-    verseBreaks: [],
-    parallelVerses: {},
-    parallelLabel: '',
-    brackets: [],
-    formatTags: [],
-    wordArrows: [],
-    comments: [],
-    indentation: [],
-    undoStack: [],
-    redoStack: [],
-    bracketSelectStep: 0,
-
-    firstBracketPoint: null,
-    connectBracketToBracketIdx: null,
-    arrowMode: false,
-    selectedArrowIdx: null,
-    pendingArrowStart: null
+    arrowMode: false
   });
 
   const passageRefEl = document.getElementById('passageRef');

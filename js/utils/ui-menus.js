@@ -390,8 +390,7 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
   if (bracket.isJumpOver) {
     // Offer only the jump-over-capable types the active profile actually has
     // (always at least Series), since the bracket spans multiple members.
-    const jumpTypes = (window.DA_PROFILES ? DA_PROFILES.JUMP_OVER_TYPES : ['series', 'bilateral'])
-      .filter(isVisibleType);
+    const jumpTypes = DA_CONSTANTS.JUMP_OVER_TYPES.filter(isVisibleType);
     const names = jumpTypes.map(t => (window.DA_PROFILES ? DA_PROFILES.getName(t)
       : DA_CONSTANTS.RELATIONSHIP_LABELS[t] || t).replace(/\s*\([^)]*\)\s*$/, '').trim());
     const note = document.createElement('p');
@@ -692,14 +691,12 @@ function showParallelDialog() {
     showStatus(`Fetching ${code}…`, 'info');
     try {
       const chapterMap = await DA_BIBLE.fetchParallelVerses(code, DA_STATE.passageRef || '');
-      // Keep only the verses actually on screen.
+      // Keep only the verses actually on screen. versesInRef is the SAME
+      // expansion computeParallelCells renders with, so the fetch filter and
+      // the cell mapper can never disagree about which verses exist.
       const wanted = new Set();
       DA_STATE.verseRefs.forEach((ref) => {
-        const parts = String(ref || '').split('-');
-        const a = parseInt(parts[0], 10);
-        const b = parseInt(parts[parts.length - 1], 10);
-        if (isNaN(a) || isNaN(b)) return;
-        for (let v = a; v <= b; v++) wanted.add(String(v));
+        DA_RENDERER.versesInRef(ref).forEach((v) => wanted.add(v));
       });
       const kept = {};
       wanted.forEach((v) => { if (chapterMap[v]) kept[v] = chapterMap[v]; });

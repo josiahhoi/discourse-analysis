@@ -33,8 +33,9 @@
 
   // Relationship types that may be created by "jumping over" intermediate
   // propositions (flat multi-member units). A profile offers whichever of these
-  // it actually includes.
-  const JUMP_OVER_TYPES = ['series', 'bilateral', 'double-ground'];
+  // it actually includes. Canonical list lives in constants.js; re-exported
+  // here for compatibility.
+  const JUMP_OVER_TYPES = DA_CONSTANTS.JUMP_OVER_TYPES;
 
   // Compact per-system definitions, transcribed from the notation spreadsheet.
   // Each entry is [type, abbr, name?]. The abbr string is the single source of
@@ -50,7 +51,7 @@
         ['negative-positive', '- / +*'], ['idea-explanation', 'Id* / Exp'],
         ['question-answer', 'Q / A*'], ['ground', '* / G'], ['inference', '∴ / *'],
         ['action-result', 'Ac / Res*'], ['conditional', 'If / Th*'],
-        ['action-purpose', 'Ac / Pur*'], ['temporal', 'T / *'], ['locative', 'L / *'],
+        ['action-purpose', 'Ac / Pur*'], ['temporal', '* / T'], ['locative', '* / L'],
         ['bilateral', 'BL'], ['concessive', 'Csv / *'], ['situation-response', 'Sit / R*']
       ]
     },
@@ -62,7 +63,7 @@
         ['negative-positive', '- / +*'], ['idea-explanation', 'Id / Exp*'],
         ['question-answer', 'Q / A*'], ['ground', '* / G'], ['inference', '∴ / *'],
         ['action-result', 'Ac / Res*'], ['conditional', 'If / Th*'],
-        ['action-purpose', 'Ac / Pur*'], ['temporal', 'T / *'], ['locative', 'L / *'],
+        ['action-purpose', 'Ac / Pur*'], ['temporal', '* / T'], ['locative', '* / L'],
         ['bilateral', 'BL'], ['concessive', 'Csv / *'], ['situation-response', 'Sit / R*']
       ]
     },
@@ -77,7 +78,7 @@
         ['action-result', 'C / E*', 'Cause-Effect (C/E)'],
         ['conditional', 'C? / E*', 'Conditional (C?/E)'],
         ['action-purpose', 'M / Ed*', 'Means-End (M/Ed)'],
-        ['temporal', 'T / *'], ['locative', 'L / *'],
+        ['temporal', '* / T'], ['locative', '* / L'],
         ['concessive', 'Adv / *', 'Adversative (Adv)'],
         ['situation-response', 'S / R*', 'Situation-Response (S/R)'],
         ['anticipation-fulfillment', 'A / F*'], ['both-and', 'B-A']
@@ -93,7 +94,7 @@
         ['action-result', 'C / E*', 'Cause-Effect (C/E)'],
         ['conditional', 'C? / E*', 'Conditional (C?/E)'],
         ['action-purpose', 'M / Ed*', 'Means-End (M/Ed)'],
-        ['temporal', 'T / *'], ['locative', 'L / *'],
+        ['temporal', '* / T'], ['locative', '* / L'],
         ['concessive', 'Adv / *', 'Adversative (Adv)'],
         ['situation-response', 'S / R*', 'Situation-Response (S/R)']
       ]
