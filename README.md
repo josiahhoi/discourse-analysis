@@ -38,8 +38,8 @@ A powerful Bible study tool for diagramming the logical structure of Scripture u
 
 ### Desktop (Recommended)
 1. Download the latest release for your platform from the `dist/` folder or the Releases page.
-   - **Windows**: `Discourse Analysis 3.0.0 x64 Portable.exe` (No installation required)
-   - **macOS**: `Discourse Analysis-3.0.0-arm64-mac.zip`
+   - **Windows**: `Discourse Analysis 3.1.0 x64 Portable.exe` (No installation required)
+   - **macOS**: `Discourse Analysis-3.1.0-arm64-mac.zip`
 2. Run the application directly.
 
 ### ESV text source
