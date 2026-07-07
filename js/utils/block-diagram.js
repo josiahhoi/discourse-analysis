@@ -27,12 +27,10 @@
   /** Human-readable, lowercase relationship name, e.g. "ground", "action-purpose". */
   function friendlyRelName(type) {
     const key = String(type).toLowerCase();
-    let name;
-    if (DA_UI.isGurtnerMode() && DA_CONSTANTS.GURTNER_RELATIONSHIP_NAMES[key]) {
-      name = DA_CONSTANTS.GURTNER_RELATIONSHIP_NAMES[key];
-    } else {
-      name = DA_CONSTANTS.RELATIONSHIP_LABELS[key] || type;
-    }
+    // Resolve through the active notation profile (handles renames + Gurtner).
+    const name = window.DA_PROFILES
+      ? DA_PROFILES.getName(key)
+      : (DA_CONSTANTS.RELATIONSHIP_LABELS[key] || type);
     // Strip a trailing " (ABBR)" suffix, then lowercase.
     return name.replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
   }
@@ -229,7 +227,11 @@
           }
           const fragEl = document.createElement('span');
           fragEl.className = 'bd-label-frag';
-          fragEl.style.color = DA_CONSTANTS.RELATIONSHIP_COLORS[frag.type]
+          // Resolve through the active notation profile so recolors apply here
+          // just like they do to the brackets.
+          fragEl.style.color = (window.DA_PROFILES
+            ? DA_PROFILES.getColor(frag.type)
+            : DA_CONSTANTS.RELATIONSHIP_COLORS[frag.type])
             || DA_CONSTANTS.RELATIONSHIP_COLORS.unspecified;
           fragEl.textContent = frag.text;
           lab.appendChild(fragEl);
@@ -245,11 +247,11 @@
     _active = !!on;
     const wrapper = document.querySelector('.bracket-canvas-wrapper');
     if (wrapper) wrapper.classList.toggle('block-diagram-active', _active);
-    const btn = document.getElementById('blockDiagramBtn');
-    if (btn) {
-      btn.classList.toggle('active', _active);
-      btn.textContent = _active ? 'Bracket View' : 'Block Diagram';
-    }
+    // The view lives under the "Alternate Views" dropdown; light its trigger
+    // up while any alternate view is active. (The menu itself relabels its
+    // Block Diagram entry from live state each time it opens.)
+    const trigger = document.getElementById('alternateViewsBtn');
+    if (trigger) trigger.classList.toggle('active', _active);
     if (_active) {
       render();
     } else {
@@ -260,17 +262,6 @@
 
   function toggle() { setActive(!_active); }
   function isActive() { return _active; }
-
-  function init() {
-    const btn = document.getElementById('blockDiagramBtn');
-    if (btn) btn.addEventListener('click', toggle);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
 
   window.DA_BLOCK = { render, toggle, isActive, setActive, computeLevels, computeLabels };
 })();

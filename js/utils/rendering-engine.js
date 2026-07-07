@@ -5,22 +5,40 @@ function _hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+// Relationship types that may be created by "jumping over" intermediate
+// propositions (flat multi-member units whose interior dots/nodes are hidden).
+// Read from the single canonical list in constants.js at use time — a
+// module-load snapshot here once drifted from the picker's copy.
+function _isJumpOverType(t) {
+  return DA_CONSTANTS.JUMP_OVER_TYPES.includes(t);
+}
+
 /**
  * Create an SVG text element with the given label, rendering stars in a larger
- * font-size (20px) for better visibility of dominance marking.
+ * font-size (20px at 100% zoom) for better visibility of dominance marking.
+ * These sizes are set as inline attributes/styles specifically so the CSS
+ * .bracket-label rule can't override them (see comment below) — which also
+ * means CSS custom properties can't reach them, so zoom is applied here in JS
+ * via the same getZoomFactor() the bracket-gutter geometry uses.
  */
 function createLabelText(label, attrs = {}) {
   const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
   for (const [key, value] of Object.entries(attrs)) {
     text.setAttribute(key, value);
   }
+  const z = _zoom();
 
   if (!label || !label.includes('*')) {
+    // Inference symbol is tiny at the default 11px — use inline style (beats CSS).
+    if (label === '∴') text.setAttribute('style', `font-size: ${30 * z}px`);
     text.textContent = label;
     return text;
   }
 
-  // Split on star and create tspan elements with different font sizes
+  // Star is always rendered as a tspan so its 20px size isn't overridden by the
+  // CSS .bracket-label { font-size: 11px } rule (CSS beats presentation attrs on
+  // the same element, but not on child tspans that lack the class).
+  // Mixed label (e.g. "E*"): render the star in a larger tspan so it stands out.
   const parts = label.split('*');
   for (let i = 0; i < parts.length; i++) {
     if (parts[i]) {
@@ -32,7 +50,7 @@ function createLabelText(label, attrs = {}) {
     // Add star between parts (except after the last part)
     if (i < parts.length - 1) {
       const star = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-      star.setAttribute('font-size', '20px');
+      star.setAttribute('font-size', `${20 * z}px`);
       star.textContent = '*';
       text.appendChild(star);
     }
@@ -115,10 +133,7 @@ function renderPropositions() {
 
   isRenderingPropositions = true;
 
-  const { GAP, BRACKET_WIDTH, SLOT_WIDTH, BASE_PADDING } = DA_CONSTANTS.BRACKET_GEO;
-  const dynamicPaddingLeft = Math.max(200, DA_STATE.brackets.length
-    ? BASE_PADDING + GAP + BRACKET_WIDTH + (_maxSlot + 1) * SLOT_WIDTH
-    : BASE_PADDING);
+  const dynamicPaddingLeft = getGutterPadding();
   // In RTL the bracket gutter mirrors to the right side, so pad on the right
   // instead of the left (and clear the opposite side when switching modes).
   if (DA_STATE.isRTL) {
@@ -131,6 +146,10 @@ function renderPropositions() {
 
   while (DA_STATE.verseRefs.length < DA_STATE.propositions.length) DA_STATE.verseRefs.push(String(DA_STATE.verseRefs.length + 1));
   if (DA_STATE.verseRefs.length > DA_STATE.propositions.length) DA_STATE.verseRefs.length = DA_STATE.propositions.length;
+  // verseBreaks is parallel to propositions, like verseRefs above.
+  if (!Array.isArray(DA_STATE.verseBreaks)) DA_STATE.verseBreaks = [];
+  while (DA_STATE.verseBreaks.length < DA_STATE.propositions.length) DA_STATE.verseBreaks.push([]);
+  if (DA_STATE.verseBreaks.length > DA_STATE.propositions.length) DA_STATE.verseBreaks.length = DA_STATE.propositions.length;
 
   // Attach delegated listeners once
   if (!_delegatedListenersAttached) {
@@ -146,37 +165,32 @@ function renderPropositions() {
   const existingBlocks = Array.from(container.querySelectorAll('.proposition-block'));
   const targetCount = DA_STATE.propositions.length;
 
-  // Calculate hidden indices from collapsed brackets
+  // Calculate hidden indices from collapsed brackets (getCollapseInfo is the
+  // shared row/arm decision). _hiddenBy remembers which bracket(s) hid each row
+  // so the fold-gap indicator can expand exactly those on click.
   const hiddenIndices = new Set();
-  const _coordinateTypes = new Set(DA_CONSTANTS.RELATIONSHIP_GROUPS_HIERARCHY[0].types);
+  const _hiddenBy = new Map();
   DA_STATE.brackets.forEach((b, idx) => {
-    if (b.isCollapsed) {
-      const labels = getBracketLabels(b.type, b.labelsSwapped, b.dominanceFlipped);
-      const rangeFrom = getRepresentativeRange(b.from);
-      const rangeTo = getRepresentativeRange(b.to);
-      const fullRange = getBracketExtent(idx);
+    if (!b.isCollapsed) return;
+    getCollapseInfo(idx).hiddenRows.forEach((k) => {
+      hiddenIndices.add(k);
+      const owners = _hiddenBy.get(k) || [];
+      owners.push(idx);
+      _hiddenBy.set(k, owners);
+    });
+  });
 
-      const isCoordinate = _coordinateTypes.has(b.type.toLowerCase());
-      const hasStarTop = (labels.top && labels.top.includes('*')) || labels.single === '*';
-      const hasStarBottom = (labels.bottom && labels.bottom.includes('*'));
-
-      if (!isCoordinate && hasStarTop && !hasStarBottom) {
-        // Show Dominant TOP (from), hide the rest
-        for (let k = fullRange.from; k <= fullRange.to; k++) {
-          if (k < rangeFrom.from || k > rangeFrom.to) hiddenIndices.add(k);
-        }
-      } else if (!isCoordinate && hasStarBottom && !hasStarTop) {
-        // Show Dominant BOTTOM (to), hide the rest
-        for (let k = fullRange.from; k <= fullRange.to; k++) {
-          if (k < rangeTo.from || k > rangeTo.to) hiddenIndices.add(k);
-        }
-      } else {
-        // Coordinate (or ambiguous): show both ends, hide the middle
-        for (let k = fullRange.from; k <= fullRange.to; k++) {
-          const isAtFrom = k >= rangeFrom.from && k <= rangeFrom.to;
-          const isAtTo = k >= rangeTo.from && k <= rangeTo.to;
-          if (!isAtFrom && !isAtTo) hiddenIndices.add(k);
-        }
+  // Interior members of a series read as one unit with the ends, so their
+  // standalone dots are hidden. This includes lines that are endpoints of a
+  // nested sub-bracket: that sub-bracket carries its own visual connection
+  // (its vertical line + label), so the bare dot would just be noise.
+  const seriesMemberIndices = new Set();
+  DA_STATE.brackets.forEach((b, idx) => {
+    const t = b.type && b.type.toLowerCase();
+    if (b.isJumpOver && _isJumpOverType(t)) {
+      const ext = getBracketExtent(idx);
+      for (let k = ext.from + 1; k <= ext.to - 1; k++) {
+        seriesMemberIndices.add(k);
       }
     }
   });
@@ -187,18 +201,32 @@ function renderPropositions() {
   }
 
   const _verseSuffixMap = precomputeVerseSuffixes(DA_STATE.verseRefs);
+  // Highlight extents once per pass, not once per block (each resolution is an
+  // id lookup + recursive extent walk).
+  const _hlForPass = computeHighlightEntries();
+
+  // Parallel column (Alternate Views): view-only second translation, keyed by
+  // verse. null when the column is off; otherwise a per-row cell-text array.
+  const _parallelCells = computeParallelCells();
+  container.classList.toggle('has-parallel', _parallelCells !== null);
+  const _parallelBadge = document.getElementById('parallelBadge');
+  if (_parallelBadge) {
+    _parallelBadge.style.display = _parallelCells !== null ? '' : 'none';
+    _parallelBadge.textContent = _parallelCells !== null ? `+ ${DA_STATE.parallelLabel}` : '';
+  }
 
   // Update existing or create new blocks
   DA_STATE.propositions.forEach((text, i) => {
     let block = existingBlocks[i];
     if (!block) {
-      block = createPropositionBlock(text, i, _verseSuffixMap[i]);
+      block = createPropositionBlock(text, i, _verseSuffixMap[i], _hlForPass, _parallelCells);
       container.appendChild(block);
     }
 
     // Toggle visibility based on folding
     block.classList.toggle('folded-hidden', hiddenIndices.has(i));
-    updatePropositionBlock(block, text, i, _verseSuffixMap[i]);
+    block.classList.toggle('series-member', seriesMemberIndices.has(i));
+    updatePropositionBlock(block, text, i, _verseSuffixMap[i], _hlForPass, _parallelCells);
   });
 
   // Remove stale gap indicators then re-insert for current hidden runs
@@ -219,6 +247,26 @@ function renderPropositions() {
       const gap = document.createElement('div');
       gap.className = 'fold-gap';
       gap.textContent = `··· ${count} row${count !== 1 ? 's' : ''} collapsed ···`;
+
+      // Clicking (or Enter/Space on) the gap expands every collapsed bracket
+      // that hides a row in this run. Gaps are rebuilt each render, so the
+      // owner indices captured here can't go stale.
+      const owners = new Set();
+      for (let k = start; k <= end; k++) (_hiddenBy.get(k) || []).forEach((bi) => owners.add(bi));
+      gap.setAttribute('role', 'button');
+      gap.tabIndex = 0;
+      gap.title = 'Click to expand';
+      gap.setAttribute('aria-label', `Expand ${count} collapsed row${count !== 1 ? 's' : ''}`);
+      const expandRun = () => {
+        DA_STATE.pushUndo('expand section');
+        owners.forEach((bi) => { const b = DA_STATE.brackets[bi]; if (b) b.isCollapsed = false; });
+        if (window.renderAll) window.renderAll();
+      };
+      gap.addEventListener('click', expandRun);
+      gap.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); expandRun(); }
+      });
+
       if (start === 0) {
         container.insertBefore(gap, container.querySelector('.proposition-block'));
       } else {
@@ -287,6 +335,14 @@ function remapPropositionAnchors(i, oldText, newText) {
       c.target.end = map(c.target.end);
     }
   });
+  // Verse boundaries ride along with the same diff-shift, then are cleaned:
+  // dropped if the edit pushed them out of range, deduped if two collapsed.
+  const vb = DA_STATE.verseBreaks && DA_STATE.verseBreaks[i];
+  if (vb && vb.length) {
+    DA_STATE.verseBreaks[i] = [...new Set(vb.map(map))]
+      .filter((b) => b > 0 && b < nLen)
+      .sort((a, b) => a - b);
+  }
 }
 
 function attachPropositionDelegatedListeners(container) {
@@ -404,8 +460,9 @@ function attachPropositionDelegatedListeners(container) {
       _glowPropIdx = i;
       _clearBracketGlow();
       if (i !== null && !isNaN(i) && Object.keys(DA_STATE.bracketHighlights).length) {
-        Object.entries(DA_STATE.bracketHighlights).forEach(([bIdxStr, color]) => {
-          const bIdx = parseInt(bIdxStr, 10);
+        Object.entries(DA_STATE.bracketHighlights).forEach(([bracketId, color]) => {
+          const bIdx = DA_STATE.bracketIndexById(bracketId);
+          if (bIdx === -1) return;
           const extent = getBracketExtent(bIdx);
           if (i >= extent.from && i <= extent.to) {
             const group = document.querySelector(`.bracket-group[data-index="${bIdx}"]`);
@@ -436,7 +493,57 @@ function attachPropositionDelegatedListeners(container) {
   });
 }
 
-function createPropositionBlock(text, i, verseDisplay) {
+/** Resolve every row highlight (id-keyed) to its color + covered extent. */
+function computeHighlightEntries() {
+  const out = [];
+  Object.entries(DA_STATE.bracketHighlights).forEach(([bracketId, color]) => {
+    const bIdx = DA_STATE.bracketIndexById(bracketId);
+    if (bIdx === -1) return;
+    out.push({ bIdx, color, extent: getBracketExtent(bIdx) });
+  });
+  return out;
+}
+
+/**
+ * Per-render map of row index → parallel-column cell text, or null when the
+ * column is off. Parallel text is keyed by VERSE (split/merge-proof); a verse's
+ * text appears once, on the FIRST row where that verse begins — later rows of
+ * the same verse get an empty cell. A merged '3-5' row shows verses 3–5 joined.
+ */
+/**
+ * Expand a verse ref ('7', '3-5') into its verse-number strings; [] for empty
+ * or non-numeric refs (e.g. '3:14' from pasted markers, which can't map to
+ * Bolls verse numbers). The ONE ref-expansion rule shared by the parallel
+ * fetch filter (ui-menus.js showParallelDialog) and the cell mapper below —
+ * if these two ever disagree, the fetch keeps verses the renderer won't show.
+ */
+function versesInRef(ref) {
+  if (!ref) return [];
+  const parts = String(ref).split('-');
+  const startN = parseInt(parts[0], 10);
+  const endN = parseInt(parts[parts.length - 1], 10);
+  if (isNaN(startN) || isNaN(endN)) return [];
+  const out = [];
+  for (let v = startN; v <= endN; v++) out.push(String(v));
+  return out;
+}
+
+function computeParallelCells() {
+  if (!DA_STATE.parallelLabel || !Object.keys(DA_STATE.parallelVerses || {}).length) return null;
+
+  const seen = new Set();
+  return DA_STATE.verseRefs.map((ref) => {
+    const texts = [];
+    versesInRef(ref).forEach((key) => {
+      if (seen.has(key)) return;
+      seen.add(key);
+      if (DA_STATE.parallelVerses[key]) texts.push(DA_STATE.parallelVerses[key]);
+    });
+    return texts.join(' ');
+  });
+}
+
+function createPropositionBlock(text, i, verseDisplay, highlightEntries, parallelCells) {
   const block = document.createElement('div');
   block.className = 'proposition-block';
   block.dataset.index = i;
@@ -444,6 +551,10 @@ function createPropositionBlock(text, i, verseDisplay) {
   const dot = document.createElement('div');
   dot.className = 'prop-dot';
   dot.dataset.index = i;
+  // Keyboard target: Tab (or ArrowUp/Down between dots) + Enter/Space acts
+  // like a click. aria-label is kept current in updatePropositionBlock.
+  dot.tabIndex = 0;
+  dot.setAttribute('role', 'button');
   block.appendChild(dot);
 
   const refSpan = document.createElement('span');
@@ -457,24 +568,30 @@ function createPropositionBlock(text, i, verseDisplay) {
   textSpan.spellcheck = false;
   block.appendChild(textSpan);
 
-  updatePropositionBlock(block, text, i, verseDisplay);
+  updatePropositionBlock(block, text, i, verseDisplay, highlightEntries, parallelCells);
   return block;
 }
 
-function updatePropositionBlock(block, text, i, verseDisplay) {
+function updatePropositionBlock(block, text, i, verseDisplay, highlightEntries, parallelCells) {
   block.dataset.index = i;
   const dot = block.querySelector('.prop-dot');
-  if (dot) dot.dataset.index = i;
+  if (dot) {
+    dot.dataset.index = i;
+    const vd = verseDisplay !== undefined ? verseDisplay : computeVerseDisplay(i);
+    dot.setAttribute('aria-label', `Verse ${vd || i + 1}: select for bracket`);
+  }
 
   const isDirectPropSelection = DA_STATE.firstBracketPoint === `p${i}`;
   let isRangeSelected = isDirectPropSelection;
-  
+
   // If a bracket is selected, highlight all propositions in its range for context
-  if (DA_STATE.firstBracketPoint && DA_STATE.firstBracketPoint.startsWith('b')) {
-    const bIdx = parseInt(DA_STATE.firstBracketPoint.slice(1), 10);
-    const range = getBracketExtent(bIdx);
-    if (i >= range.from && i <= range.to) {
-      isRangeSelected = true;
+  if (DA_STATE.firstBracketPoint && !DA_STATE.isPropRef(DA_STATE.firstBracketPoint)) {
+    const bIdx = DA_STATE.bracketIndexById(DA_STATE.firstBracketPoint);
+    if (bIdx !== -1) {
+      const range = getBracketExtent(bIdx);
+      if (i >= range.from && i <= range.to) {
+        isRangeSelected = true;
+      }
     }
   }
 
@@ -483,14 +600,13 @@ function updatePropositionBlock(block, text, i, verseDisplay) {
 
   block.style.marginLeft = `${(DA_STATE.indentation[i] || 0) * 20}px`;
 
-  // Collect highlight colors and bracket indices covering this proposition
-  const _highlightEntries = [];
-  Object.entries(DA_STATE.bracketHighlights).forEach(([bIdxStr, color]) => {
-    const bIdx = parseInt(bIdxStr, 10);
-    const extent = getBracketExtent(bIdx);
-    if (i >= extent.from && i <= extent.to) _highlightEntries.push({ bIdx, color, extent });
-  });
-  const _highlightColors = _highlightEntries.map(e => e.color);
+  // Highlight colors of brackets covering this proposition. The resolved
+  // entries are computed once per render pass by the caller; the fallback keeps
+  // standalone calls correct.
+  const _hlAll = highlightEntries !== undefined ? highlightEntries : computeHighlightEntries();
+  const _highlightColors = _hlAll
+    .filter(e => i >= e.extent.from && i <= e.extent.to)
+    .map(e => e.color);
 
   // --- Left accent bar ---
   let _bar = block.querySelector('.section-highlight-bar');
@@ -543,6 +659,25 @@ function updatePropositionBlock(block, text, i, verseDisplay) {
       renderInlineContent(textSpan, text, i);
     }
   }
+
+  // Parallel column cell (view-only; the differential renderer reuses blocks,
+  // so the span must be added/removed when the column toggles mid-session).
+  const cells = parallelCells !== undefined ? parallelCells : computeParallelCells();
+  let pSpan = block.querySelector('.parallel-text');
+  if (cells === null) {
+    if (pSpan) pSpan.remove();
+  } else {
+    if (!pSpan) {
+      pSpan = document.createElement('span');
+      pSpan.className = 'parallel-text';
+      // dir=auto: e.g. Chinese must render LTR inside its cell even when the
+      // primary passage is Hebrew and the whole row is direction: rtl.
+      pSpan.setAttribute('dir', 'auto');
+      block.appendChild(pSpan);
+    }
+    const cellText = cells[i] || '';
+    if (pSpan.textContent !== cellText) pSpan.textContent = cellText;
+  }
 }
 
 function precomputeVerseSuffixes(verseRefs) {
@@ -569,44 +704,10 @@ function precomputeVerseSuffixes(verseRefs) {
   });
 }
 
+// Single-index convenience over precomputeVerseSuffixes, so the suffix logic
+// (which propositions share a verse → a/b/c letters) lives in exactly one place.
 function computeVerseDisplay(i) {
-  const currentRef = DA_STATE.verseRefs[i];
-  if (!currentRef) return '';
-
-  const checkNeedsSuffix = (verse, idx) => {
-    return DA_STATE.verseRefs.some((r, rIdx) => {
-      if (rIdx === idx) return false;
-      return r === verse || r.startsWith(verse + '-') || r.endsWith('-' + verse) || r.includes('-' + verse + '-');
-    });
-  };
-
-  const getSuffix = (verse, idx) => {
-    let count = 0;
-    for (let j = 0; j < DA_STATE.verseRefs.length; j++) {
-      const ref = DA_STATE.verseRefs[j];
-      if (!ref) continue;
-      const isMatch = ref === verse || ref.startsWith(verse + '-') || ref.endsWith('-' + verse) || ref.includes('-' + verse + '-');
-      if (isMatch) {
-        if (j === idx) return String.fromCharCode(97 + count);
-        count++;
-      }
-    }
-    return '';
-  };
-
-  const getFullDisplay = (ref, idx) => {
-    if (!ref.includes('-')) {
-      return checkNeedsSuffix(ref, idx) ? ref + getSuffix(ref, idx) : ref;
-    }
-    const parts = ref.split('-');
-    const start = parts[0];
-    const end = parts[parts.length - 1];
-    const startDisplay = checkNeedsSuffix(start, idx) ? start + getSuffix(start, idx) : start;
-    const endDisplay = checkNeedsSuffix(end, idx) ? end + getSuffix(end, idx) : end;
-    return `${startDisplay}-${endDisplay}`;
-  };
-
-  return getFullDisplay(currentRef, i);
+  return precomputeVerseSuffixes(DA_STATE.verseRefs)[i] || '';
 }
 
 function renderInlineContent(textSpan, text, i) {
@@ -700,7 +801,8 @@ function renderInlineContent(textSpan, text, i) {
 function appendChunk(textSpan, chunk, startPos, propIdx, activeTags, allTags) {
   let node = document.createTextNode(chunk);
 
-  let wrapper = null, currentInner = null;
+  /** @type {HTMLElement|null} */ let wrapper = null;
+  /** @type {HTMLElement|null} */ let currentInner = null;
   const activeIds = Array.from(activeTags);
 
   activeIds.forEach(id => {
@@ -713,6 +815,10 @@ function appendChunk(textSpan, chunk, startPos, propIdx, activeTags, allTags) {
       const el = document.createElement('span');
       el.className = 'color-text';
       el.style.color = t.tag.color;
+      // Keep the original value (e.g. hex) so extractFormatTags can recover it
+      // verbatim on focusout — style.color reads back as rgb(), which would
+      // otherwise drift the stored color away from the swatch value.
+      el.dataset.color = t.tag.color;
       if (!wrapper) wrapper = currentInner = el;
       else { currentInner.appendChild(el); currentInner = el; }
     }
@@ -764,69 +870,116 @@ function appendChunk(textSpan, chunk, startPos, propIdx, activeTags, allTags) {
 
 function computeSlotAssignments() {
   _slotForIdx = {};
+  const n = DA_STATE.brackets.length;
+  if (n === 0) { _maxSlot = 0; return; }
+
+  // Extents are computed ONCE up front. The containment check runs over every
+  // bracket pair (O(n²)), so recomputing recursive extents inside it made deep
+  // nestings O(n³) — the main reason chapter-length passages froze per frame.
+  const extents = DA_STATE.brackets.map((_, i) => getBracketExtent(i));
+
+  const contains = (outerIdx, innerIdx) => {
+    if (outerIdx === innerIdx) return false;
+    const eOuter = extents[outerIdx];
+    const eInner = extents[innerIdx];
+    if (eInner.from >= eOuter.from && eInner.to <= eOuter.to) {
+      if (eInner.from === eOuter.from && eInner.to === eOuter.to) {
+        return innerIdx < outerIdx;
+      }
+      return true;
+    }
+    return false;
+  };
+
   const order = [];
   const visited = new Set();
-  
   const visit = (idx) => {
     if (visited.has(idx)) return;
     visited.add(idx);
-    DA_STATE.brackets.forEach((a, i) => {
-      if (bracketContainsForSlot(DA_STATE.brackets[idx], idx, a, i)) visit(i);
-    });
+    for (let i = 0; i < n; i++) {
+      if (contains(idx, i)) visit(i);
+    }
     order.push(idx);
   };
-  
-  DA_STATE.brackets.forEach((_, i) => visit(i));
-  
-  order.forEach((idx) => {
-    const bracket = DA_STATE.brackets[idx];
-    const contained = DA_STATE.brackets
-      .map((a, i) => ({ a, i }))
-      .filter(({ a, i }) => bracketContainsForSlot(bracket, idx, a, i));
-      
-    if (contained.length === 0) {
-      _slotForIdx[idx] = 0;
-    } else {
-      _slotForIdx[idx] = 1 + Math.max(...contained.map(({ i }) => _slotForIdx[i]));
-    }
-  });
-  
-  _maxSlot = DA_STATE.brackets.length ? Math.max(...Object.values(_slotForIdx)) : 0;
-}
+  for (let i = 0; i < n; i++) visit(i);
 
-function bracketContainsForSlot(outer, outerIdx, inner, innerIdx) {
-  if (outerIdx === innerIdx) return false;
-  const eOuter = getBracketExtent(outerIdx);
-  const eInner = getBracketExtent(innerIdx);
-  
-  if (eInner.from >= eOuter.from && eInner.to <= eOuter.to) {
-    if (eInner.from === eOuter.from && eInner.to === eOuter.to) {
-      return innerIdx < outerIdx;
+  _maxSlot = 0;
+  order.forEach((idx) => {
+    let slot = 0;
+    for (let i = 0; i < n; i++) {
+      if (contains(idx, i)) slot = Math.max(slot, _slotForIdx[i] + 1);
     }
-    return true;
-  }
-  return false;
+    _slotForIdx[idx] = slot;
+    if (slot > _maxSlot) _maxSlot = slot;
+  });
 }
 
 // Canvas width captured each renderBrackets pass, used to mirror computed gutter
 // X coordinates in RTL mode. Shared so getConnectionPoints can mirror too.
 let _bracketCanvasW = 0;
+
+// Per-pass memo for getConnectionPoints, keyed "from|to". Only non-null while
+// renderBrackets is mid-pass (dot positions are frozen then); always reset to
+// null afterwards so no stale geometry survives between frames.
+let _connCache = null;
 function _mirrorGutterX(xv) {
   return DA_STATE.isRTL ? _bracketCanvasW - xv : xv;
 }
 
+// Width of the bracket gutter (text padding) given the current nesting depth.
+// Shared by renderPropositions (as padding) and getBracketX (as the origin).
+// BRACKET_GEO is defined in raw px for 100% zoom. Everything computed from it
+// is scaled by the current zoom factor so the gutter/nesting geometry stays
+// proportionate to the (CSS-scaled) text instead of looking cramped or
+// oversized at any zoom level besides 100%. Falls back to 1 (no scaling) when
+// DA_UI isn't loaded, e.g. isolated unit tests.
+function _zoom() {
+  return (window.DA_UI && DA_UI.getZoomFactor) ? DA_UI.getZoomFactor() : 1;
+}
+
+/**
+ * Connection-node offset from the bracket spine (positive = right, so RTL
+ * flips the sign), zoom-scaled. The ONE definition of where a bracket's node
+ * sits — used by both the node renderer (renderBrackets) and arm targeting
+ * (getConnectionPoints.getX); keeping them in one place is what guarantees a
+ * parent's arm actually lands on the child's node circle at every zoom level.
+ */
+function _nodeOffset() {
+  return (DA_STATE.isRTL ? 15 : -15) * _zoom();
+}
+
+function getGutterPadding() {
+  const { GAP, BRACKET_WIDTH, SLOT_WIDTH, BASE_PADDING } = DA_CONSTANTS.BRACKET_GEO;
+  const z = _zoom();
+  return Math.max(200 * z, DA_STATE.brackets.length
+    ? BASE_PADDING * z + GAP * z + BRACKET_WIDTH * z + (_maxSlot + 1) * SLOT_WIDTH * z
+    : BASE_PADDING * z);
+}
+
 function getBracketX(bracketIdx) {
   const slot = _slotForIdx[bracketIdx] ?? 0;
-  const { GAP, BRACKET_WIDTH, SLOT_WIDTH, BASE_PADDING } = DA_CONSTANTS.BRACKET_GEO;
-  const dynamicPaddingLeft = Math.max(200, DA_STATE.brackets.length
-    ? BASE_PADDING + GAP + BRACKET_WIDTH + (_maxSlot + 1) * SLOT_WIDTH
-    : BASE_PADDING);
-  return dynamicPaddingLeft - GAP - BRACKET_WIDTH - slot * SLOT_WIDTH;
+  const { GAP, BRACKET_WIDTH, SLOT_WIDTH } = DA_CONSTANTS.BRACKET_GEO;
+  const z = _zoom();
+  return getGutterPadding() - GAP * z - BRACKET_WIDTH * z - slot * SLOT_WIDTH * z;
 }
 
 function renderBrackets() {
   const svg = document.getElementById('bracketCanvas');
   if (!svg) return;
+
+  // Keyboard-focus continuity: the SVG is rebuilt from scratch each pass, which
+  // would silently drop focus (e.g. mid keyboard bracket-creation on a
+  // connection node). Remember which bracket's node/line held focus and restore
+  // it onto the rebuilt element at the end.
+  let _refocus = null;
+  const _active = document.activeElement;
+  if (_active && svg.contains(_active)) {
+    const _kind = _active.classList.contains('connection-node') ? 'node'
+      : _active.classList.contains('bracket-hitbox') ? 'line' : null;
+    const _idx = parseInt(_kind === 'node' ? _active.dataset.bracketIdx : _active.dataset.index, 10);
+    if (_kind && DA_STATE.brackets[_idx]) _refocus = { kind: _kind, id: DA_STATE.brackets[_idx].id };
+  }
+
   svg.innerHTML = '';
   if (DA_STATE.brackets.length === 0) return;
   
@@ -859,8 +1012,9 @@ function renderBrackets() {
       _hoveredBracketIdx = newIdx;
       _clearCardActive();
       if (newIdx === null || isNaN(newIdx)) return;
+      const hoveredId = DA_STATE.brackets[newIdx]?.id;
       DA_STATE.comments.forEach(c => {
-        if (c.type === 'bracket' && c.target?.bracketIdx === newIdx) {
+        if (c.type === 'bracket' && c.target?.bracketId === hoveredId) {
           const card = document.querySelector(`.comments-preview-card[data-comment-id="${c.id}"]`);
           if (card) {
             card.classList.add('comment-hover-active');
@@ -875,7 +1029,12 @@ function renderBrackets() {
     });
   }
 
-  const _coordTypes = new Set(DA_CONSTANTS.RELATIONSHIP_GROUPS_HIERARCHY[0].types);
+  // All bracket extents for this pass, computed once. Several checks below run
+  // over bracket pairs; recomputing recursive extents inside those loops is
+  // what made deep nestings quadratic-to-cubic per frame.
+  const _extents = DA_STATE.brackets.map((_, idx) => getBracketExtent(idx));
+  // Verse displays for aria-labels, one suffix computation per pass.
+  const _verseMap = precomputeVerseSuffixes(DA_STATE.verseRefs);
 
   // --- RTL mirroring ---
   // In right-to-left mode the bracket gutter is on the right, so every *computed*
@@ -885,18 +1044,46 @@ function renderBrackets() {
   const _rtl = DA_STATE.isRTL;
   _bracketCanvasW = svg.getBoundingClientRect().width;
   const MX = _mirrorGutterX;                        // mirror a computed gutter X
-  const _labelDX = _rtl ? -5 : 5;                   // label sits toward the text
+  const _z = _zoom();                               // scales the small offsets below too,
+                                                      // so labels/nodes/stars don't look
+                                                      // glued to the spine at high zoom
+  const _labelDX = (_rtl ? -5 : 5) * _z;             // label sits toward the text
   const _labelAnchor = _rtl ? 'end' : 'start';
-  const _nodeDX = _rtl ? 15 : -15;                  // node sits away from the text
-  const _starDX = _rtl ? 12 : -12;
+  const _nodeDX = _nodeOffset();                     // node sits away from the text
+  const _starDX = (_rtl ? 12 : -12) * _z;
   const _starAnchor = _rtl ? 'start' : 'end';
+
+  // Connection-nodes to suppress: a bracket "jumped over" by a series or
+  // bilateral is an implicit member, so its own parent-attach anchor would just
+  // dangle inside the span. We hide it. A bracket the jump-over references
+  // directly (its from/to) keeps its node — the arm terminates there.
+  const _hiddenNodeIdx = new Set();
+  DA_STATE.brackets.forEach((s, sIdx) => {
+    const _t = s.type && s.type.toLowerCase();
+    if (!s.isJumpOver || !_isJumpOverType(_t)) return;
+    const sExt = _extents[sIdx];
+    const refs = new Set([s.from, s.to]);
+    DA_STATE.brackets.forEach((b, bIdx) => {
+      if (bIdx === sIdx || refs.has(b.id)) return;
+      const bExt = _extents[bIdx];
+      if (bExt.from >= sExt.from && bExt.to <= sExt.to &&
+          !(bExt.from === sExt.from && bExt.to === sExt.to)) {
+        _hiddenNodeIdx.add(bIdx);
+      }
+    });
+  });
+
+  // Per-pass memo for getConnectionPoints: a nested bracket's geometry is
+  // otherwise recomputed recursively for every ancestor that references it.
+  _connCache = new Map();
+  try {
 
   DA_STATE.brackets.forEach((bracket, i) => {
     // 1. Hide brackets that are inside a collapsed parent
     const isInsideCollapsed = DA_STATE.brackets.some((otherB, otherIdx) => {
       if (otherIdx === i || !otherB.isCollapsed) return false;
-      const outerRange = getBracketExtent(otherIdx);
-      const innerRange = getBracketExtent(i);
+      const outerRange = _extents[otherIdx];
+      const innerRange = _extents[i];
       return innerRange.from >= outerRange.from && innerRange.to <= outerRange.to;
     });
     if (isInsideCollapsed) return;
@@ -904,7 +1091,9 @@ function renderBrackets() {
     let { topY, topLeft, bottomY, bottomLeft } = getConnectionPoints(bracket.from, bracket.to, dotPositions, i);
     const x = MX(getBracketX(i));
 
-    const isCollapsedCoord = bracket.isCollapsed && _coordTypes.has(bracket.type.toLowerCase());
+    // Shared with the row hider in renderPropositions so rows and arms agree.
+    const _collapseInfo = bracket.isCollapsed ? getCollapseInfo(i) : null;
+    const isCollapsedCoord = !!(_collapseInfo && _collapseInfo.isCoordinateShape);
 
     if (bracket.isCollapsed) {
       if (isCollapsedCoord) {
@@ -919,28 +1108,25 @@ function renderBrackets() {
           bottomY = toPos.midY;
           bottomLeft = toPos.left;
         } else {
-          const extent = getBracketExtent(i);
+          const extent = _extents[i];
           for (let j = extent.from; j <= extent.to; j++) {
             const pos = dotPositions[j];
             if (pos && pos.midY > 0) { topY = bottomY = pos.midY; topLeft = bottomLeft = pos.left; break; }
           }
         }
       } else {
-        // Subordinate collapsed: snap to the representative dot of the dominant endpoint.
-        // Use getRepresentativeRange so that bN refs resolve to the actual proposition dot
-        // rather than the bracket node x position (which may be hidden/unrendered).
-        const labelsC = getBracketLabels(bracket.type, bracket.labelsSwapped, bracket.dominanceFlipped);
-        const isTopStar = labelsC.top && labelsC.top.includes('*');
-        const isBottomStar = labelsC.bottom && labelsC.bottom.includes('*');
-        const dominantId = (isBottomStar && !isTopStar) ? bracket.to : bracket.from;
-        const repDominant = getRepresentativeRange(dominantId);
+        // Subordinate collapsed: snap to the representative dot of the dominant
+        // endpoint (already resolved by getCollapseInfo). getRepresentativeRange
+        // makes bN refs land on the actual proposition dot rather than the
+        // bracket node x position (which may be hidden/unrendered).
+        const repDominant = getRepresentativeRange(_collapseInfo.dominantId);
         const dominantPos = dotPositions[repDominant.from];
         if (dominantPos && dominantPos.midY > 0) {
           topY = bottomY = dominantPos.midY;
           topLeft = bottomLeft = dominantPos.left;
         } else {
           // Fallback: find first visible prop in the bracket's full extent
-          const extent = getBracketExtent(i);
+          const extent = _extents[i];
           for (let j = extent.from; j <= extent.to; j++) {
             const pos = dotPositions[j];
             if (pos && pos.midY > 0) { topY = bottomY = pos.midY; topLeft = bottomLeft = pos.left; break; }
@@ -950,10 +1136,10 @@ function renderBrackets() {
     }
 
     // Create Group for Hovering and Selection
-    const isBracketSelected = DA_STATE.firstBracketPoint === `b${i}`;
-    const isActiveTarget = DA_STATE.activeCommentTarget && DA_STATE.activeCommentTarget.type === 'bracket' && DA_STATE.activeCommentTarget.bracketIdx === i;
+    const isBracketSelected = DA_STATE.firstBracketPoint === bracket.id;
+    const isActiveTarget = DA_STATE.activeCommentTarget && DA_STATE.activeCommentTarget.type === 'bracket' && DA_STATE.activeCommentTarget.bracketId === bracket.id;
     const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    const color = DA_CONSTANTS.RELATIONSHIP_COLORS[bracket.type] || DA_CONSTANTS.RELATIONSHIP_COLORS.unspecified;
+    const color = (window.DA_PROFILES ? DA_PROFILES.getColor(bracket.type) : DA_CONSTANTS.RELATIONSHIP_COLORS[bracket.type]) || DA_CONSTANTS.RELATIONSHIP_COLORS.unspecified;
     group.setAttribute('style', `--bracket-color: ${color};`);
     group.setAttribute('class', `bracket-group ${bracket.type} ${bracket.isCollapsed ? 'is-collapsed' : ''} ${isCollapsedCoord ? 'is-collapsed-coord' : ''} ${isBracketSelected ? 'is-selected' : ''} ${isActiveTarget ? 'is-active-target' : ''}`);
     group.dataset.index = i;
@@ -963,7 +1149,7 @@ function renderBrackets() {
 
     // Background highlight path for comments
     if (DA_STATE.showCommentsEnabled) {
-      const bComments = DA_STATE.comments.filter(c => c.type === 'bracket' && c.target && c.target.bracketIdx === i);
+      const bComments = DA_STATE.comments.filter(c => c.type === 'bracket' && c.target && c.target.bracketId === bracket.id);
       if (bComments.length > 0) {
           group.classList.add('has-comment');
           let d;
@@ -989,11 +1175,20 @@ function renderBrackets() {
       class: 'bracket-line'
     }));
 
-    // Hitbox
+    // Hitbox. The vertical one doubles as the bracket's keyboard target
+    // (Enter opens the label picker via the canvas keydown handler); the arm
+    // hitboxes below stay mouse-only so each bracket is a single tab stop.
+    const _ext = _extents[i];
+    const _typeName = window.DA_PROFILES ? DA_PROFILES.getName(bracket.type) : bracket.type;
+    const _spokenType = (!_typeName || _typeName === '?') ? 'Unlabeled' : _typeName;
+    const _vLabel = `${_spokenType} bracket, verses ${_verseMap[_ext.from] || _ext.from + 1}–${_verseMap[_ext.to] || _ext.to + 1}. Press Enter to edit.`;
     group.appendChild(createSVG('line', {
       x1: x, y1: topY,
       x2: x, y2: ((bracket.isCollapsed && !isCollapsedCoord) ? topY : bottomY),
       class: 'bracket-hitbox',
+      tabindex: 0,
+      role: 'button',
+      'aria-label': _vLabel,
       dataset: { index: i }
     }));
 
@@ -1034,7 +1229,7 @@ function renderBrackets() {
         'text-anchor': _starAnchor,
         'dominant-baseline': 'middle',
         class: 'main-point-star',
-        'font-size': '50px',
+        'font-size': `${50 * _z}px`,
         fill: '#e53935',
         'pointer-events': 'none'
       })).textContent = '★';
@@ -1050,8 +1245,13 @@ function renderBrackets() {
     group.appendChild(createSVG('circle', {
       cx: x + _nodeDX,
       cy: nodeY,
-      r: 5,
-      class: `${(DA_STATE.bracketSelectStep === 1 && DA_STATE.firstBracketPoint === `b${i}`) ? 'connection-node active-node' : 'connection-node'} ${bracket.isCollapsed ? 'collapsed' : ''}`,
+      r: 5 * _z,
+      class: `${(DA_STATE.bracketSelectStep === 1 && DA_STATE.firstBracketPoint === bracket.id) ? 'connection-node active-node' : 'connection-node'} ${bracket.isCollapsed ? 'collapsed' : ''} ${_hiddenNodeIdx.has(i) ? 'series-absorbed' : ''}`,
+      tabindex: 0,
+      role: 'button',
+      'aria-label': bracket.isCollapsed
+        ? `${_spokenType} bracket node: collapsed, press Enter to expand`
+        : `${_spokenType} bracket node: select for bracket`,
       dataset: { bracketIdx: i }
     }));
 
@@ -1074,44 +1274,65 @@ function renderBrackets() {
         dataset: { index: i }
       }));
     } else {
+      // Standalone stars ('*' only) are centered on the bracket endpoint via
+      // dominant-baseline:middle. Mixed labels ('E*') use baseline positioning
+      // with a -5 offset so the text sits just above the endpoint.
+      const topStarOnly = labels.top === '*';
+      const bottomStarOnly = labels.bottom === '*';
+
       group.appendChild(createLabelText(labels.top, {
         x: x + _labelDX,
-        y: topY - 5,
+        y: topStarOnly ? topY : topY - 5,
         'text-anchor': _labelAnchor,
+        ...(topStarOnly ? { 'dominant-baseline': 'middle' } : {}),
         class: 'bracket-label',
         dataset: { index: i, pos: 'top' }
       }));
 
       group.appendChild(createLabelText(labels.bottom, {
         x: x + _labelDX,
-        y: bottomY - 5,
+        y: bottomStarOnly ? bottomY : bottomY - 5,
         'text-anchor': _labelAnchor,
+        ...(bottomStarOnly ? { 'dominant-baseline': 'middle' } : {}),
         class: 'bracket-label',
         dataset: { index: i, pos: 'bottom' }
       }));
     }
   });
+
+  } finally {
+    // The memo is only valid for this pass's dot positions — never leave it on.
+    _connCache = null;
+  }
+
+  // Restore keyboard focus onto the rebuilt element (see top of function).
+  if (_refocus) {
+    const bIdx = DA_STATE.bracketIndexById(_refocus.id);
+    if (bIdx !== -1) {
+      const el = _refocus.kind === 'node'
+        ? svg.querySelector(`.connection-node[data-bracket-idx="${bIdx}"]`)
+        : svg.querySelector(`.bracket-hitbox[tabindex][data-index="${bIdx}"]`);
+      if (el) el.focus();
+    }
+  }
 }
 
 function getExtent(id, _seen) {
   if (typeof id === 'number') return { from: id, to: id };
   if (id === null || id === undefined) return { from: 0, to: 0 };
-  if (id.startsWith('p')) {
+  if (DA_STATE.isPropRef(id)) {
     const idx = parseInt(id.slice(1), 10);
     return { from: idx, to: idx };
   }
-  if (id.startsWith('b')) {
-    if (!_seen) _seen = new Set();
-    if (_seen.has(id)) return { from: 0, to: 0 };
-    _seen.add(id);
-    const bIdx = parseInt(id.slice(1), 10);
-    const b = DA_STATE.brackets[bIdx];
-    if (!b) return { from: 0, to: 0 };
-    const eFrom = getExtent(b.from, _seen);
-    const eTo = getExtent(b.to, _seen);
-    return { from: Math.min(eFrom.from, eTo.from), to: Math.max(eFrom.to, eTo.to) };
-  }
-  return { from: 0, to: 0 };
+  // Anything that isn't 'pN' is a bracket id.
+  if (!_seen) _seen = new Set();
+  if (_seen.has(id)) return { from: 0, to: 0 };
+  _seen.add(id);
+  const b = DA_STATE.bracketById(id);
+  if (!b) return { from: 0, to: 0 };
+  const eFrom = getExtent(b.from, _seen);
+  const eTo = getExtent(b.to, _seen);
+  return { from: Math.min(eFrom.from, eTo.from), to: Math.max(eFrom.to, eTo.to) };
 }
 
 function getBracketExtent(bracketIdx) {
@@ -1127,15 +1348,14 @@ function getBracketExtent(bracketIdx) {
 // full extent of a sub-bracket endpoint.
 function getRepresentativeRange(id, _seen) {
   if (id === null || id === undefined) return { from: 0, to: 0 };
-  if (typeof id === 'number' || id.startsWith('p')) {
+  if (typeof id === 'number' || DA_STATE.isPropRef(id)) {
     const idx = typeof id === 'number' ? id : parseInt(id.slice(1), 10);
     return { from: idx, to: idx };
   }
-  const bIdx = parseInt(id.slice(1), 10);
   if (!_seen) _seen = new Set();
-  if (_seen.has(bIdx)) return { from: 0, to: 0 };
-  _seen.add(bIdx);
-  const b = DA_STATE.brackets[bIdx];
+  if (_seen.has(id)) return { from: 0, to: 0 };
+  _seen.add(id);
+  const b = DA_STATE.bracketById(id);
   if (!b) return { from: 0, to: 0 };
   const labels = getBracketLabels(b.type, b.labelsSwapped, b.dominanceFlipped);
   const hasStarTop = (labels.top && labels.top.includes('*')) || labels.single === '*';
@@ -1146,467 +1366,129 @@ function getRepresentativeRange(id, _seen) {
     return getRepresentativeRange(b.to, _seen);
   } else {
     // Coordinate or ambiguous — expose the full extent of this sub-bracket
-    return getBracketExtent(bIdx);
+    return getBracketExtent(DA_STATE.bracketIndexById(id));
   }
 }
 
+// Lazy so this file doesn't depend on constants.js load order.
+let _coordTypesCache = null;
+function _coordinateTypeSet() {
+  if (!_coordTypesCache) _coordTypesCache = new Set(DA_CONSTANTS.RELATIONSHIP_GROUPS_HIERARCHY[0].types);
+  return _coordTypesCache;
+}
+
+/**
+ * The single source of truth for what collapsing a bracket does. Both the row
+ * hider (renderPropositions) and the arm drawer (renderBrackets) consume this,
+ * so they can never disagree about which rows represent a collapsed bracket —
+ * previously a no-star subordinate label kept both endpoint rows visible but
+ * drew only one arm, leaving the other row dangling.
+ *
+ * A subordinate type with exactly one starred arm collapses to that dominant
+ * end (isCoordinateShape false, dominantId set). Everything else — coordinate
+ * types, no-star labels (e.g. dominance display off), double-star labels —
+ * keeps both ends and hides the middle (isCoordinateShape true).
+ */
+function getCollapseInfo(bracketIdx) {
+  const b = DA_STATE.brackets[bracketIdx];
+  if (!b) return { hiddenRows: [], isCoordinateShape: true, dominantId: null };
+  const labels = getBracketLabels(b.type, b.labelsSwapped, b.dominanceFlipped);
+  const starTop = !!((labels.top && labels.top.includes('*')) || labels.single === '*');
+  const starBottom = !!(labels.bottom && labels.bottom.includes('*'));
+  const isCoordinate = _coordinateTypeSet().has(b.type.toLowerCase());
+  const fullRange = getBracketExtent(bracketIdx);
+  const hiddenRows = [];
+
+  if (!isCoordinate && starTop !== starBottom) {
+    const dominantId = starTop ? b.from : b.to;
+    const rep = getRepresentativeRange(dominantId);
+    for (let k = fullRange.from; k <= fullRange.to; k++) {
+      if (k < rep.from || k > rep.to) hiddenRows.push(k);
+    }
+    return { hiddenRows, isCoordinateShape: false, dominantId };
+  }
+
+  const repFrom = getRepresentativeRange(b.from);
+  const repTo = getRepresentativeRange(b.to);
+  for (let k = fullRange.from; k <= fullRange.to; k++) {
+    const atFrom = k >= repFrom.from && k <= repFrom.to;
+    const atTo = k >= repTo.from && k <= repTo.to;
+    if (!atFrom && !atTo) hiddenRows.push(k);
+  }
+  return { hiddenRows, isCoordinateShape: true, dominantId: null };
+}
+
 function getConnectionPoints(fromId, toId, dotPositions, excludeBracketIdx = -1, _seen) {
+  const _cacheKey = _connCache ? `${fromId}|${toId}` : null;
+  if (_cacheKey && _connCache.has(_cacheKey)) return _connCache.get(_cacheKey);
+
   // Guard against cyclic bracket references (a bracket reachable from itself via
   // from/to). getExtent/getRepresentativeRange already carry such guards; without
   // one here a cycle recurses forever and the whole diagram dies on render.
   if (!_seen) _seen = new Set();
 
-  const extentFrom = getExtent(fromId);
-  const extentTo = getExtent(toId);
-  const totalFrom = Math.min(extentFrom.from, extentTo.from);
-  const totalTo = Math.max(extentFrom.to, extentTo.to);
-
   // Helper to get Y coordinate for a point
-  const getY = (id, bracketIdx) => {
-    if (typeof id === 'number' || id.startsWith('p')) {
+  const getY = (id) => {
+    if (typeof id === 'number' || DA_STATE.isPropRef(id)) {
       const idx = typeof id === 'number' ? id : parseInt(id.slice(1), 10);
       return dotPositions[idx]?.midY || 0;
     }
-    if (id.startsWith('b')) {
-      const bIdx = parseInt(id.slice(1), 10);
-      if (_seen.has(bIdx)) return 0; // cycle — bail
-      _seen.add(bIdx);
-      const b = DA_STATE.brackets[bIdx];
-      if (!b) return 0; // SAFETY
-      const points = getConnectionPoints(b.from, b.to, dotPositions, bIdx, _seen);
-      
-      // NEW: Check for stars to determine connection point
-      const labels = getBracketLabels(b.type, b.labelsSwapped, b.dominanceFlipped);
-      if (labels.single) return (points.topY + points.bottomY) / 2;
-      
-      if (labels.top && labels.top.includes('*')) {
-        return points.topY;
-      }
-      if (labels.bottom && labels.bottom.includes('*')) {
-        return points.bottomY;
-      }
-      
-      return (points.topY + points.bottomY) / 2;
+    // Bracket id
+    if (_seen.has(id)) return 0; // cycle — bail
+    _seen.add(id);
+    const b = DA_STATE.bracketById(id);
+    if (!b) return 0; // SAFETY
+    const points = getConnectionPoints(b.from, b.to, dotPositions, -1, _seen);
+
+    // Check for stars to determine connection point
+    const labels = getBracketLabels(b.type, b.labelsSwapped, b.dominanceFlipped);
+    if (labels.single) return (points.topY + points.bottomY) / 2;
+
+    if (labels.top && labels.top.includes('*')) {
+      return points.topY;
     }
-    return 0;
+    if (labels.bottom && labels.bottom.includes('*')) {
+      return points.bottomY;
+    }
+
+    return (points.topY + points.bottomY) / 2;
   };
 
   // Helper to get X coordinate for a point
   const getX = (id) => {
-    if (typeof id === 'number' || id.startsWith('p')) {
+    if (typeof id === 'number' || DA_STATE.isPropRef(id)) {
       const idx = typeof id === 'number' ? id : parseInt(id.slice(1), 10);
       return dotPositions[idx]?.left || 0;
     }
-    if (id.startsWith('b')) {
-      const bIdx = parseInt(id.slice(1), 10);
-      // Point at the connection-node, mirrored to the right gutter in RTL (the
-      // node offset flips sign just like in renderBrackets: -15 LTR, +15 RTL).
-      return _mirrorGutterX(getBracketX(bIdx)) + (DA_STATE.isRTL ? 15 : -15);
-    }
-    return 0;
+    // Bracket id: point at the connection-node, mirrored to the right gutter
+    // in RTL. _nodeOffset() is the same zoom-scaled offset renderBrackets
+    // draws the node circle at, so the arm lands on it at every zoom level.
+    const bIdx = DA_STATE.bracketIndexById(id);
+    if (bIdx === -1) return 0;
+    return _mirrorGutterX(getBracketX(bIdx)) + _nodeOffset();
   };
 
-  return {
-    topY: getY(fromId, excludeBracketIdx),
+  const result = {
+    topY: getY(fromId),
     topLeft: getX(fromId),
-    bottomY: getY(toId, excludeBracketIdx),
+    bottomY: getY(toId),
     bottomLeft: getX(toId)
   };
-}
-
-function getBracketLabels(type, labelsSwapped = false, dominanceFlipped = false) {
-  const typeKey = type.toLowerCase();
-  let labelStr = DA_CONSTANTS.BRACKET_LABELS[typeKey];
-  
-  // Check for custom label in project state or saved bank
-  if (!labelStr && typeKey.startsWith('cl_')) {
-    const custom = DA_STATE.customLabels.find(cl => cl.id === typeKey) || 
-                   DA_STATE.savedCustomLabels.find(cl => cl.id === typeKey);
-    if (custom) labelStr = custom.label;
-  }
-  
-  if (!labelStr) labelStr = type.slice(0, 2);
-  
-  if (DA_UI.isGurtnerMode() && DA_CONSTANTS.GURTNER_LABELS[typeKey]) labelStr = DA_CONSTANTS.GURTNER_LABELS[typeKey];
-  
-  if (DA_CONSTANTS.SINGLE_LABEL_TYPES.has(typeKey)) {
-    return { single: labelStr, summary: labelStr };
-  }
-
-  let top = '', bottom = '';
-  
-  // Robust parsing for labels like "*/Id/Exp" or "C/E/*"
-  const parts = labelStr.split('/');
-  if (parts.length === 3) {
-    // Format: Ornament/TopLabel/BottomLabel
-    if (parts[0] === '*') {
-      top = parts[1] + '*';
-      bottom = parts[2];
-    } else if (parts[2] === '*') {
-      top = parts[0];
-      bottom = parts[1] + '*';
-    } else {
-      top = parts[0]; bottom = parts[1]; // fallback
-    }
-  } else if (parts.length === 2) {
-    top = parts[0] || '';
-    bottom = parts[1] || '';
-    // If it's a 2-part label but no side has a star yet, add one to the bottom
-    if (!top.includes('*') && !bottom.includes('*')) {
-      bottom += '*';
-    }
-  } else {
-    top = labelStr;
-    bottom = '*'; // Default star on bottom if no slash
-  }
-
-  if (labelsSwapped) {
-    [top, bottom] = [bottom, top];
-  }
-
-  if (dominanceFlipped) {
-    // Correctly move the star from one side to the other
-    const hasStarTop = top.includes('*');
-    const hasStarBottom = bottom.includes('*');
-
-    if (hasStarTop && !hasStarBottom) {
-      top = top.replace('*', '');
-      bottom += '*';
-    } else if (hasStarBottom && !hasStarTop) {
-      bottom = bottom.replace('*', '');
-      top += '*';
-    } else if (!hasStarTop && !hasStarBottom) {
-      top += '*';
-    }
-  }
-
-  // Create a clean summary using the canonical order (ignoring swaps for the name)
-  const canonical = DA_CONSTANTS.RELATIONSHIP_LABELS[typeKey] || type;
-  // If it's a known short-code pair, use it, otherwise use a shortened version of the label name
-  const summary = canonical.includes('-') 
-    ? canonical.split('-').map(s => s.trim().substring(0,3)).join('/') 
-    : (canonical.length > 6 ? canonical.substring(0, 4) : canonical);
-
-  return { top: top.trim(), bottom: bottom.trim(), summary };
-}
-
-function renderWordArrows() {
-  const svg = document.getElementById('wordArrowsSvg');
-  if (!svg) return;
-  svg.innerHTML = '';
-  // Word arrows are not supported in right-to-left mode (their collision-aware
-  // routing assumes LTR glyph positions), so skip rendering them entirely.
-  if (DA_STATE.isRTL) return;
-  const wrapper = document.getElementById('propositions');
-  if (!wrapper) return;
-  const wrapperRect = wrapper.getBoundingClientRect();
-
-  const _hL = 8, _hW = 4;
-  const makeHead = (x, y, dir) => {
-    if (dir === 'up') return `${x},${y} ${x - _hW},${y + _hL} ${x + _hW},${y + _hL}`;
-    if (dir === 'down') return `${x},${y} ${x - _hW},${y - _hL} ${x + _hW},${y - _hL}`;
-    if (dir === 'left') return `${x},${y} ${x + _hL},${y - _hW} ${x + _hL},${y + _hW}`;
-    return `${x},${y} ${x - _hL},${y - _hW} ${x - _hL},${y + _hW}`; // right
-  };
-
-  // Returns true if a wrapper-relative point sits on a visible glyph. Used so we
-  // only reroute a horizontal leg into the gutter when it would actually cross
-  // text — legs that run through empty space (e.g. an indented sub-line's left
-  // margin) keep the original routing.
-  const pointOnGlyph = (xWrap, yWrap) => {
-    if (!document.caretRangeFromPoint) return false;
-    const xc = xWrap + wrapperRect.left, yc = yWrap + wrapperRect.top;
-    const r = document.caretRangeFromPoint(xc, yc);
-    if (!r || !r.startContainer || r.startContainer.nodeType !== 3) return false;
-    const s = r.startContainer.textContent || '';
-    for (let k = 0; k < 2; k++) {
-      const a = k === 0 ? r.startOffset : r.startOffset - 1, b = a + 1;
-      if (a < 0 || b > s.length || !/\S/.test(s[a])) continue;
-      const cr = document.createRange(); cr.setStart(r.startContainer, a); cr.setEnd(r.startContainer, b);
-      const rect = cr.getBoundingClientRect();
-      if (xc >= rect.left && xc <= rect.right && yc >= rect.top && yc <= rect.bottom) return true;
-    }
-    return false;
-  };
-  const legHitsText = (yWrap, xa, xb) => {
-    const lo = Math.min(xa, xb) + 2, hi = Math.max(xa, xb) - 2;
-    for (let x = lo; x <= hi; x += 8) if (pointOnGlyph(x, yWrap)) return true;
-    return false;
-  };
-
-  // Measure an anchor by its non-whitespace text, not the full span box. While
-  // editing in Text Edit mode, inserted indentation (e.g. tabbed spaces) lands
-  // INSIDE the anchor span, so its bounding box would left-extend and drag the
-  // arrow off the word; a trimmed range keeps the arrow on the actual word.
-  const anchorRect = (el) => {
-    const tn = el.firstChild;
-    if (tn && tn.nodeType === 3 && el.childNodes.length === 1) {
-      const t = tn.textContent;
-      const start = t.length - t.replace(/^\s+/, '').length;
-      const end = t.replace(/\s+$/, '').length;
-      if (end > start && (start > 0 || end < t.length)) {
-        const rng = document.createRange();
-        rng.setStart(tn, start); rng.setEnd(tn, end);
-        const r = rng.getBoundingClientRect();
-        if (r.width > 0 || r.height > 0) return r;
-      }
-    }
-    return el.getBoundingClientRect();
-  };
-
-  DA_STATE.wordArrows.forEach((wa, idx) => {
-    const fromEl = wrapper.querySelector(`.arrow-anchor[data-arrow-id="arrow-${idx}-from"]`);
-    const toEl = wrapper.querySelector(`.arrow-anchor[data-arrow-id="arrow-${idx}-to"]`);
-    if (!fromEl || !toEl) return;
-
-    const fromR = anchorRect(fromEl);
-    const toR = anchorRect(toEl);
-
-    // word boundaries relative to wrapper
-    const fL = fromR.left - wrapperRect.left;
-    const fR = fromR.right - wrapperRect.left;
-    const fM = fromR.top + fromR.height / 2 - wrapperRect.top;
-
-    const tL = toR.left - wrapperRect.left;
-    const tR = toR.right - wrapperRect.left;
-    const tM = toR.top + toR.height / 2 - wrapperRect.top;
-    const tT = toR.top - wrapperRect.top;
-    const tB = toR.bottom - wrapperRect.top;
-    const tC = toR.left + toR.width / 2 - wrapperRect.left;
-
-    const fC = fromR.left + fromR.width / 2 - wrapperRect.left;
-    const fT = fromR.top - wrapperRect.top;
-    const fB = fromR.bottom - wrapperRect.top;
-
-    const tBeg = tL + 5; // Beginning of word (first letter area)
-    const fBeg = fL + 5;
-
-    let x1, y1, x2, y2, isLastHorizontal;
-
-    if (tM < fM - 10) {
-      // UPWARDS: Horizontal then Vertical (Arrival at bottom edge)
-      x1 = (tBeg < fL) ? fL : (tBeg > fR ? fR : fBeg);
-      y1 = fM;
-      x2 = tBeg;
-      y2 = tB + 2;
-      isLastHorizontal = false;
-    } else if (tM > fM + 10) {
-      // DOWNWARDS: Vertical then Horizontal (Arrival at side)
-      x1 = fBeg;
-      y1 = fB;
-      y2 = tM;
-      x2 = (fBeg > tC) ? tR + 2 : tL - 2;
-      isLastHorizontal = true;
-    } else {
-      // SAME LINE: Horizontal only
-      x1 = (tBeg < fBeg) ? fL : fR;
-      y1 = fM;
-      x2 = (tBeg < fBeg) ? tR + 2 : tL - 2;
-      y2 = fM;
-      isLastHorizontal = true;
-    }
-
-    // Collision-aware routing: keep the original geometry, but if the horizontal
-    // leg would cross a word, lift it into the inter-line gap (and drop straight
-    // down/up onto the target's center) instead of striking through text.
-    const isUp = tM < fM - 10, isDown = tM > fM + 10;
-    const legY = isDown ? y2 : y1; // the horizontal leg's y in the base routing
-    const wordH = Math.max(fromR.height, toR.height);
-    const gutter = Math.min(12, Math.max(5, wordH * 0.4));
-
-    // Sink the arrowhead a few px into the target word so it clearly points at the
-    // word rather than sitting in the gap beneath it.
-    const tIn = Math.min(6, toR.height * 0.3);
-
-    let d, points;
-    if (legHitsText(legY, x1, x2)) {
-      if (isUp) {
-        // Route the horizontal in the gap above the source line. If a fixed gutter
-        // would overshoot past the target line (e.g. the target is the wrapped line
-        // directly above, only a couple px away), use the midpoint of the actual
-        // gap so the leg sits between the lines instead of striking the one above.
-        const gy = (fT - gutter < tB) ? (tB + fT) / 2 : (fT - gutter);
-        const tipY = tB - tIn;
-        d = `M ${fC} ${fT} V ${gy} H ${tC} V ${tipY}`;
-        points = makeHead(tC, tipY, 'up');
-      } else if (isDown) {
-        const gy = (tT - gutter < fB) ? (fB + tT) / 2 : (tT - gutter);
-        const tipY = tT + tIn;
-        d = `M ${fC} ${fB} V ${gy} H ${tC} V ${tipY}`;
-        points = makeHead(tC, tipY, 'down');
-      } else {
-        const gy = fB + gutter; // dip into the gap below this line
-        const tipY = tB - tIn;
-        d = `M ${fC} ${fB} V ${gy} H ${tC} V ${tipY}`;
-        points = makeHead(tC, tipY, 'up');
-      }
-    } else {
-      // No collision — original routing.
-      const sOff = 4;
-      let finalX1 = x1, finalY1 = y1;
-      if (isUp) { if (x1 === fL) finalX1 -= sOff; else if (x1 === fR) finalX1 += sOff; }
-      else if (isDown) { finalY1 += sOff; }
-      else { if (x1 === fL) finalX1 -= sOff; else if (x1 === fR) finalX1 += sOff; }
-
-      let finalX2 = x2, finalY2 = y2;
-      const offset = 1.5;
-      if (isLastHorizontal) { if (x2 < x1) finalX2 += offset; else finalX2 -= offset; }
-      else { if (y2 < y1) finalY2 += offset; else finalY2 -= offset; }
-
-      d = (isLastHorizontal && y1 !== y2)
-        ? `M ${finalX1} ${finalY1} V ${y2} H ${finalX2}`
-        : `M ${finalX1} ${finalY1} H ${x2} V ${finalY2}`;
-
-      if (isLastHorizontal) {
-        points = (x2 < x1) ? makeHead(x2, y2, 'left') : makeHead(x2, y2, 'right');
-      } else {
-        points = (y2 < y1) ? makeHead(x2, y2, 'up') : makeHead(x2, y2, 'down');
-      }
-    }
-
-    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    g.setAttribute('class', 'word-arrow-group');
-    g.dataset.index = idx;
-
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', d);
-    path.setAttribute('class', 'word-arrow-path');
-    path.style.strokeLinecap = 'butt'; // Cleaner tip
-    g.appendChild(path);
-    const head = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    head.setAttribute('points', points);
-    head.setAttribute('fill', 'var(--text)');
-    head.setAttribute('class', 'word-arrow-head');
-    g.appendChild(head);
-
-    svg.appendChild(g);
-  });
-}
-
-function renderCommentPreviews() {
-  const sidebar = document.getElementById('commentsPreview');
-  const list = document.getElementById('commentsPreviewList');
-  if (!sidebar || !list) return;
-
-  if (!DA_STATE.showCommentsEnabled) {
-    sidebar.style.display = 'none';
-    return;
-  }
-  sidebar.style.display = 'flex';
-  
-  const existingCards = Array.from(list.children);
-  const targetCount = DA_STATE.comments.length;
-
-  // Remove excess cards
-  while (existingCards.length > targetCount) {
-    existingCards.pop().remove();
-  }
-
-  DA_STATE.comments.forEach((comment, i) => {
-    let card = existingCards[i];
-    if (!card) {
-      card = document.createElement('div');
-      card.className = 'comments-preview-card';
-      list.appendChild(card);
-    }
-    card.dataset.commentId = comment.id;
-    
-    const chapterMatch = (DA_STATE.passageRef || '').match(/(\d+):/);
-    const chapter = chapterMatch ? chapterMatch[1] : '';
-
-    let targetDesc = '';
-    if (comment.type === 'text') {
-      const propIdx = comment.target.propIndex;
-      const verse = computeVerseDisplay(propIdx) || '?';
-      const fullRef = chapter ? `${chapter}:${verse}` : verse;
-      const text = DA_STATE.propositions[propIdx] || '';
-      const snippet = text.substring(comment.target.start, comment.target.end);
-      targetDesc = `${fullRef}: "${snippet}"`;
-    } else {
-      const bIdx = comment.target.bracketIdx;
-      const b = DA_STATE.brackets[bIdx];
-      const extent = getBracketExtent(bIdx);
-      const v1 = computeVerseDisplay(extent.from) || '?';
-      const v2 = computeVerseDisplay(extent.to) || '?';
-      const vsRange = v1 === v2 ? v1 : `${v1}-${v2}`;
-      const fullRef = chapter ? `${chapter}:${vsRange}` : vsRange;
-      targetDesc = `Bracket (${fullRef}): ${b ? DA_UI.formatBracketType(b.type) : 'Unknown'}`;
-    }
-
-    const newHtml = `
-      <div class="comment-card-header">
-        <span class="comment-target">${DA_UI.escapeHtml(targetDesc)}</span>
-      </div>
-      <div class="comment-author">${DA_UI.escapeHtml(comment.author)}</div>
-      <div class="comment-text">${DA_UI.renderCommentText(comment.text)}</div>
-      <div class="comment-replies">
-        ${(comment.replies || []).map(r => `
-          <div class="reply">
-            <span class="reply-author">${DA_UI.escapeHtml(r.author)}:</span>
-            <span class="reply-text">${DA_UI.renderCommentText(r.text)}</span>
-          </div>
-        `).join('')}
-      </div>
-      <div class="reply-input-row">
-        <input type="text" placeholder="Reply..." class="reply-input" data-id="${comment.id}">
-        <button class="send-reply-btn" data-id="${comment.id}" title="Send reply">→</button>
-      </div>
-    `;
-    
-    if (card._lastHtml !== newHtml) {
-      card.innerHTML = newHtml;
-      card._lastHtml = newHtml;
-    }
-  });
-
-  // Card hover → corresponding highlight glow (set up once on the list container)
-  if (!list._commentCardHoverListenersAttached) {
-    list._commentCardHoverListenersAttached = true;
-    let _hoveredCardId = null;
-
-    const _clearHighlightHover = () => {
-      document.querySelectorAll('mark.comment-highlight.comment-highlight-card-hover')
-        .forEach(el => el.classList.remove('comment-highlight-card-hover'));
-      document.querySelectorAll('.bracket-group.comment-card-hover')
-        .forEach(el => el.classList.remove('comment-card-hover'));
-    };
-
-    list.addEventListener('mouseover', (e) => {
-      const card = e.target.closest('.comments-preview-card');
-      const newId = card?.dataset.commentId ?? null;
-      if (newId === _hoveredCardId) return;
-      _hoveredCardId = newId;
-      _clearHighlightHover();
-      if (!newId) return;
-      const comment = DA_STATE.comments.find(c => c.id === newId);
-      if (!comment) return;
-      if (comment.type === 'text') {
-        document.querySelectorAll(`mark.comment-highlight[data-comment-id="${newId}"]`)
-          .forEach(el => el.classList.add('comment-highlight-card-hover'));
-      } else {
-        const bracketIdx = comment.target?.bracketIdx;
-        if (bracketIdx !== undefined) {
-          const group = document.querySelector(`.bracket-group[data-index="${bracketIdx}"]`);
-          if (group) group.classList.add('comment-card-hover');
-        }
-      }
-    });
-
-    list.addEventListener('mouseleave', () => {
-      _hoveredCardId = null;
-      _clearHighlightHover();
-    });
-  }
+  if (_cacheKey) _connCache.set(_cacheKey, result);
+  return result;
 }
 
 function getPointExtent(id) {
   return getExtent(id);
 }
 
-window.DA_RENDERER = {
-    renderAll, renderPropositions, renderBrackets, renderWordArrows, renderCommentPreviews,
-    computeSlotAssignments, getBracketX, getConnectionPoints, getBracketLabels,
-    getPointExtent, getBracketExtent, getRepresentativeRange, updateBracketPositions,
-    scheduleVisualUpdate, computeVerseDisplay, clampToWordAnchor,
+// getBracketLabels, renderWordArrows, and renderCommentPreviews now live in
+// render-labels.js / render-arrows.js / render-comments.js and add themselves to
+// this namespace via Object.assign (loaded after this file in index.html).
+window.DA_RENDERER = Object.assign(window.DA_RENDERER || {}, {
+    renderAll, renderPropositions, renderBrackets,
+    computeSlotAssignments, getBracketX, getConnectionPoints,
+    getPointExtent, getBracketExtent, getRepresentativeRange, getCollapseInfo, updateBracketPositions,
+    scheduleVisualUpdate, computeVerseDisplay, clampToWordAnchor, computeParallelCells, versesInRef,
     getBracketSlots: () => ({ ..._slotForIdx })
-};
+});

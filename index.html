@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://*.firebaseapp.com https://apis.google.com https://www.gstatic.com 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://api.esv.org https://bolls.life https://raw.githubusercontent.com http://localhost:*;">
+  <!-- script-src deliberately has no 'unsafe-inline'/'unsafe-eval': all scripts are
+       external files and none of the vendored libs (html2canvas, jspdf, lz-string)
+       or the Firebase compat SDK use eval. Keep new scripts in .js files. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://*.firebaseapp.com https://apis.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://api.esv.org https://bolls.life https://raw.githubusercontent.com http://localhost:*;">
   <title>Discourse Analysis</title>
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -11,8 +14,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Roboto+Mono:wght@400;500;700&family=Source+Sans+3:wght@400;500;600&family=Noto+Serif+Hebrew:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
-  <script src="js/utils/init.js"></script>
+  <link rel="stylesheet" href="styles.css?v=3.1.0">
+  <script src="js/utils/init.js?v=3.1.0"></script>
 </head>
 <body>
   <div class="app">
@@ -28,10 +31,6 @@
         </select>
         <input type="text" id="passageInput" placeholder="e.g. John 1:1-5, Romans 8:28" value="Rom 3:21-26">
         <button id="fetchBtn" type="button">Fetch Passage</button>
-        <div class="api-key-row" id="apiKeyRow" style="display: none;">
-          <label for="apiKey">ESV API Key:</label>
-          <input type="password" id="apiKey" placeholder="Your API key (stored in browser only)">
-        </div>
         <details class="import-section">
           <summary>Or paste text to bracket or import</summary>
           <textarea id="pasteText" placeholder="Paste passage text here. Use [1], [2], [3:14] for verse breaks."></textarea>
@@ -58,7 +57,16 @@
             <div class="shortcut-item"><span>Right-Click Text</span> <span>Comment / Color Code</span></div>
             <div class="shortcut-item"><kbd>Ctrl</kbd>+<kbd>S</kbd> <span>Quick Save</span></div>
             <div class="shortcut-item"><kbd>Ctrl</kbd>+<kbd>Z</kbd> <span>Undo</span></div>
+            <div class="shortcut-item"><kbd>Ctrl</kbd>+<kbd>Y</kbd> <span>Redo (or Ctrl+Shift+Z)</span></div>
+            <div class="shortcut-item"><kbd>T</kbd> <span>Text Edit mode</span></div>
+            <div class="shortcut-item"><kbd>A</kbd> <span>Arrow mode</span></div>
+            <div class="shortcut-item"><kbd>B</kbd> <span>Block Diagram</span></div>
+            <div class="shortcut-item"><span>Alternate Views</span> <span>Block Diagram / Parallel Column (view-only)</span></div>
+            <div class="shortcut-item"><kbd>C</kbd> <span>Comments (panel, or comment on selected text)</span></div>
+            <div class="shortcut-item"><kbd>Esc</kbd> <span>Exit mode / close dialog</span></div>
+            <div class="shortcut-item"><kbd>Tab</kbd>/<kbd>↑↓</kbd>+<kbd>Enter</kbd> <span>Brackets by keyboard (via the dots)</span></div>
             <div class="shortcut-item"><span>Drop File</span> <span>Import JSON/PNG/PDF</span></div>
+            <div class="shortcut-item"><span>Zoom (− / 100% / +)</span> <span>Scale text &amp; diagram (View, sidebar)</span></div>
             <hr>
             <div class="save-load-row">
               <button id="openReferenceGuideBtn" type="button" class="secondary">Relationship Guide</button>
@@ -70,7 +78,12 @@
           <label>View</label>
           <div class="save-load-row">
             <button id="themeToggle" type="button" class="secondary" title="Switch between Light and Dark mode">Light Mode</button>
-            <button id="toggleCommentsBtn" type="button" class="secondary" title="Show or hide comments on brackets">Show Comments</button>
+            <button id="toggleCommentsBtn" type="button" class="secondary" aria-keyshortcuts="c" title="Show or hide comments on brackets (C)">Show Comments (C)</button>
+          </div>
+          <div class="save-load-row zoom-row" role="group" aria-label="Zoom">
+            <button id="zoomOutBtn" type="button" class="secondary zoom-btn" title="Zoom out">−</button>
+            <button id="zoomLevelBtn" type="button" class="secondary zoom-level-btn" title="Reset zoom to 100%">100%</button>
+            <button id="zoomInBtn" type="button" class="secondary zoom-btn" title="Zoom in">+</button>
           </div>
         </div>
 
@@ -120,6 +133,7 @@
             </button>
             <span id="passageRef" contenteditable="true" role="textbox" title="Click to edit passage reference">—</span>
             <span class="copyright" id="copyrightLabel">(ESV)</span>
+            <span class="copyright parallel-badge" id="parallelBadge" style="display: none;" title="Parallel translation shown (view-only)"></span>
             <div id="cloudHeaderStatus" class="cloud-status-badge" style="display: none;">
               <span class="cloud-sync-dot" title="Sync status"></span>
               <span class="cloud-icon">🌐</span>
@@ -129,11 +143,12 @@
             </div>
           </div>
           <div class="workspace-toolbar" id="workspaceToolbar">
-            <button id="textEditModeBtn" type="button" class="toolbar-btn" title="Toggle text edit mode: edit text freely with newlines and indentation.">Text Edit</button>
-            <button id="arrowModeBtn" type="button" class="toolbar-btn" title="Toggle arrow mode: draw word-to-word arrows.">Add Arrows</button>
-            <button id="blockDiagramBtn" type="button" class="toolbar-btn" title="Toggle block diagram view: show structure with indentation instead of brackets (read-only).">Block Diagram</button>
+            <button id="textEditModeBtn" type="button" class="toolbar-btn" aria-keyshortcuts="t" title="Toggle text edit mode: edit text freely with newlines and indentation. (T)">Text Edit (T)</button>
+            <button id="arrowModeBtn" type="button" class="toolbar-btn" aria-keyshortcuts="a" title="Toggle arrow mode: draw word-to-word arrows. (A)">Add Arrows (A)</button>
+            <button id="alternateViewsBtn" type="button" class="toolbar-btn" aria-haspopup="menu" title="Alternate views: block diagram (B) or a parallel translation column.">Alternate Views ▾</button>
             <div class="toolbar-divider"></div>
-            <button id="undoDivideBtn" type="button" class="toolbar-btn undo-action-btn" title="Undo last action">Undo</button>
+            <button id="undoDivideBtn" type="button" class="toolbar-btn undo-action-btn" aria-keyshortcuts="Control+Z" title="Undo last action (Ctrl/Cmd+Z)">Undo</button>
+            <button id="redoBtn" type="button" class="toolbar-btn undo-action-btn" aria-keyshortcuts="Control+Y" title="Redo last undone action (Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z)">Redo</button>
           </div>
           <div class="passage-header-right">
             <span id="passageAuthor" class="passage-author" aria-label="Page author"></span>
@@ -163,7 +178,7 @@
 
     <footer class="footer">
       <p>ESV via <a href="https://api.esv.org" target="_blank" rel="noopener">api.esv.org</a>. Greek/Fallback: <a href="https://bolls.life" target="_blank" rel="noopener">bolls.life</a> & <a href="https://sblgnt.com" target="_blank" rel="noopener">SBLGNT</a>.</p>
-      <p class="footer-version">Version 2.9.3 · Made by Josiah Hoi and Bryce Bussert, based on the method taught by Dr. Daniel M. Gurtner.</p>
+      <p class="footer-version">Version 3.1.0 · Made by Josiah Hoi and Bryce Bussert, based on the method taught by Dr. Daniel M. Gurtner.</p>
     </footer>
   </div>
   <div id="welcomeModal" class="modal-overlay" style="display: none;">
@@ -192,6 +207,42 @@
         <button id="closeSettingsBtn" class="close-btn">&times;</button>
       </div>
       <div class="modal-body">
+        <div class="settings-section">
+          <h3>Notation</h3>
+          <div class="sidebar-field">
+            <label for="profileSelect" class="field-label">Notation profile</label>
+            <select id="profileSelect" title="How relationships are labeled and whether dominance is marked"></select>
+          </div>
+        </div>
+
+        <details class="settings-section advanced-notation">
+          <summary class="settings-summary">Advanced Notation Settings</summary>
+          <div class="notation-toolbar">
+            <button id="domAllOnBtn" type="button" class="secondary" title="Mark dominance on every relationship">Dominance: All on</button>
+            <button id="domAllOffBtn" type="button" class="secondary" title="Turn dominance off for every relationship">All off</button>
+            <span class="notation-toolbar-spacer"></span>
+            <button id="importProfileBtn" type="button" class="secondary" title="Load a profile from a file">Import…</button>
+            <button id="exportProfileBtn" type="button" class="secondary" title="Save the current profile to a file">Export</button>
+            <input type="file" id="importProfileInput" accept=".json,application/json" hidden>
+          </div>
+          <div class="notation-grid-head">
+            <span>Relationship</span><span>Label</span><span class="col-dom" title="Mark dominance">★</span><span>Color</span>
+          </div>
+          <div id="notationGrid" class="notation-grid"></div>
+          <p class="notation-hint">Edits create your own profile. Use <strong>Export</strong> to share it; others <strong>Import</strong> to load it.</p>
+          <div class="notation-cloud">
+            <div class="notation-cloud-title">Share on the cloud</div>
+            <div class="notation-cloud-row">
+              <input type="text" id="cloudProfileName" placeholder="Profile name" title="The name students type to load this profile">
+              <button id="cloudLoadBtn" type="button" class="secondary" title="Load a profile by name">Load</button>
+            </div>
+            <div class="notation-cloud-row">
+              <input type="password" id="cloudProfilePassword" placeholder="Password (to publish/update)" title="Required only to publish or change a profile">
+              <button id="cloudPublishBtn" type="button" class="secondary" title="Publish or update this profile on the cloud">Publish</button>
+            </div>
+            <p class="notation-hint">Anyone can load by name. The password protects changes (in-app gate, not hardened security) — pick a fresh one, not a password you use elsewhere.</p>
+          </div>
+        </details>
         <div class="settings-section">
           <h3>Identity</h3>
           <div class="sidebar-field">
@@ -314,25 +365,34 @@
     </div>
   </template>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
+  <!-- Vendored locally (was cdnjs) so export/compression work offline and the CSP can drop the remote script source. -->
+  <script src="js/vendor/html2canvas.min.js?v=3.1.0"></script>
+  <script src="js/vendor/jspdf.umd.min.js?v=3.1.0"></script>
+  <script src="js/vendor/lz-string.min.js?v=3.1.0"></script>
   <!-- Services & Utils -->
-  <script src="js/services/firebase-config.js"></script>
-  <script src="js/utils/constants.js"></script>
-  <script src="js/services/state.js"></script>
-  <script src="js/utils/ui.js"></script>
-  <script src="js/services/persistence.js"></script>
-  <script src="js/services/mode-service.js"></script>
-  <script src="js/services/bible-service.js"></script>
-  <script src="js/services/cloud-sync.js"></script>
-  <script src="js/utils/editor-logic.js"></script>
-  <script src="js/utils/rendering-engine.js"></script>
-  <script src="js/utils/block-diagram.js"></script>
-  <script src="js/services/export-service.js"></script>
-  <script src="js/services/keyboard-handler.js"></script>
-  <script src="js/services/mouse-handler.js"></script>
+  <script src="js/services/firebase-config.js?v=3.1.0"></script>
+  <script src="js/utils/constants.js?v=3.1.0"></script>
+  <script src="js/services/state.js?v=3.1.0"></script>
+  <script src="js/services/profiles.js?v=3.1.0"></script>
+  <script src="js/utils/ui.js?v=3.1.0"></script>
+  <script src="js/utils/ui-comments.js?v=3.1.0"></script>
+  <script src="js/utils/ui-menus.js?v=3.1.0"></script>
+  <script src="js/utils/ui-dialogs.js?v=3.1.0"></script>
+  <script src="js/services/notation-ui.js?v=3.1.0"></script>
+  <script src="js/services/persistence.js?v=3.1.0"></script>
+  <script src="js/services/mode-service.js?v=3.1.0"></script>
+  <script src="js/services/bible-service.js?v=3.1.0"></script>
+  <script src="js/services/cloud-sync.js?v=3.1.0"></script>
+  <script src="js/utils/editor-logic.js?v=3.1.0"></script>
+  <script src="js/utils/rendering-engine.js?v=3.1.0"></script>
+  <script src="js/utils/render-labels.js?v=3.1.0"></script>
+  <script src="js/utils/render-arrows.js?v=3.1.0"></script>
+  <script src="js/utils/render-comments.js?v=3.1.0"></script>
+  <script src="js/utils/block-diagram.js?v=3.1.0"></script>
+  <script src="js/services/export-service.js?v=3.1.0"></script>
+  <script src="js/services/keyboard-handler.js?v=3.1.0"></script>
+  <script src="js/services/mouse-handler.js?v=3.1.0"></script>
   <!-- Main App -->
-  <script src="app.js"></script>
+  <script src="app.js?v=3.1.0"></script>
 </body>
 </html>

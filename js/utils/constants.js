@@ -70,8 +70,10 @@ const BOLLS_BOOKS = {
   gen: 1, genesis: 1, exod: 2, exodus: 2, lev: 3, leviticus: 3, num: 4, numbers: 4, deut: 5, deuteronomy: 5,
   josh: 6, joshua: 6, judg: 7, judges: 7, ruth: 8, '1sam': 9, '1samuel': 9, '2sam': 10, '2samuel': 10,
   '1kings': 11, '2kings': 12, '1chron': 13, '1chronicles': 13, '2chron': 14, '2chronicles': 14,
-  ezra: 15, neh: 16, nehemiah: 16, est: 17, esther: 17, job: 18, ps: 19, psalms: 19, prov: 20, proverbs: 20,
-  eccl: 21, ecclesiastes: 21, song: 22, isa: 23, isaiah: 23, jer: 24, jeremiah: 24, lam: 25, lamentations: 25,
+  ezra: 15, neh: 16, nehemiah: 16, est: 17, esth: 17, esther: 17, job: 18,
+  ps: 19, psa: 19, psalm: 19, psalms: 19, prov: 20, proverbs: 20,
+  eccl: 21, ecc: 21, ecclesiastes: 21, song: 22, songofsongs: 22, songofsolomon: 22,
+  isa: 23, isaiah: 23, jer: 24, jeremiah: 24, lam: 25, lamentations: 25,
   ezek: 26, ezekiel: 26, dan: 27, daniel: 27, hos: 28, hosea: 28, joel: 29, amos: 30, obad: 31, obadiah: 31,
   jonah: 32, mic: 33, micah: 33, nah: 34, nahum: 34, hab: 35, habakkuk: 35, zeph: 36, zephaniah: 36, hag: 37, haggai: 37,
   zech: 38, zechariah: 38, mal: 39, malachi: 39,
@@ -92,41 +94,15 @@ const BRACKET_LABELS = {
   ground: '*/G',
   inference: '∴',
   bilateral: 'Bl',
+  'double-ground': 'DG',
   'cause-effect': 'C/E*',
   'action-result': 'Ac/Res*',
   'action-purpose': 'Ac/Pur*',
   conditional: 'If/Th*',
-  temporal: 'T/*',
-  locative: 'L/*',
+  temporal: '*/T',
+  locative: '*/L',
   'action-manner': 'Ac/Mn*',
-  comparison: '//',
-  'negative-positive': '-/+',
-  'idea-explanation': 'Id/Exp*',
-  'question-answer': 'Q/A*',
-  'general-specific': 'Gen/Sp*',
-  'fact-interpretation': 'Ft/In*',
-  'anticipation-fulfillment': 'An/Fl*',
-  concessive: 'Csv/*',
-  'situation-response': 'Sit/R*',
-  'unspecified': '?'
-};
-
-const GURTNER_LABELS = {
-  series: 'S',
-  progression: 'P/*',
-  alternative: 'A',
-  'both-and': 'B-A',
-  ground: '*/G',
-  inference: '∴',
-  bilateral: 'Bl',
-  'cause-effect': 'C/E/*',
-  'action-result': 'C/E/*',
-  'action-purpose': 'M/Ed/*',
-  conditional: 'C?/E/*',
-  temporal: 'T/*',
-  locative: 'L/*',
-  'action-manner': 'W/Ed/*',
-  comparison: '//',
+  comparison: 'Cf/Cf',
   'negative-positive': '-/+',
   'idea-explanation': 'Id/Exp*',
   'question-answer': 'Q/A*',
@@ -146,6 +122,7 @@ const RELATIONSHIP_LABELS = {
   ground: 'Ground (G)',
   inference: 'Inference (∴)',
   bilateral: 'Bilateral (Bl)',
+  'double-ground': 'Double Ground (DG)',
   'cause-effect': 'Cause-Effect (C/E)',
   'action-result': 'Action-Result (Ac/Res)',
   'action-purpose': 'Action-Purpose (Ac/Pur)',
@@ -179,7 +156,7 @@ const RELATIONSHIP_GROUPS_HIERARCHY = [
       },
       {
         name: 'Support by Distinct Statement',
-        types: ['ground', 'inference', 'bilateral', 'action-result', 'action-purpose', 'conditional', 'temporal', 'locative']
+        types: ['ground', 'double-ground', 'inference', 'bilateral', 'action-result', 'action-purpose', 'conditional', 'temporal', 'locative']
       },
       {
         name: 'Support by Contrary Statement',
@@ -189,30 +166,14 @@ const RELATIONSHIP_GROUPS_HIERARCHY = [
   }
 ];
 
-const SINGLE_LABEL_TYPES = new Set(['series', 'alternative', 'bilateral', 'both-and', 'unspecified', 'comparison']);
+const SINGLE_LABEL_TYPES = new Set(['series', 'alternative', 'bilateral', 'both-and', 'unspecified']);
 
-const GURTNER_RELATIONSHIP_NAMES = {
-  series: 'Series (S)',
-  progression: 'Progression (P)',
-  alternative: 'Alternative (A)',
-  ground: 'Ground (G)',
-  inference: 'Inference (∴)',
-  bilateral: 'Bilateral (Bl)',
-  'cause-effect': 'Cause-Effect (C/E)',
-  'action-result': 'Cause-Effect (C/E)',
-  'action-purpose': 'Means-End (M/Ed)',
-  conditional: 'Conditional (C?/E)',
-  temporal: 'Temporal (T)',
-  locative: 'Locative (L)',
-  'action-manner': 'Way-End (W/Ed)',
-  comparison: 'Comparison (/)',
-  'negative-positive': 'Negative-Positive (-/+)',
-  'idea-explanation': 'Idea-Explanation (Id/Exp)',
-  'question-answer': 'Question-Answer (Q/A)',
-  concessive: 'Concessive (Csv)',
-  'situation-response': 'Situation-Response (Sit/R)',
-  'unspecified': '?'
-};
+// Relationship types that may be created by "jumping over" intermediate
+// propositions (flat multi-member units whose interior dots/nodes are hidden).
+// SINGLE canonical list — profiles.js re-exports it, and the renderer
+// (rendering-engine.js) and picker (ui-menus.js) read it from here, so the
+// three copies that once drifted can't come back.
+const JUMP_OVER_TYPES = ['series', 'bilateral', 'double-ground'];
 
 const BRACKET_GEO = {
   GAP: 15,
@@ -228,6 +189,13 @@ const REVIEWER_NAME_KEY = 'biblebracket_reviewer_name';
 const PAGE_AUTHOR_KEY = 'biblebracket_page_author';
 const WELCOME_SEEN_KEY = 'biblebracket_welcome_seen';
 
+// Zoom: a personal on-screen reading preference (persisted like theme), not a
+// document property — never saved into bracket files. Discrete steps rather
+// than a continuous slider, matching browser/Word/Figma zoom conventions.
+const ZOOM_KEY = 'biblebracket_zoom';
+const ZOOM_LEVELS = [75, 90, 100, 110, 125, 150];
+const ZOOM_DEFAULT = 100;
+
 const RELATIONSHIP_COLORS = {
   series: '#ef4444',             // Red
   progression: '#f97316',        // Orange
@@ -236,6 +204,7 @@ const RELATIONSHIP_COLORS = {
   ground: '#10b981',             // Emerald
   inference: '#06b6d4',          // Cyan
   bilateral: '#3b82f6',          // Blue
+  'double-ground': '#1d4ed8',    // Deep Blue
   'cause-effect': '#6366f1',     // Indigo
   'action-result': '#8b5cf6',    // Violet
   'action-purpose': '#a855f7',   // Purple
@@ -278,13 +247,15 @@ const RELATIONSHIP_DEFINITIONS = {
   'anticipation-fulfillment': { definition: "A main clause that fulfills the anticipation or promise of a prior clause (subset of progression)", keywords: "" },
   'both-and': { definition: "Each proposition makes an independent contribution to the whole, but the contributions are inseparable (subset of series)", keywords: "" },
   bilateral: { definition: "A bilateral relationship supporting the preceding proposition and supported by the following proposition.", keywords: "for... therefore" },
+  'double-ground': { definition: "A proposition supported on both sides by grounds — like a bilateral, it can be formed by jumping over the middle member.", keywords: "for... for" },
   'idea-explanation': { definition: "A relationship where the second proposition explains the idea of the first.", keywords: "that is" }
 };
 
 window.DA_CONSTANTS = {
     ESV_API, SBLGNT_BASE, SBLGNT_BOOKS, FULL_BOOK_NAMES, BOLLS_BOOKS,
-    BRACKET_LABELS, GURTNER_LABELS, RELATIONSHIP_LABELS, RELATIONSHIP_GROUPS_HIERARCHY,
-    SINGLE_LABEL_TYPES, GURTNER_RELATIONSHIP_NAMES, BRACKET_GEO,
+    BRACKET_LABELS, RELATIONSHIP_LABELS, RELATIONSHIP_GROUPS_HIERARCHY,
+    SINGLE_LABEL_TYPES, JUMP_OVER_TYPES, BRACKET_GEO,
     RELATIONSHIP_COLORS, RELATIONSHIP_DEFINITIONS,
-    THEME_KEY, COMMENT_AUTHOR_KEY, REVIEWER_NAME_KEY, PAGE_AUTHOR_KEY, WELCOME_SEEN_KEY
+    THEME_KEY, COMMENT_AUTHOR_KEY, REVIEWER_NAME_KEY, PAGE_AUTHOR_KEY, WELCOME_SEEN_KEY,
+    ZOOM_KEY, ZOOM_LEVELS, ZOOM_DEFAULT
 };

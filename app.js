@@ -3,7 +3,6 @@
 const propositionsContainer = document.getElementById('propositions');
 const bracketCanvas = document.getElementById('bracketCanvas');
 const wordArrowsSvg = document.getElementById('wordArrowsSvg');
-const versionSelect = document.getElementById('versionSelect');
 const passageInput = document.getElementById('passageInput');
 const fetchBtn = document.getElementById('fetchBtn');
 if (fetchBtn) {
@@ -11,8 +10,17 @@ if (fetchBtn) {
 }
 initDelegatedListeners();
 const passageRefEl = document.getElementById('passageRef');
-const apiKeyInput = document.getElementById('apiKey');
-const apiKeyRow = document.getElementById('apiKeyRow');
+// The header ref is contenteditable ("Click to edit passage reference"), so sync
+// edits back into state — otherwise saves/exports/filenames keep the old ref.
+if (passageRefEl) {
+  passageRefEl.addEventListener('input', () => {
+    DA_STATE.passageRef = passageRefEl.textContent.trim();
+  });
+  passageRefEl.addEventListener('keydown', (e) => {
+    // A single-line field: Enter commits (blur) instead of inserting a newline.
+    if (e.key === 'Enter') { e.preventDefault(); passageRefEl.blur(); }
+  });
+}
 const themeToggle = document.getElementById('themeToggle');
 const toggleCommentsBtn = document.getElementById('toggleCommentsBtn');
 
@@ -25,16 +33,15 @@ const importBtn = document.getElementById('importBtn');
 const importFileInput = document.getElementById('importFileInput');
 const projectSettingsBtn = document.getElementById('projectSettingsBtn');
 const undoDivideBtn = document.getElementById('undoDivideBtn');
+const redoBtn = document.getElementById('redoBtn');
 const textEditModeBtn = document.getElementById('textEditModeBtn');
-const commentModeBtn = document.getElementById('commentModeBtn');
 const arrowModeBtn = document.getElementById('arrowModeBtn');
-const openFileBtn = document.getElementById('openFileBtn');
+const alternateViewsBtn = document.getElementById('alternateViewsBtn');
 const openMenuBtn = document.getElementById('openMenuBtn');
 const reviewerNameInput = document.getElementById('reviewerName');
 const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 const openReferenceGuideBtn = document.getElementById('openReferenceGuideBtn');
 const closeReferenceBtn = document.getElementById('closeReferenceBtn');
-// arrowHighlight and pendingArrowStart are managed on window.* by mouse-handler.js
 
 // Global Aliases for backward compatibility in legacy handlers
 window.renderAll = () => DA_RENDERER.renderAll();
@@ -58,8 +65,16 @@ function clearAllFormatting() {
 
 // Service Initializations
 DA_UI.initTheme();
+DA_UI.initZoom();
 
 if (themeToggle) themeToggle.addEventListener('click', DA_UI.toggleTheme);
+
+const zoomOutBtn = document.getElementById('zoomOutBtn');
+const zoomInBtn = document.getElementById('zoomInBtn');
+const zoomLevelBtn = document.getElementById('zoomLevelBtn');
+if (zoomOutBtn) zoomOutBtn.addEventListener('click', DA_UI.zoomOut);
+if (zoomInBtn) zoomInBtn.addEventListener('click', DA_UI.zoomIn);
+if (zoomLevelBtn) zoomLevelBtn.addEventListener('click', DA_UI.resetZoom);
 
 // Project Owner / Author Logic
 const pageAuthorInput = document.getElementById('pageAuthor');
@@ -108,6 +123,11 @@ if (undoDivideBtn) {
     undoLastAction();
   });
 }
+if (redoBtn) {
+  redoBtn.addEventListener('click', () => {
+    redoLastAction();
+  });
+}
 
 function undoLastAction() {
   const action = DA_STATE.undo();
@@ -119,15 +139,28 @@ function undoLastAction() {
   }
 }
 
+function redoLastAction() {
+  const action = DA_STATE.redo();
+  if (action) {
+    renderAll();
+    DA_UI.showStatus(`Redo: ${action}`, 'success');
+  } else {
+    DA_UI.showStatus('Nothing to redo', 'info');
+  }
+}
+
 if (reviewerNameInput) {
-  reviewerNameInput.value = localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || localStorage.getItem(DA_CONSTANTS.COMMENT_AUTHOR_KEY) || '';
+  const _savedReviewerName = localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || localStorage.getItem(DA_CONSTANTS.COMMENT_AUTHOR_KEY) || '';
+  reviewerNameInput.value = _savedReviewerName;
+  DA_PROFILES.maybeApplyGurtnerProfile(_savedReviewerName);
+
   reviewerNameInput.addEventListener('input', () => {
-    try { 
-      localStorage.setItem(DA_CONSTANTS.REVIEWER_NAME_KEY, reviewerNameInput.value.trim());
-      // Also update comment author key for consistency with existing code
-      localStorage.setItem(DA_CONSTANTS.COMMENT_AUTHOR_KEY, reviewerNameInput.value.trim());
+    const name = reviewerNameInput.value.trim();
+    try {
+      localStorage.setItem(DA_CONSTANTS.REVIEWER_NAME_KEY, name);
+      localStorage.setItem(DA_CONSTANTS.COMMENT_AUTHOR_KEY, name);
     } catch (_) { }
-    // Update labels immediately if Gurtner mode is toggled
+    DA_PROFILES.maybeApplyGurtnerProfile(name);
     renderAll();
   });
 }
@@ -137,7 +170,7 @@ if (reviewerNameInput) {
 if (toggleCommentsBtn) {
   const updateToggleUI = () => {
     toggleCommentsBtn.classList.toggle('active', DA_STATE.showCommentsEnabled);
-    toggleCommentsBtn.textContent = DA_STATE.showCommentsEnabled ? 'Hide Comments' : 'Show Comments';
+    toggleCommentsBtn.textContent = DA_STATE.showCommentsEnabled ? 'Hide Comments (C)' : 'Show Comments (C)';
   };
   updateToggleUI();
   
@@ -162,9 +195,6 @@ if (clearBracketsBtn) clearBracketsBtn.addEventListener('click', () => {
     DA_UI.showStatus('All brackets cleared.', 'success');
   }
 });
-if (openFileBtn && importFileInput) {
-  openFileBtn.addEventListener('click', () => importFileInput.click());
-}
 if (importFileInput) {
   importFileInput.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
@@ -205,17 +235,14 @@ async function fetchPassage() {
   try {
     const result = await DA_BIBLE.fetchPassageData(version, query);
 
-    // Loading a new passage exits any active live cloud session, so the old
-    // project's listener/URL/badge don't linger and clobber the new passage.
-    if (DA_STATE.cloudUnsubscribe && window.DA_CLOUD) DA_CLOUD.stopCloudSync();
-    // Drop the stored project ID too — this is new work, not a resume of the old
-    // project. Leaving it set would let a later sync write the new passage over
-    // the old project's cloud doc (stopCloudSync intentionally keeps it).
-    DA_STATE.activeProjectId = null;
-
-    DA_STATE.propositions = result.propositions;
-    DA_STATE.verseRefs = result.verseRefs;
-    DA_STATE.passageRef = result.passageRef;
+    // A new passage replaces the document: one shared reset ends/forgets the
+    // cloud session and clears every per-document field (brackets, comments,
+    // undo/redo, parallel column, custom labels, …) before the new text lands.
+    DA_STATE.resetForNewDocument({
+      propositions: result.propositions,
+      verseRefs: result.verseRefs,
+      passageRef: result.passageRef
+    });
     
     if (copyrightLabel) copyrightLabel.textContent = result.copyright;
     
@@ -230,10 +257,11 @@ async function fetchPassage() {
 
     if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
 
-    clearAllFormatting();
-    DA_STATE.undoStack = [];
     renderAll();
-    DA_UI.showStatus('Passage loaded.', 'success');
+    // Only ESV specifically has a primary/fallback split (api.esv.org → Bolls);
+    // other versions are always Bolls, so don't call that a "fallback".
+    const usedFallback = version === 'esv' && result.source === 'bolls';
+    DA_UI.showStatus(usedFallback ? 'Passage loaded (via Bolls — ESV API unavailable).' : 'Passage loaded.', 'success');
   } catch (err) {
     DA_UI.showStatus(err.message || 'Failed to fetch passage', 'error');
   } finally {
@@ -292,21 +320,25 @@ if (importBtn) importBtn.addEventListener('click', () => {
   const startVerse = (startVerseInput?.value?.trim() || '1').replace(/[^0-9a-z:]/gi, '') || '1';
 
   const parsed = DA_UI.parsePastedText(raw, startVerse);
-  if (parsed.propositions.length > 0) {
-    DA_STATE.propositions = parsed.propositions;
-    DA_STATE.verseRefs = parsed.verseRefs;
-  } else {
-    DA_STATE.propositions = [raw.replace(/\[\d+(?::\d+)?\]\s*/g, '').trim() || raw];
-    DA_STATE.verseRefs = [startVerse];
-  }
-  DA_STATE.passageRef = passageRefInput?.value?.trim() || 'Imported text';
+  const usedParsed = parsed.propositions.length > 0;
+
+  // Pasted text replaces the document: one shared reset ends/forgets the cloud
+  // session and clears every per-document field before the paste lands. (This
+  // branch once skipped the session reset — with a live session attached, the
+  // next cloud snapshot would clobber the paste, or a manual Sync would
+  // overwrite the cloud project with it.)
+  DA_STATE.resetForNewDocument({
+    propositions: usedParsed
+      ? parsed.propositions
+      : [raw.replace(/\[\d+(?::\d+)?\]\s*/g, '').trim() || raw],
+    verseRefs: usedParsed ? parsed.verseRefs : [startVerse],
+    passageRef: passageRefInput?.value?.trim() || 'Imported text'
+  });
   if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
   const copyrightLabel = document.getElementById('copyrightLabel');
   if (copyrightLabel) copyrightLabel.textContent = '';
   if (propositionsContainer) propositionsContainer.classList.remove('greek-text');
-  
-  clearAllFormatting();
-  DA_STATE.undoStack = [];
+
   renderAll();
   DA_UI.showStatus('Imported. Double-click to split a line, single-click to edit. Click the dots to create brackets.', 'success');
 });
@@ -333,6 +365,10 @@ DA_MOUSE.initSidebarMouseHandlers(commentsPreview);
 
 if (arrowModeBtn) {
   arrowModeBtn.addEventListener('click', DA_MODES.toggleArrowMode);
+}
+
+if (alternateViewsBtn) {
+  alternateViewsBtn.addEventListener('click', DA_UI.showAlternateViewsMenu);
 }
 
 // (Word arrow interaction logic moved to DA_MOUSE.initWorkspaceMouseHandlers)
@@ -387,16 +423,9 @@ DA_CLOUD.registerCloudRenderCallbacks({
 });
 
 document.addEventListener('DOMContentLoaded', () => {
-  const startBtn = document.getElementById('startCloudBtn');
-  const stopBtn = document.getElementById('stopCloudBtn');
-  const joinBtn = document.getElementById('joinCloudBtn');
-  const copyBtn = document.getElementById('copyCloudUrlBtn');
-  const joinInput = document.getElementById('joinCloudId');
-
+  // Cloud sync is driven from the Export menu (toggle) and the header badge
+  // (manual Sync button + click-to-copy project code).
   const manualSyncBtn = document.getElementById('manualSyncBtn');
-  if (startBtn) startBtn.addEventListener('click', DA_CLOUD.startCloudSync);
-  if (stopBtn) stopBtn.addEventListener('click', DA_CLOUD.stopCloudSync);
-  if (joinBtn) joinBtn.addEventListener('click', () => DA_CLOUD.joinCloudSync(joinInput.value.trim().toUpperCase()));
   if (manualSyncBtn) {
     manualSyncBtn.addEventListener('click', async () => {
       try {
@@ -411,11 +440,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
-  if (copyBtn) copyBtn.addEventListener('click', () => {
-    const url = window.location.href;
-    navigator.clipboard.writeText(url).then(() => DA_UI.showStatus('Link copied!', 'success'));
-  });
-
   // Click the project code to copy it to the clipboard.
   const headerProjectId = document.getElementById('headerProjectId');
   if (headerProjectId) {
@@ -434,38 +458,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Check URL for existing project. A project ID lingers in the URL after a
-  // session, so on reload we confirm before rejoining — otherwise the user gets
-  // silently reconnected to a stale/old project they didn't ask for.
+  // A project ID lingers in the URL after a session. Rather than silently
+  // rejoining a stale project, we prompt — but only ONE startup prompt shows:
+  // a cloud "reconnect?" (when a project code is in the URL) takes priority over
+  // the local "restore draft?" banner, since reconnecting loads the cloud copy
+  // anyway. See DA_PERSISTENCE.initStartupRecovery.
   const urlParams = new URLSearchParams(window.location.search);
   const projectFromUrl = urlParams.get('project');
-  if (projectFromUrl) {
-    // Small delay so the page paints before the confirm dialog appears.
-    setTimeout(() => {
-      const reconnect = confirm(
-        `Reconnect to cloud project ${projectFromUrl}?\n\n` +
-        `Click Cancel to start fresh — you can rejoin later from the cloud panel.`
-      );
-      if (reconnect) {
-        DA_UI.showStatus(`Loading project ${projectFromUrl}…`, 'info');
-        DA_CLOUD.joinCloudSync(projectFromUrl);
-      } else {
-        // Drop the stale param so future reloads don't keep prompting.
-        const url = new URL(window.location);
-        url.searchParams.delete('project');
-        window.history.replaceState({}, '', url);
-      }
-    }, 600);
-  }
-  
-  // First-run identity prompt. Skip it when reconnecting to a cloud project
-  // from the URL — that path has its own confirm dialog and sets the owner from
-  // the project, so we don't want two dialogs stacking on load.
+
+  // First-run identity prompt. Skip it when a cloud project is being offered —
+  // reconnecting sets the owner from the project, so we don't stack dialogs.
   if (!projectFromUrl) DA_UI.maybeShowWelcome();
 
-  // Initialize persistence and recovery services
+  // Initialize persistence and recovery services (one startup recovery prompt).
   DA_PERSISTENCE.renderRecentList();
-  DA_PERSISTENCE.initDraftRecovery();
+  DA_PERSISTENCE.initStartupRecovery(projectFromUrl);
   DA_PERSISTENCE.initDragAndDrop();
   DA_PERSISTENCE.initMagicPaste();
   DA_PERSISTENCE.attachFilenameObservers();

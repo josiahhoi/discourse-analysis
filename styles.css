@@ -20,6 +20,10 @@
 /* 1. Reset, Variables & Base Elements       */
 /* ========================================= */
 :root {
+  /* Zoom multiplier (1 = 100%), set from JS (DA_UI.applyZoom) and persisted
+     like theme. The default here is only a fallback for the instant before
+     JS runs — see js/utils/ui-dialogs.js initZoom(). */
+  --da-zoom: 1;
   --bg: #1a1a1c;
   --surface: #242428;
   --surface-elevated: #2e2e32;
@@ -128,7 +132,10 @@ body {
 /* 2. Main App Layout & Header               */
 /* ========================================= */
 .app {
-  min-height: 100vh;
+  /* Pin the shell to the viewport: the workspace scrolls internally, so its
+     scrollbars (incl. horizontal, for wide parallel/bracket layouts) sit at
+     the screen edge instead of below the fold at the document's bottom. */
+  height: 100vh;
   display: flex;
   flex-direction: column;
 }
@@ -305,6 +312,7 @@ body {
 /* Main layout */
 .main {
   flex: 1;
+  min-height: 0; /* let the workspace/sidebar scroll instead of stretching the shell */
   display: flex;
   overflow: hidden;
   /* Removed padding/gap here to let sidebar sit flush */
@@ -556,6 +564,13 @@ body {
   gap: 0.25rem;
 }
 
+.picker-jump-note {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0.5rem 0.25rem 0.25rem;
+  font-style: italic;
+}
+
 .picker-group-header {
   margin: 0.25rem 0 0.15rem;
   font-size: 0.65rem;
@@ -595,6 +610,17 @@ body {
 .relationship-picker-fixed {
   position: fixed !important;
   z-index: 1000;
+  /* Never taller than the window: the relationship list scrolls internally so
+     the header tools and the footer (Delete Bracket) always stay reachable —
+     previously on short screens the footer could sit below the fold. */
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 24px);
+}
+
+.relationship-picker-fixed .relationship-picker-content {
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .label-picker button {
@@ -731,6 +757,41 @@ body {
   gap: 0.25rem;
 }
 
+/* Type-to-filter box in the relationship picker */
+.picker-search-row {
+  padding: 0 0 0.4rem;
+}
+
+.picker-search {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.85rem;
+  box-sizing: border-box;
+}
+
+.picker-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Filtered-out picker entries/groups. !important so it beats the flex/grid
+   display rules on wrappers and groups. */
+.search-hidden {
+  display: none !important;
+}
+
+.picker-no-matches {
+  margin: 0;
+  padding: 0.6rem 0.4rem;
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--text-muted);
+}
+
 .picker-footer {
   margin-top: 0;
   border-top: 1px solid var(--border);
@@ -845,6 +906,29 @@ body {
   border-color: var(--accent);
 }
 
+/* Zoom control: compact "− 100% +" row. The +/- buttons are narrower than the
+   level readout (which needs room for "150%"), and disable at the ends of
+   ZOOM_LEVELS instead of wrapping/looping. */
+.zoom-row .zoom-btn {
+  flex: 0 0 2rem;
+  font-weight: 600;
+}
+
+.zoom-row .zoom-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.zoom-row .zoom-btn:disabled:hover {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+.zoom-row .zoom-level-btn {
+  flex: 1;
+  font-variant-numeric: tabular-nums; /* steady width as the percent changes */
+}
+
 #saveBtn {
   background: var(--accent);
   color: var(--bg);
@@ -917,13 +1001,34 @@ body {
   min-width: 0;
   overflow-x: auto;
   padding: 1.5rem 2rem; /* Add consistent padding here */
-  /* Hide the horizontal scrollbar but keep the area scrollable (wide bracket
-     diagrams stay reachable via trackpad / shift-scroll). */
-  scrollbar-width: none; /* Firefox */
+  /* Thin, theme-matched scrollbars. Wide layouts (parallel column, nested
+     brackets) need a visible, grabbable horizontal scrollbar — trackpad-only
+     scrolling left users with no way to pan sideways. */
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: var(--border) transparent;
 }
 
 .workspace::-webkit-scrollbar {
-  display: none; /* WebKit / Chromium (Electron) */
+  width: 12px;
+  height: 12px;
+}
+
+.workspace::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.workspace::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+  /* Inset the thumb from the edges so it reads as a slim rounded bar. */
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.workspace::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+  border-width: 2px;
+  background-clip: padding-box;
 }
 
 /* Comments preview (right sidebar) */
@@ -1474,6 +1579,11 @@ body {
   width: fit-content; /* Shrink-wrap around content */
   min-width: min-content; /* Ensure it contains brackets and text */
   min-height: 100px;
+  /* The workspace is a flex column; without this the wrapper (a flex child) is
+     compressed below its content height when the passage is taller than the
+     viewport, clipping the last rows — most visibly a tall parallel-column
+     cell. Keeping it unshrinkable lets the workspace's own overflow scroll. */
+  flex-shrink: 0;
   background: var(--surface);
   border-radius: var(--radius);
   border: 1px solid var(--border);
@@ -1588,6 +1698,17 @@ body {
 .connection-node,
 .prop-dot {
   pointer-events: all;
+}
+
+/* Keyboard focus rings for the bracket-creation targets (dots, connection
+   nodes, bracket lines). :focus-visible = keyboard users only, so mouse
+   clicks don't flash outlines. */
+.prop-dot:focus-visible,
+.connection-node:focus-visible,
+.bracket-hitbox:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
 /* Draft recovery and magic paste banners */
@@ -1780,7 +1901,7 @@ mark.comment-highlight.comment-highlight-card-hover {
 .bracket-canvas .bracket-label {
   pointer-events: all;
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: calc(15px * var(--da-zoom));
   font-weight: 600;
   fill: var(--bracket-color, var(--label-text));
   stroke: none;
@@ -1830,6 +1951,52 @@ mark.comment-highlight.comment-highlight-card-hover {
   width: 900px; /* FIXED WIDTH for the content area */
   box-sizing: content-box; /* Ensures the 900px is added to the dynamic bracket padding */
   /* Removed height: 100% to prevent vertical stretching */
+}
+
+/* Parallel column (Alternate Views): widen the content area to make room for
+   the view-only translation cell appended to each row. */
+.propositions.has-parallel {
+  width: 1280px; /* base 900 + 380 for the parallel column */
+}
+
+/* When the column is shown, the primary text must fill the whole primary area
+   (not hug its content) so the parallel cell always begins at the same x on
+   every row — otherwise a short line lets its cell slide left and the column
+   looks ragged. flex-grow absorbs the slack; min-width:0 lets a long line wrap
+   instead of pushing the cell out. */
+.propositions.has-parallel .proposition-text {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.parallel-text {
+  flex: none;
+  width: 360px;
+  margin-left: 1rem;
+  padding-left: 1rem;
+  border-left: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: calc(0.95rem * var(--da-zoom));
+  line-height: 1.6;
+  user-select: text;    /* copyable, but view-only (no contenteditable) */
+  white-space: normal;
+}
+
+/* In RTL (Hebrew) the flex row is reversed, putting the cell on the left; the
+   separator border swaps sides to stay between the columns. dir="auto" on the
+   cell keeps e.g. Chinese rendering LTR inside it. */
+body.rtl-mode .parallel-text {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: none;
+  margin-right: 1rem;
+  padding-right: 1rem;
+  border-right: 1px solid var(--border);
+  text-align: left;
+}
+
+.parallel-badge {
+  color: var(--text-muted);
 }
 
 .propositions.bracket-gutter {
@@ -1884,11 +2051,11 @@ body.text-edit-mode-active .proposition-block {
 
 .prop-dot {
   position: absolute;
-  left: -18px; /* Moved closer to the proposition box */
+  left: calc(-18px * var(--da-zoom)); /* Moved closer to the proposition box */
   top: 50%;
   transform: translateY(-50%);
-  width: 10px;
-  height: 10px;
+  width: calc(10px * var(--da-zoom));
+  height: calc(10px * var(--da-zoom));
   background: var(--border);
   border-radius: 50%;
   cursor: pointer;
@@ -1911,13 +2078,13 @@ body.text-edit-mode-active .proposition-block {
 
 .connection-node.active-node {
   fill: var(--accent) !important;
-  r: 8 !important;
+  r: calc(8px * var(--da-zoom)) !important;
   stroke-width: 2px;
 }
 
 .proposition-block .verse-ref {
   color: var(--text-muted);
-  font-size: 0.9em;
+  font-size: calc(0.9rem * var(--da-zoom)); /* was 0.9em; explicit so it scales with zoom */
   margin-right: 0.35em;
   user-select: none;
   padding: 1px 4px;
@@ -1940,17 +2107,23 @@ body.text-edit-mode-active .verse-ref {
   outline: none;
   white-space: pre-wrap; /* Preserve manual spaces/newlines but wrap long lines within the fixed-width container */
   overflow-wrap: break-word;
+  /* Explicit base (was an unset inherited 1rem) so zoom has something to scale.
+     1rem * 1 == the old inherited default, so 100% zoom is visually unchanged. */
+  font-size: calc(1rem * var(--da-zoom));
 }
 
-/* Greek text (SBLGNT) - slightly larger for readability */
+/* Greek text (SBLGNT) - slightly larger for readability. Was 1.05em (relative
+   to the inherited size); now an explicit rem*zoom value so it composes with
+   zoom the same way as the base rule above instead of double-applying it. */
 .propositions.greek-text .proposition-text {
-  font-size: 1.05em;
+  font-size: calc(1.05rem * var(--da-zoom));
 }
 
-/* Hebrew text (WLC) - serif Hebrew face, larger for niqqud legibility */
+/* Hebrew text (WLC) - serif Hebrew face, larger for niqqud legibility. Was
+   1.3em; see Greek comment above for why this is now rem*zoom. */
 .propositions.hebrew-text .proposition-text {
   font-family: 'Noto Serif Hebrew', 'SBL Hebrew', 'Times New Roman', serif;
-  font-size: 1.3em;
+  font-size: calc(1.3rem * var(--da-zoom));
   line-height: 2.2;
 }
 
@@ -2148,14 +2321,34 @@ body.rtl-mode .proposition-block .proposition-text {
   display: none !important;
 }
 
+/* Interior members of a flat series: hide the dot (kept in layout so bracket
+   geometry/dotPositions indexing stay intact) so the line reads as part of the
+   series rather than a standalone node. */
+.proposition-block.series-member .prop-dot {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* A sub-bracket jumped over by a series is an implicit member of it, so its
+   own parent-attach anchor is hidden (visibility, not display, to preserve
+   geometry the bracket arms are measured against). */
+.connection-node.series-absorbed {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .fold-gap {
   text-align: center;
   color: var(--text-muted, #aaa);
   font-size: 11px;
   padding: 2px 0;
   letter-spacing: 3px;
-  pointer-events: none;
+  cursor: pointer;
   user-select: none;
+}
+.fold-gap:hover,
+.fold-gap:focus-visible {
+  color: var(--accent);
 }
 
 .connection-node.collapsed {
@@ -2163,7 +2356,12 @@ body.rtl-mode .proposition-block .proposition-text {
   opacity: 0.75;
   stroke: #fff;
   stroke-width: 1.5px;
-  cursor: zoom-in;
+  cursor: zoom-in; /* honest now: clicking a collapsed node expands it */
+}
+
+/* Mid-connection the collapsed node acts as a connect target again */
+.bracket-canvas.connect-mode .connection-node.collapsed {
+  cursor: crosshair;
 }
 
 /* All collapsed brackets: bracket's own color, dashed */
@@ -2348,7 +2546,7 @@ body.rtl-mode .proposition-block .proposition-text {
 .word-arrow-group {
   cursor: pointer;
 }
-.word-arrow-group:hover path {
+.word-arrow-group:hover .word-arrow-path {
   stroke-width: 3;
 }
 
@@ -2571,6 +2769,27 @@ body.rtl-mode .proposition-block .proposition-text {
   opacity: 1;
 }
 
+/* Wide invisible stroke that makes the whole arrow an easy click target
+   (mirrors .bracket-hitbox on brackets). */
+.word-arrow-hitbox {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 12;
+  pointer-events: stroke;
+}
+
+/* Selected arrow (click to select, Delete/right-click to remove): the line
+   itself lights up, not just its anchor words — the endpoints may be
+   off-screen on a long arrow. */
+.word-arrow-group.is-selected .word-arrow-path {
+  stroke: var(--accent);
+  stroke-width: 3.5;
+  opacity: 1;
+}
+.word-arrow-group.is-selected .word-arrow-head {
+  fill: var(--accent);
+}
+
 /* Context Menu (for Export As) */
 .context-menu {
   position: fixed;
@@ -2599,6 +2818,14 @@ body.rtl-mode .proposition-block .proposition-text {
 
 .context-menu .menu-item:hover {
   background: var(--hover-bg);
+}
+
+.context-menu .menu-item.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.context-menu .menu-item.disabled:hover {
+  background: none;
 }
 
 .context-menu hr {
@@ -2673,4 +2900,147 @@ body.rtl-mode .proposition-block .proposition-text {
 [data-theme="light"] .arrow-anchor.hover-anchor {
   background-color: #e0e0e0;
   box-shadow: 0 0 0 2px #cccccc;
+}
+
+/* ── Notation profile editor (Settings → Notation) ───────────────────────── */
+.settings-modal { max-width: 580px; }
+.settings-modal .modal-body { max-height: 72vh; overflow-y: auto; }
+
+.notation-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+  flex-wrap: wrap;
+}
+.notation-toolbar-spacer { flex: 1; }
+
+.notation-grid-head,
+.notation-row {
+  display: grid;
+  grid-template-columns: 1fr 96px 28px 34px;
+  gap: 8px;
+  align-items: center;
+}
+.notation-grid-head {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--border);
+}
+.notation-grid-head .col-dom { text-align: center; }
+
+.notation-grid {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.notation-row { padding: 3px 0; }
+.notation-row input[type="text"] {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 0.82rem;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.notation-label { font-family: 'Roboto Mono', monospace; }
+.notation-dom {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0;
+}
+.notation-dom input { cursor: pointer; }
+.notation-color {
+  width: 100%;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+}
+.notation-hint {
+  font-size: 0.72rem;
+  opacity: 0.65;
+  margin: 8px 0 0;
+}
+
+.notation-cloud {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.notation-cloud-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+  margin-bottom: 8px;
+}
+.notation-cloud-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.notation-cloud-row input {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+  background: #ffffff;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.notation-cloud-row button { white-space: nowrap; }
+
+/* Collapsible Advanced Notation Settings */
+.advanced-notation {
+  border: none;
+  padding: 0;
+}
+.settings-summary {
+  cursor: pointer;
+  user-select: none;
+  display: block;
+  padding: 12px 0;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  list-style: none;
+  transition: opacity 0.2s ease;
+}
+.settings-summary:hover {
+  opacity: 0.8;
+}
+.settings-summary::-webkit-details-marker {
+  display: none;
+}
+.settings-summary::before {
+  content: '▶ ';
+  display: inline-block;
+  margin-right: 8px;
+  transition: transform 0.2s ease;
+  transform-origin: center;
+}
+.advanced-notation[open] .settings-summary::before {
+  transform: rotate(90deg);
+}
+.advanced-notation[open] > :not(.settings-summary) {
+  animation: slideDown 0.2s ease;
+}
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

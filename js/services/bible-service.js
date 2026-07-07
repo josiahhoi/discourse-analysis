@@ -1,86 +1,112 @@
 const PASSAGE_REF_REGEX = /^(\d?\s*[a-zA-Z\s]+?)\s*(\d+)(?::(\d+)(?:-(\d+))?)?$/;
 
-// ── Logos Source ───────────────────────────────────────────────────────────────
-
-// TODO: Implement once the Logos local API endpoint format is confirmed.
-// When Logos is running it exposes a local HTTP server. Consult the Logos
-// Platform developer docs for the correct base URL, resource IDs (ESV, NASB,
-// NA28), and response shape. Then wire up `transformLogosResponse` below.
-async function fetchFromLogos(_version, _query) {
-  return null;
+/**
+ * References can arrive with typographic characters the regex above doesn't
+ * know: the ESV API's canonical form uses an en dash ("Romans 3:21–26"),
+ * and pasted refs may carry non-breaking spaces. Normalize to plain ASCII
+ * before every parse.
+ */
+function normalizeRefQuery(query) {
+  return String(query || '')
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, '-') // hyphens, en/em dashes, minus
+    .replace(/\u00A0/g, ' ') // non-breaking space
+    .trim();
 }
 
 // ── SBLGNT Source (NT Greek) ──────────────────────────────────────────────────
+
+/**
+ * Download a book file and collect ONE chapter as a { verseNum: greekText }
+ * map, joining repeated verse lines (paragraph breaks in the source file).
+ * The single SBLGNT scan pipeline — shared by the passage import
+ * (fetchSBLGNTPassage) and the parallel column (fetchSBLGNTChapterMap), so a
+ * fix to the fetch/parse/join rules can never miss one of the two paths.
+ */
+async function fetchSBLGNTChapterVerses(ref) {
+  const res = await fetch(`${DA_CONSTANTS.SBLGNT_BASE}${ref.file}`);
+  if (!res.ok) throw new Error(`SBLGNT fetch error: ${res.status}`);
+
+  const map = {};
+  for (const line of (await res.text()).split('\n')) {
+    const parts = line.split('\t');
+    if (parts.length < 2) continue;
+    const m = parts[0].trim().match(/(\d+):(\d+)$/);
+    if (!m || parseInt(m[1]) !== ref.chapter) continue;
+    const v = String(parseInt(m[2]));
+    const greek = parts[1].trim();
+    map[v] = map[v] ? `${map[v]} ${greek}` : greek;
+  }
+  return map;
+}
 
 async function fetchSBLGNTPassage(query, ref) {
   if (!ref) ref = parsePassageReference(query);
   if (!ref || !ref.file) throw new Error('Book not found in SBLGNT (New Testament only).');
 
-  const url = `${DA_CONSTANTS.SBLGNT_BASE}${ref.file}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`SBLGNT fetch error: ${res.status}`);
+  const map = await fetchSBLGNTChapterVerses(ref);
+  const verseNums = Object.keys(map)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .filter((v) => !ref.hasVerses || (v >= ref.startVerse && v <= ref.endVerse));
 
-  const text = await res.text();
-  const lines = text.split('\n');
-  const results = [];
-  const verseRefs = [];
-
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    const parts = line.split('\t');
-    if (parts.length < 2) continue;
-
-    const loc = parts[0].trim();
-    const m = loc.match(/(\d+):(\d+)$/);
-    if (!m) continue;
-
-    const curChapter = parseInt(m[1]);
-    const curVerse = parseInt(m[2]);
-    const isInRange = ref.hasVerses
-      ? curVerse >= ref.startVerse && curVerse <= ref.endVerse
-      : true;
-
-    if (curChapter === ref.chapter && isInRange) {
-      const greek = parts[1].trim();
-      if (results.length > 0 && verseRefs[verseRefs.length - 1] === String(curVerse)) {
-        results[results.length - 1] += ' ' + greek;
-      } else {
-        results.push(greek);
-        verseRefs.push(String(curVerse));
-      }
-    }
-  }
-
-  if (results.length === 0) throw new Error('No verses found in SBLGNT for this range.');
+  if (verseNums.length === 0) throw new Error('No verses found in SBLGNT for this range.');
 
   return {
-    propositions: results,
-    verseRefs,
+    propositions: verseNums.map((v) => map[String(v)]),
+    verseRefs: verseNums.map((v) => String(v)),
     passageRef: `${ref.bookName} ${ref.chapter}${ref.hasVerses ? ':' + ref.startVerse + (ref.endVerse !== ref.startVerse ? '-' + ref.endVerse : '') : ''}`,
     copyright: '(SBLGNT)'
   };
 }
 
+/**
+ * SBLGNT counterpart of fetchParallelVerses: the whole chapter as a
+ * { verseNum: greekText } map for the parallel column.
+ */
+async function fetchSBLGNTChapterMap(query) {
+  const ref = parsePassageReference(query);
+  if (!ref || !ref.file) throw new Error('SBLGNT covers the New Testament only.');
+
+  const map = await fetchSBLGNTChapterVerses(ref);
+  if (!Object.keys(map).length) throw new Error('No verses found in SBLGNT for this chapter.');
+  return map;
+}
+
 // ── Bolls Source ──────────────────────────────────────────────────────────────
 
-async function fetchFromBolls(translation, query) {
-  const match = query.match(PASSAGE_REF_REGEX);
-  if (!match) throw new Error('Could not parse reference. Use format like "John 1:1-5"');
+/**
+ * Parse a reference, resolve the Bolls book id, and fetch the WHOLE chapter.
+ * The single Bolls request pipeline — shared by the passage import
+ * (fetchFromBolls) and the parallel column (fetchParallelVerses), so a fix to
+ * the reference parsing, book lookup, or error handling can never miss one of
+ * the two paths. Returns { match, verses, bookName }: `match` is the
+ * PASSAGE_REF_REGEX result (book / chapter / optional verse range), `verses`
+ * the raw Bolls rows.
+ */
+async function fetchBollsChapter(translation, query, parseErrorMsg) {
+  const match = normalizeRefQuery(query).match(PASSAGE_REF_REGEX);
+  if (!match) throw new Error(parseErrorMsg);
 
   const bookName = match[1].trim().toLowerCase().replace(/\s+/g, '');
-  const chapter = match[2];
-  const startVerse = match[3] ? parseInt(match[3]) : null;
-  const endVerse = match[4] ? parseInt(match[4]) : startVerse;
-
   const bollsId = DA_CONSTANTS.BOLLS_BOOKS[bookName];
   if (!bollsId) throw new Error(`Book "${match[1]}" not recognized.`);
 
-  const url = `https://bolls.life/get-text/${translation}/${bollsId}/${chapter}/`;
-  const res = await fetch(url);
+  const res = await fetch(`https://bolls.life/get-text/${translation}/${bollsId}/${match[2]}/`);
   if (!res.ok) throw new Error(`Bolls API error: ${res.status}`);
 
   const verses = await res.json();
   if (!Array.isArray(verses) || verses.length === 0) throw new Error('No verses found.');
+
+  return { match, verses, bookName };
+}
+
+async function fetchFromBolls(translation, query) {
+  const { match, verses, bookName } = await fetchBollsChapter(
+    translation, query, 'Could not parse reference. Use format like "John 1:1-5"');
+
+  const chapter = match[2];
+  const startVerse = match[3] ? parseInt(match[3]) : null;
+  const endVerse = match[4] ? parseInt(match[4]) : startVerse;
 
   const filtered = startVerse !== null
     ? verses.filter(v => v.verse >= startVerse && v.verse <= endVerse)
@@ -95,10 +121,35 @@ async function fetchFromBolls(translation, query) {
   return { text, passageRef: ref, copyright: `(${translation})` };
 }
 
+/**
+ * Fetch a chapter as a per-verse map for the parallel column (Alternate
+ * Views): { "97": "我何等愛慕你的律法…", … }. Unlike fetchFromBolls (which
+ * joins verses into one text for the primary import path), the parallel
+ * column is keyed by verse so proposition splits/merges never disturb it.
+ * Returns the WHOLE chapter; the caller keeps only the verses on screen.
+ */
+async function fetchParallelVerses(translation, query) {
+  // The Greek NT is not on Bolls - route to the app's SBLGNT source instead.
+  if (translation === 'SBLGNT') return fetchSBLGNTChapterMap(query);
+
+  const { verses } = await fetchBollsChapter(
+    translation, query, 'Could not read this passage reference. Parallel needs a reference like "John 1:1-5".');
+
+  const map = {};
+  verses.forEach((v) => {
+    // Display-only text: strip any markup and zero-width characters.
+    map[String(v.verse)] = String(v.text)
+      .replace(/<[^>]*>/g, '')
+      .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
+      .trim();
+  });
+  return map;
+}
+
 // ── Parse helpers ─────────────────────────────────────────────────────────────
 
 function parsePassageReference(query) {
-  const match = query.match(PASSAGE_REF_REGEX);
+  const match = normalizeRefQuery(query).match(PASSAGE_REF_REGEX);
   if (!match) return null;
 
   const bookNameKey = match[1].trim().toLowerCase().replace(/\s+/g, '');
@@ -119,6 +170,9 @@ function parsePassageReference(query) {
 }
 
 function parseBollsText(rawText) {
+  // Strip zero-width characters from source text (legacy verse markers, BOM,
+  // joiners) — verse boundaries are structured data now, never in-band chars.
+  rawText = String(rawText).replace(/[\u200B\u200C\u200D\uFEFF]/g, '');
   const verseParts = rawText.split(/(?=\[\d+\])/);
   const propositions = [];
   const verseRefs = [];
@@ -148,18 +202,41 @@ function parseBollsText(rawText) {
   return { propositions, verseRefs };
 }
 
+// ── ESV API (desktop only) ──────────────────────────────────────────────────
+//
+// The real api.esv.org fetch + API key live in the Electron main process
+// (main.js), reached via the preload bridge (window.electronAPI.fetchESV).
+// That bridge only exists in the Electron desktop app — the static/GitHub
+// Pages web build has no server to hold the secret, so it always falls
+// through to the keyless Bolls source below. See .env.example.
+
+async function fetchFromESVApi(query) {
+  if (!window.electronAPI || typeof window.electronAPI.fetchESV !== 'function') {
+    throw new Error('ESV API not available in this build (web/browser).');
+  }
+  const res = await window.electronAPI.fetchESV(query);
+  if (!res || !res.ok) {
+    if (res && res.noKey) throw new Error('No ESV API key configured (.env).');
+    throw new Error(`ESV API error${res && res.status ? ` (${res.status})` : ''}`);
+  }
+  const parsed = parseBollsText(res.text);
+  if (parsed.propositions.length === 0) throw new Error('ESV API returned no verses.');
+  return { ...parsed, passageRef: res.canonical || query, copyright: '(ESV)' };
+}
+
 // ── Main entry point ──────────────────────────────────────────────────────────
 
 /**
  * Fetch a Bible passage from the best available source.
  *
  * Source priority:
- *   Greek NT  — Logos (NA28) → SBLGNT
+ *   Greek NT  — SBLGNT (GitHub raw)
  *   Greek OT  — Bolls LXX
- *   ESV       — Logos → Bolls ESV
- *   NASB      — Logos → Bolls NASB
+ *   Hebrew OT — Bolls WLC
+ *   ESV       — api.esv.org (desktop app with a key) → falls back to Bolls
+ *   NASB      — Bolls (the ESV API only serves the ESV translation)
  *
- * @param {string} version - 'esv' | 'nasb' | 'greek'
+ * @param {string} version - 'esv' | 'nasb' | 'greek' | 'hebrew'
  * @param {string} query   - Passage reference e.g. "John 1:1-5"
  */
 async function fetchPassageData(version, query) {
@@ -174,8 +251,6 @@ async function fetchPassageData(version, query) {
   if (version === 'greek') {
     const ref = parsePassageReference(query);
     if (ref && ref.file) {
-      const logos = await fetchFromLogos('na28', query);
-      if (logos) return { ...logos, isGreek: true };
       const result = await fetchSBLGNTPassage(query, ref);
       return { ...result, isGreek: true };
     } else {
@@ -185,18 +260,23 @@ async function fetchPassageData(version, query) {
     }
   }
 
-  const logos = await fetchFromLogos(version, query);
-  if (logos) {
-    const parsed = parseBollsText(logos.text);
-    return { ...parsed, passageRef: logos.passageRef, copyright: logos.copyright, isGreek: false };
+  if (version !== 'nasb') {
+    try {
+      const result = await fetchFromESVApi(query);
+      return { ...result, isGreek: false, source: 'esv-api' };
+    } catch (_) {
+      // No key, not the desktop app, network error, bad reference, etc. —
+      // fall through to the keyless Bolls source below.
+    }
   }
 
   const translation = version === 'nasb' ? 'NASB' : 'ESV';
   const data = await fetchFromBolls(translation, query);
   const parsed = parseBollsText(data.text);
-  return { ...parsed, passageRef: data.passageRef, copyright: data.copyright, isGreek: false };
+  return { ...parsed, passageRef: data.passageRef, copyright: data.copyright, isGreek: false, source: 'bolls' };
 }
 
 window.DA_BIBLE = {
-  fetchPassageData
+  fetchPassageData,
+  fetchParallelVerses
 };

@@ -44,6 +44,68 @@ function normalizeBracketData(data) {
     data = { ...data, verseRefs: data.verseRefs.map(normalizeVerseRef) };
   }
 
+  // ── Verse boundaries: legacy invisible markers → structured verseBreaks ────
+  // Old files hid a zero-width \u200B character in the text wherever a merge
+  // crossed a verse boundary. Strip those out of the text, record each position
+  // in verseBreaks (offsets where a later verse begins), and shift every
+  // character-offset anchor on the affected lines (format tags, text comments,
+  // word arrows) left by the number of markers removed before it. Runs before
+  // the arrow clamp below so clamping sees the final text.
+  {
+    const MARKER = '\u200B';
+    const verseBreaks = Array.isArray(data.verseBreaks)
+      ? data.propositions.map((_, i) => (Array.isArray(data.verseBreaks[i]) ? data.verseBreaks[i].slice() : []))
+      : data.propositions.map(() => []);
+
+    const markerIdxs = []; // per prop: sorted old marker indices, or null
+    let anyMarkers = false;
+    const newProps = data.propositions.map((p, i) => {
+      if (typeof p !== 'string' || p.indexOf(MARKER) === -1) { markerIdxs.push(null); return p; }
+      anyMarkers = true;
+      const idxs = [];
+      let out = '';
+      for (let c = 0; c < p.length; c++) {
+        if (p[c] === MARKER) idxs.push(c);
+        else out += p[c];
+      }
+      markerIdxs.push(idxs);
+      // Marker at old index m (k-th marker) → the next verse's text starts at
+      // new offset m - k (k earlier markers were removed before it).
+      const collected = idxs.map((m, k) => m - k).filter((b) => b > 0 && b < out.length);
+      verseBreaks[i] = [...new Set([...verseBreaks[i], ...collected])].sort((a, b) => a - b);
+      return out;
+    });
+
+    if (anyMarkers) {
+      const shiftOffset = (propIdx, o) => {
+        const idxs = markerIdxs[propIdx];
+        if (!idxs || typeof o !== 'number') return o;
+        let d = 0;
+        for (const m of idxs) { if (m < o) d++; }
+        return o - d;
+      };
+      data = {
+        ...data,
+        propositions: newProps,
+        verseBreaks,
+        formatTags: (Array.isArray(data.formatTags) ? data.formatTags : []).map((f) => ({
+          ...f, start: shiftOffset(f.propIndex, f.start), end: shiftOffset(f.propIndex, f.end)
+        })),
+        comments: (Array.isArray(data.comments) ? data.comments : []).map((c) => {
+          if (c.type !== 'text' || !c.target) return c;
+          return { ...c, target: { ...c.target, start: shiftOffset(c.target.propIndex, c.target.start), end: shiftOffset(c.target.propIndex, c.target.end) } };
+        }),
+        wordArrows: (Array.isArray(data.wordArrows) ? data.wordArrows : []).map((wa) => ({
+          ...wa,
+          fromStart: shiftOffset(wa.fromProp, wa.fromStart), fromEnd: shiftOffset(wa.fromProp, wa.fromEnd),
+          toStart: shiftOffset(wa.toProp, wa.toStart), toEnd: shiftOffset(wa.toProp, wa.toEnd)
+        }))
+      };
+    } else {
+      data = { ...data, verseBreaks };
+    }
+  }
+
   // Heal arrow anchors that earlier offset-remapping may have stretched across
   // whitespace/blank lines — clamp each back to a single word so they render
   // sanely. Arrows are word-level; comments may span phrases so they're left.
@@ -64,72 +126,130 @@ function normalizeBracketData(data) {
   const rawBrackets = Array.isArray(data.brackets) ? data.brackets : (Array.isArray(data.arcs) ? data.arcs : []);
   if (rawBrackets.length === 0) return data;
 
-  // Only migrate if we find numeric 'from' or 'to' properties (legacy format)
-  const needsMigration = rawBrackets.some(b => typeof b.from === 'number' || typeof b.to === 'number');
-  if (!needsMigration) return data;
+  let brackets = rawBrackets.map((b) => ({ ...b }));
+  let comments = (Array.isArray(data.comments) ? data.comments : [])
+    .map((c) => ({ ...c, target: c.target ? { ...c.target } : c.target }));
 
-  // 1. Prepare indexed brackets to track original order for comment mapping
-  const indexedBrackets = rawBrackets.map((b, i) => ({ ...b, _originalIdx: i }));
-  
-  // 2. Sort by span width (inner-most first) to reconstruct the logical hierarchy
-  // Narrower brackets must be processed first so they can be "owned" by wider ones.
-  indexedBrackets.sort((a, b) => {
-    const widthA = (a.to || 0) - (a.from || 0);
-    const widthB = (b.to || 0) - (b.from || 0);
-    return widthA - widthB || a._originalIdx - b._originalIdx;
-  });
+  // ── Stage 1: legacy numeric from/to (the original flat format) ─────────────
+  // Reconstruct the nested hierarchy from proposition-index spans.
+  const needsNumericMigration = brackets.some(b => typeof b.from === 'number' || typeof b.to === 'number');
+  if (needsNumericMigration) {
+    // 1. Prepare indexed brackets to track original order for comment mapping
+    const indexedBrackets = brackets.map((b, i) => ({ ...b, _originalIdx: i }));
 
-  // 3. Track what currently "owns" each proposition index
-  let owners = data.propositions.map((_, i) => `p${i}`);
-  const newBrackets = [];
-  const oldToNewIdx = {};
-
-  indexedBrackets.forEach((oldB, newIdx) => {
-    const fromIdx = oldB.from || 0;
-    const toIdx = oldB.to || 0;
-    
-    // The logical targets are whatever currently owns these indices at this point in the assembly
-    const newFrom = owners[fromIdx];
-    const newTo = owners[toIdx];
-    
-    const id = oldB.id || String(Date.now() + newIdx);
-    const { _originalIdx, ...cleanB } = oldB;
-    
-    newBrackets.push({
-      ...cleanB,
-      id,
-      from: newFrom,
-      to: newTo,
-      dominanceFlipped: !!oldB.dominanceFlipped,
-      labelsSwapped: !!oldB.labelsSwapped
+    // 2. Sort by span width (inner-most first) to reconstruct the logical hierarchy
+    // Narrower brackets must be processed first so they can be "owned" by wider ones.
+    indexedBrackets.sort((a, b) => {
+      const widthA = (a.to || 0) - (a.from || 0);
+      const widthB = (b.to || 0) - (b.from || 0);
+      return widthA - widthB || a._originalIdx - b._originalIdx;
     });
-    
-    oldToNewIdx[_originalIdx] = newIdx;
-    
-    // Update the ownership map: this range is now covered by the new bracket
-    const bracketRef = `b${newIdx}`;
-    for (let k = fromIdx; k <= toIdx; k++) {
-      owners[k] = bracketRef;
+
+    // 3. Track what currently "owns" each proposition index
+    let owners = data.propositions.map((_, i) => `p${i}`);
+    const newBrackets = [];
+    const oldToNewIdx = {};
+
+    indexedBrackets.forEach((oldB, newIdx) => {
+      const fromIdx = oldB.from || 0;
+      const toIdx = oldB.to || 0;
+
+      // The logical targets are whatever currently owns these indices at this point in the assembly
+      const newFrom = owners[fromIdx];
+      const newTo = owners[toIdx];
+
+      const { _originalIdx, ...cleanB } = oldB;
+
+      newBrackets.push({
+        ...cleanB,
+        from: newFrom,
+        to: newTo,
+        dominanceFlipped: !!oldB.dominanceFlipped,
+        labelsSwapped: !!oldB.labelsSwapped
+      });
+
+      oldToNewIdx[_originalIdx] = newIdx;
+
+      // Update the ownership map: this range is now covered by the new bracket.
+      // ('bN' index refs here are temporary — stage 2 converts them to ids.)
+      const bracketRef = `b${newIdx}`;
+      for (let k = fromIdx; k <= toIdx; k++) {
+        owners[k] = bracketRef;
+      }
+    });
+
+    // 4. Remap comment targets to the re-sorted bracket order (still by index;
+    // stage 2 converts indices to ids).
+    comments = comments.map(c => {
+      if (!c.target) return c;
+      let target = { ...c.target };
+      const oldIdx = target.bracketIdx !== undefined ? target.bracketIdx : target.arcIdx;
+      if (oldIdx !== undefined && oldToNewIdx[oldIdx] !== undefined) {
+        target.bracketIdx = oldToNewIdx[oldIdx];
+        delete target.arcIdx;
+      }
+      return { ...c, target };
+    });
+
+    brackets = newBrackets;
+  }
+
+  // ── Stage 2: positional references → stable ids ────────────────────────────
+  // Give every bracket a unique id, then convert every positional reference —
+  // 'bN' in from/to, comment target.bracketIdx/arcIdx, numeric highlight keys —
+  // to that id. After this, nothing in the file refers to a bracket by position,
+  // so add/delete/reorder never needs renumbering again.
+
+  // 2a. Unique ids ('pN'-shaped or duplicate ids are regenerated).
+  const seenIds = new Set();
+  brackets.forEach((b) => {
+    if (typeof b.id !== 'string' || !b.id || /^p\d+$/.test(b.id) || seenIds.has(b.id)) {
+      do { b.id = DA_STATE.newBracketId(); } while (seenIds.has(b.id));
     }
+    seenIds.add(b.id);
   });
 
-  // 4. Update comment targets to match the new bracket indices
-  const newComments = (Array.isArray(data.comments) ? data.comments : []).map(c => {
+  // 2b. from/to: 'bN' (index) → id. Refs that are already ids pass through.
+  const idxToId = (ref) => {
+    if (typeof ref === 'string') {
+      const m = /^b(\d+)$/.exec(ref);
+      if (m && brackets[+m[1]]) return brackets[+m[1]].id;
+    }
+    return ref;
+  };
+  brackets.forEach((b) => { b.from = idxToId(b.from); b.to = idxToId(b.to); });
+
+  // 2c. Comment targets: bracketIdx/arcIdx → bracketId.
+  comments = comments.map((c) => {
     if (!c.target) return c;
-    let target = { ...c.target };
+    const target = { ...c.target };
     const oldIdx = target.bracketIdx !== undefined ? target.bracketIdx : target.arcIdx;
-    if (oldIdx !== undefined && oldToNewIdx[oldIdx] !== undefined) {
-      target.bracketIdx = oldToNewIdx[oldIdx];
+    if (oldIdx !== undefined) {
+      if (brackets[oldIdx]) target.bracketId = brackets[oldIdx].id;
+      delete target.bracketIdx;
       delete target.arcIdx;
     }
     return { ...c, target };
   });
 
-  return { 
-    ...data, 
-    brackets: newBrackets, 
-    comments: newComments,
-    version: 1 // Normalize to current version
+  // 2d. Highlights: numeric index keys → id keys. Id keys pass through if they
+  // resolve; anything else is dropped (it pointed at a bracket that's gone).
+  const highlights = {};
+  const rawHighlights = (data.bracketHighlights && typeof data.bracketHighlights === 'object') ? data.bracketHighlights : {};
+  Object.entries(rawHighlights).forEach(([k, v]) => {
+    if (/^\d+$/.test(k)) {
+      if (brackets[+k]) highlights[brackets[+k].id] = v;
+    } else if (seenIds.has(k)) {
+      highlights[k] = v;
+    }
+  });
+
+  return {
+    ...data,
+    brackets,
+    comments,
+    bracketHighlights: highlights,
+    version: 3 // v3: structured verseBreaks; v2: stable-id references
   };
 }
 
@@ -152,44 +272,45 @@ function importBracket(data) {
   // Legacy migration
   data = normalizeBracketData(data);
 
-  // Loading a different project exits any active live cloud session, so the old
-  // project's listener/URL/badge don't linger and overwrite the loaded data.
-  if (DA_STATE.cloudUnsubscribe && window.DA_CLOUD) DA_CLOUD.stopCloudSync();
-
-  DA_STATE.updateState({
+  // Loading a different project replaces the document: one shared reset ends/
+  // forgets the cloud session and clears every per-document field (undo/redo,
+  // parallel column, selections, …) before the file's content is applied.
+  DA_STATE.resetForNewDocument({
     passageRef: data.passageRef || 'Imported bracket',
     propositions: data.propositions.slice(),
     verseRefs: Array.isArray(data.verseRefs) && data.verseRefs.length === data.propositions.length
       ? data.verseRefs.slice()
       : data.propositions.map((_, i) => String(i + 1)),
+    // normalizeBracketData above guarantees verseBreaks is aligned; the reset
+    // helper re-pads defensively either way.
+    verseBreaks: Array.isArray(data.verseBreaks)
+      ? data.verseBreaks.map((a) => (Array.isArray(a) ? a.slice() : []))
+      : [],
     brackets: (Array.isArray(data.brackets) ? data.brackets : (Array.isArray(data.arcs) ? data.arcs : [])).map((a) => ({ ...a })),
     formatTags: Array.isArray(data.formatTags) ? data.formatTags.map((t) => ({ ...t })) : [],
     wordArrows: Array.isArray(data.wordArrows) ? data.wordArrows.map((w) => ({ ...w })) : [],
-    comments: Array.isArray(data.comments) ? data.comments.map((c) => {
-        let target = { ...(c.target || {}) };
-        if (target.arcIdx !== undefined) {
-          target.bracketIdx = target.arcIdx;
-          delete target.arcIdx;
-        }
-        return { ...c, target, replies: Array.isArray(c.replies) ? c.replies.map((r) => ({ ...r })) : [] };
-    }) : [],
+    // Legacy comment targets (bracketIdx/arcIdx) were already converted to
+    // stable bracketId by normalizeBracketData above — just deep-copy here.
+    comments: Array.isArray(data.comments) ? data.comments.map((c) => ({
+        ...c,
+        target: { ...(c.target || {}) },
+        replies: Array.isArray(c.replies) ? c.replies.map((r) => ({ ...r })) : []
+    })) : [],
     indentation: Array.isArray(data.indentation) ? data.indentation.slice() : [],
     bracketHighlights: (data.bracketHighlights && typeof data.bracketHighlights === 'object') ? Object.assign({}, data.bracketHighlights) : {},
-    undoStack: [],
-    bracketSelectStep: 0,
-    firstBracketPoint: null,
-    activeProjectId: data.activeProjectId || null
+    // Project-specific labels travel with the file. Intentionally NOT written
+    // to localStorage ('da_custom_labels') so imported labels don't silently
+    // enter the user's permanent bank.
+    customLabels: Array.isArray(data.customLabels) ? data.customLabels.map((cl) => ({ ...cl })) : []
   });
+
+  // The file may carry the project id it was shared under — remember it (state
+  // 'remembered') so "Turn Cloud Sync ON" can offer to resume that project.
+  if (window.DA_CLOUD && data.activeProjectId) DA_CLOUD.adoptRememberedProject(data.activeProjectId);
 
   const passageRefEl = document.getElementById('passageRef');
   if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
 
-  if (data.customLabels) {
-    DA_STATE.customLabels = data.customLabels;
-    // We intentionally do NOT update localStorage.setItem('da_custom_labels', ...) here
-    // so that imported labels don't automatically enter the user's permanent bank.
-  }
-  
   const pageAuthorInputEl = document.getElementById('pageAuthor');
   if (pageAuthorInputEl && data.pageAuthor != null) {
     pageAuthorInputEl.value = data.pageAuthor;
@@ -199,10 +320,7 @@ function importBracket(data) {
   const copyrightLabel = document.getElementById('copyrightLabel');
   if (copyrightLabel && data.copyrightLabel) copyrightLabel.textContent = data.copyrightLabel;
   
-  const propositionsContainer = document.getElementById('propositionsContainer');
-  if (propositionsContainer) {
-    propositionsContainer.classList.toggle('greek-text', !!data.copyrightLabel?.includes('SBL'));
-  }
+  if (window.DA_MODES) DA_MODES.applyScriptDirection(data);
 
   DA_UI.clearPropositionHighlights();
   if (window.renderAll) window.renderAll();
@@ -417,6 +535,60 @@ function initDraftRecovery() {
     });
 }
 
+/**
+ * Single startup recovery prompt. A returning user could otherwise face two
+ * dialogs at once — a cloud "reconnect?" and a local "restore draft?". Since
+ * reconnecting loads the authoritative cloud copy (making the local mirror
+ * moot), cloud reconnect takes priority: when a project code is present in the
+ * URL we show ONLY the cloud banner; otherwise we fall back to draft recovery.
+ * Both use the same non-blocking banner style (the cloud path was previously a
+ * jarring native confirm()).
+ */
+function initStartupRecovery(projectFromUrl) {
+    if (projectFromUrl) {
+        showCloudReconnectBanner(projectFromUrl);
+    } else {
+        initDraftRecovery();
+    }
+}
+
+function showCloudReconnectBanner(projectId) {
+    const wrapper = document.querySelector('.bracket-canvas-wrapper') || document.body;
+    const banner = document.createElement('div');
+    banner.className = 'draft-recovery-banner';
+    banner.setAttribute('role', 'dialog');
+    banner.setAttribute('aria-label', 'Reconnect to cloud project');
+    banner.innerHTML = `
+      <span class="draft-recovery-text">🌐 You were connected to cloud project <strong>${DA_UI.escapeHtml(projectId)}</strong>. Reconnect?</span>
+      <div class="draft-recovery-actions">
+        <button type="button" data-action="reconnect">Reconnect</button>
+        <button type="button" data-action="dismiss" class="secondary">Start Fresh</button>
+      </div>
+    `;
+    wrapper.prepend(banner);
+
+    // Drop the stale ?project= param so a later reload doesn't re-prompt.
+    const dropProjectParam = () => {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('project');
+        window.history.replaceState({}, '', url);
+    };
+
+    banner.querySelector('[data-action="reconnect"]').addEventListener('click', () => {
+        banner.remove();
+        DA_UI.showStatus(`Loading project ${projectId}…`, 'info');
+        if (window.DA_CLOUD) DA_CLOUD.joinCloudSync(projectId);
+    });
+    banner.querySelector('[data-action="dismiss"]').addEventListener('click', () => {
+        banner.remove();
+        dropProjectParam();
+        // "Start Fresh" is one-and-done: no second draft prompt. The local draft
+        // is just this cloud session's autosaved mirror, so re-offering it would
+        // be a redundant second popup. It stays in localStorage — a param-free
+        // reload can still surface it — but we don't chain another prompt here.
+    });
+}
+
 // Auto-save every 30 seconds
 const _autosaveIntervalId = setInterval(saveDraft, 30000);
 window.addEventListener('beforeunload', saveDraft);
@@ -609,7 +781,7 @@ function initDragAndDrop() {
         dropZone.classList.add('drag-over');
     });
     dropZone.addEventListener('dragleave', (e) => {
-        if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over');
+        if (!dropZone.contains(/** @type {Node} */ (e.relatedTarget))) dropZone.classList.remove('drag-over');
     });
     dropZone.addEventListener('drop', async (e) => {
         e.preventDefault();
@@ -649,6 +821,7 @@ function initDragAndDrop() {
 
 window.DA_PERSISTENCE = {
     normalizeBracketData, saveDraft, clearDraft, getDraft, importBracket, initMagicPaste, initDraftRecovery,
+    initStartupRecovery, showCloudReconnectBanner,
     addToRecent, renderRecentList, getExportFilename, attachFilenameObservers,
     injectPngMetadata, extractPngMetadata, extractPdfMetadata, processDNA, saveBracket, exportBracket, initDragAndDrop
 };

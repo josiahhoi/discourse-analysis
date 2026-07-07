@@ -1,13 +1,19 @@
 /**
- * Walks a contenteditable text span and extracts plain text + format tags (bold/underline).
- * Used by focusout handler and Ctrl+B/U shortcut to sync DOM formatting back to state.
+ * Walks a contenteditable text span and extracts plain text + format tags
+ * (bold / underline / color). Used by the focusout handler and Ctrl+B/U shortcut
+ * to sync DOM formatting back to state. Color must be captured here too:
+ * focusout rebuilds a line's formatTags entirely from this result, so any type
+ * not extracted is silently dropped on the next focus change.
  */
 function extractFormatTags(textSpan, propIndex) {
   let text = '';
   const tags = [];
   function traverse(node) {
     if (node.nodeType === Node.TEXT_NODE) {
-      text += node.textContent;
+      // Strip zero-width characters (legacy verse markers, BOM, joiners) so
+      // pasted text can't smuggle invisible state back into the model. Offsets
+      // are computed from this accumulated text, so tags stay consistent.
+      text += node.textContent.replace(/[\u200B\u200C\u200D\uFEFF]/g, '');
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       if (node.tagName === 'BR') text += '\n';
       else if (node.tagName === 'DIV' && text.length > 0 && !text.endsWith('\n')) text += '\n';
@@ -15,10 +21,16 @@ function extractFormatTags(textSpan, propIndex) {
       node.childNodes.forEach(traverse);
       const end = text.length;
       if (start < end) {
-        let type = null;
-        if (node.tagName === 'B' || node.tagName === 'STRONG') type = 'bold';
-        else if (node.tagName === 'U') type = 'underline';
-        if (type) tags.push({ type, propIndex, start, end });
+        if (node.tagName === 'B' || node.tagName === 'STRONG') {
+          tags.push({ type: 'bold', propIndex, start, end });
+        } else if (node.tagName === 'U') {
+          tags.push({ type: 'underline', propIndex, start, end });
+        } else if (node.classList && node.classList.contains('color-text')) {
+          // Prefer the verbatim value stashed in data-color; fall back to the
+          // computed style for spans rendered before data-color existed.
+          const color = node.dataset.color || node.style.color;
+          if (color) tags.push({ type: 'color', color, propIndex, start, end });
+        }
       }
     }
   }
@@ -35,29 +47,27 @@ function splitPropositionAtOffset(i, offset) {
   const startRef = partsRef[0];
   const endRef = partsRef[partsRef.length - 1];
 
-  // Count markers with fuzziness (±2 characters)
-  const nearbyStart = Math.max(0, offset - 2);
-  const nearbyEnd = Math.min(text.length, offset + 2);
-  const nearbyText = text.slice(nearbyStart, nearbyEnd);
-  
-  let markersBefore = (text.slice(0, offset).match(/\u200B/g) || []).length;
-  let isCleanBreak = false;
-  let markerIndexInText = -1;
-  
-  if (nearbyText.includes('\u200B')) {
-    isCleanBreak = true;
-    markerIndexInText = text.indexOf('\u200B', nearbyStart);
-    markersBefore = (text.slice(0, markerIndexInText + 1).match(/\u200B/g) || []).length;
-  }
+  // Verse boundaries are structured data (verseBreaks[i]: offsets where a later
+  // verse begins), not characters hidden in the text. A cursor within ±2 chars
+  // of a recorded boundary snaps to it — the split then falls exactly at the
+  // verse transition and renumbering is exact (same fuzziness the old invisible
+  // markers had).
+  const breaks = (DA_STATE.verseBreaks[i] || []).slice().sort((a, b) => a - b);
+  const snapped = breaks.find(b => Math.abs(b - offset) <= 2);
+  const isCleanBreak = snapped !== undefined;
+
+  // How many verse boundaries lie at/before the split point — drives the verse
+  // renumbering below (same semantics as the old marker count).
+  const markersBefore = isCleanBreak
+    ? breaks.indexOf(snapped) + 1
+    : breaks.filter(b => b <= offset).length;
+
+  // Where the second half's raw slice begins.
+  const splitAt = isCleanBreak ? snapped : offset;
 
   // Set the final text for both parts
-  if (isCleanBreak) {
-    DA_STATE.propositions[i] = text.slice(0, markerIndexInText).trimEnd();
-    DA_STATE.propositions.splice(i + 1, 0, text.slice(markerIndexInText + 1).trimStart());
-  } else {
-    DA_STATE.propositions[i] = text.slice(0, offset).trimEnd();
-    DA_STATE.propositions.splice(i + 1, 0, text.slice(offset).trimStart());
-  }
+  DA_STATE.propositions[i] = text.slice(0, splitAt).trimEnd();
+  DA_STATE.propositions.splice(i + 1, 0, text.slice(splitAt).trimStart());
 
   const interpolateRef = (base, offset) => {
     const num = parseInt(base, 10);
@@ -108,16 +118,17 @@ function splitPropositionAtOffset(i, offset) {
   });
 
   if (referencingIndices.length > 0) {
-    const newBracketIdx = DA_STATE.brackets.length;
-    DA_STATE.brackets.push({
+    const newBracket = {
+      id: DA_STATE.newBracketId(),
       from: 'p' + i,
       to: 'p' + (i + 1),
       type: 'unspecified'
-    });
+    };
+    DA_STATE.brackets.push(newBracket);
     referencingIndices.forEach(({ idx, refersFrom, refersTo }) => {
       const b = DA_STATE.brackets[idx];
-      if (refersFrom) b.from = 'b' + newBracketIdx;
-      if (refersTo) b.to = 'b' + newBracketIdx;
+      if (refersFrom) b.from = newBracket.id;
+      if (refersTo) b.to = newBracket.id;
     });
   }
   
@@ -127,10 +138,21 @@ function splitPropositionAtOffset(i, offset) {
   // leading whitespace). Using plain `offset` here is what caused anchors to drift
   // right by the trimmed-whitespace length. `firstLen` is the length of the
   // (trimEnd'd) first half, used to clamp anchors that fall in its trimmed tail.
-  const secondStart = isCleanBreak ? (markerIndexInText + 1) : offset;
+  const secondStart = splitAt;
   const _rawSecond = text.slice(secondStart);
   const secondCut = secondStart + (_rawSecond.length - _rawSecond.trimStart().length);
   const firstLen = DA_STATE.propositions[i].length;
+
+  // Distribute the verse boundaries between the halves. A snapped boundary is
+  // consumed by the split itself (it becomes the seam between the two lines);
+  // earlier ones stay with the first half, later ones move to the second half
+  // shifted into its coordinate space. Out-of-range results are dropped.
+  const secondLen = DA_STATE.propositions[i + 1].length;
+  DA_STATE.verseBreaks[i] = breaks.filter(b => b < secondStart && b > 0 && b < firstLen);
+  DA_STATE.verseBreaks.splice(i + 1, 0, breaks
+    .filter(b => b >= secondStart)
+    .map(b => b - secondCut)
+    .filter(b => b > 0 && b < secondLen));
 
   // Adjust word arrows
   DA_STATE.wordArrows.forEach(wa => {
@@ -218,14 +240,33 @@ function mergePropositions(i) {
   const endA = refA.split('-').pop();
   const startB = refB.split('-')[0];
   
-  // Join with a single character (zero-width marker at a verse transition, else a
-  // space). Keep prevText intact \u2014 only trim currText's leading whitespace and the
-  // combined trailing whitespace. Trimming the *front* of the combined string (as a
-  // plain .trim() did) would drop prevText's leading whitespace and silently shift
-  // all of prop i-1's existing anchors; not trimming the front keeps them valid.
-  const joiner = (endA && startB && endA !== startB) ? '\u200B' : ' ';
+  // Join with a single visible space. Keep prevText intact \u2014 only trim
+  // currText's leading whitespace and the combined trailing whitespace. Trimming
+  // the *front* of the combined string (as a plain .trim() did) would drop
+  // prevText's leading whitespace and silently shift all of prop i-1's existing
+  // anchors; not trimming the front keeps them valid.
+  //
+  // When the join crosses a verse boundary, that boundary is recorded as
+  // structured data in verseBreaks (the offset where currText's verse begins in
+  // the merged string) \u2014 previously an invisible \u200B character was hidden in
+  // the text here, which any retype could silently destroy. Bonus: merged
+  // verses are now separated by a real space instead of being jammed together.
+  const isVerseTransition = !!(endA && startB && endA !== startB);
   const _currLeadingWS = currText.length - currText.replace(/^\s+/, '').length;
-  DA_STATE.propositions[i - 1] = (prevText + joiner + currText.replace(/^\s+/, '')).replace(/\s+$/, '');
+  DA_STATE.propositions[i - 1] = (prevText + ' ' + currText.replace(/^\s+/, '')).replace(/\s+$/, '');
+
+  // currText's content begins here in the merged string (see prevLen below).
+  const _currStartsAt = prevText.length + 1;
+  const mergedBreaks = (DA_STATE.verseBreaks[i - 1] || []).slice();
+  if (isVerseTransition) mergedBreaks.push(_currStartsAt);
+  (DA_STATE.verseBreaks[i] || []).forEach((b) => {
+    mergedBreaks.push(b + _currStartsAt - _currLeadingWS);
+  });
+  const _mergedLen = DA_STATE.propositions[i - 1].length;
+  DA_STATE.verseBreaks[i - 1] = [...new Set(mergedBreaks)]
+    .filter((b) => b > 0 && b < _mergedLen)
+    .sort((a, b) => a - b);
+  DA_STATE.verseBreaks.splice(i, 1);
   
   if (refA && refB && refA !== refB) {
     const partsA = refA.split('-');
@@ -255,50 +296,29 @@ function mergePropositions(i) {
     b.to = unshiftRef(b.to, i);
   });
 
-  // Remove degenerate brackets where from === to (e.g., auto-created brackets whose halves merged back)
+  // Remove degenerate brackets where from === to (e.g., auto-created brackets
+  // whose halves merged back). Brackets are referenced by stable id, so removal
+  // needs no renumbering — just reparent references and drop the id's comments
+  // and highlight.
   for (let j = DA_STATE.brackets.length - 1; j >= 0; j--) {
     const b = DA_STATE.brackets[j];
     if (b.from === b.to) {
-      const bRef = 'b' + j;
       // Reparent: any bracket pointing to this one should now point to its child
       DA_STATE.brackets.forEach((other, k) => {
         if (k === j) return;
-        if (other.from === bRef) other.from = b.from;
-        if (other.to === bRef) other.to = b.to;
+        if (other.from === b.id) other.from = b.from;
+        if (other.to === b.id) other.to = b.to;
       });
       DA_STATE.brackets.splice(j, 1);
-      // Fix shifted bN references
-      DA_STATE.brackets.forEach(other => {
-        const fix = (val) => {
-          if (typeof val === 'string' && val.startsWith('b')) {
-            const idx = parseInt(val.slice(1), 10);
-            if (idx > j) return 'b' + (idx - 1);
-          }
-          return val;
-        };
-        other.from = fix(other.from);
-        other.to = fix(other.to);
-      });
-      // Fix comment references
-      DA_STATE.comments = DA_STATE.comments.filter(c => c.type !== 'bracket' || c.target?.bracketIdx !== j);
-      DA_STATE.comments.forEach(c => {
-        if (c.type === 'bracket' && c.target?.bracketIdx > j) c.target.bracketIdx--;
-      });
-      // Fix bracketHighlights references
-      const _mh = {};
-      Object.entries(DA_STATE.bracketHighlights).forEach(([k, v]) => {
-        const idx = parseInt(k, 10);
-        if (idx < j) _mh[idx] = v;
-        else if (idx > j) _mh[idx - 1] = v;
-      });
-      DA_STATE.bracketHighlights = _mh;
+      DA_STATE.comments = DA_STATE.comments.filter(c => c.type !== 'bracket' || c.target?.bracketId !== b.id);
+      delete DA_STATE.bracketHighlights[b.id];
     }
   }
   
   // Where currText's content now begins in the merged string: prevText is kept
-  // whole, plus the 1-char joiner, minus the leading whitespace we trimmed off
-  // currText (so anchors that were after that whitespace land correctly).
-  const prevLen = prevText.length + joiner.length - _currLeadingWS;
+  // whole, plus the 1-char space joiner, minus the leading whitespace we trimmed
+  // off currText (so anchors that were after that whitespace land correctly).
+  const prevLen = _currStartsAt - _currLeadingWS;
 
   // Adjust word arrows
   DA_STATE.wordArrows.forEach(wa => {
@@ -393,61 +413,72 @@ function setSelectionByGlobalOffset(el, start, end) {
   }
 }
 
+/**
+ * Delete a bracket, CASCADING to any brackets built on top of it.
+ *
+ * An outer bracket's endpoint refers to the inner bracket AS A UNIT ("v21
+ * relates to [v22–23]"); once that unit is dissolved there is no honest
+ * automatic answer for what the outer arm should point at — re-aiming it at
+ * one member silently changes the relationship's meaning and can even produce
+ * shapes the adjacency rule forbids at creation time (e.g. 21→23 skipping 22).
+ * So dependents are removed with it — think of brackets as a stack of cards:
+ * pull one from the middle and the ones resting on it come down. The user
+ * confirms first when dependents exist, and Undo restores everything.
+ *
+ * Returns the number of brackets deleted (0 if the user cancelled).
+ */
 function deleteBracket(bracketIdx) {
   const bToDelete = DA_STATE.brackets[bracketIdx];
-  if (!bToDelete) return;
+  if (!bToDelete) return 0;
 
-  DA_STATE.pushUndo('delete bracket');
-
-  const bRef = 'b' + bracketIdx;
-
-  // 1. Any bracket pointing to THIS one should now point to its children
-  DA_STATE.brackets.forEach((b, i) => {
-    if (i === bracketIdx) return;
-    if (b.from === bRef) b.from = bToDelete.from;
-    if (b.to === bRef) b.to = bToDelete.to;
-  });
-
-  // 2. Remove the bracket from state
-  DA_STATE.brackets.splice(bracketIdx, 1);
-
-  // 3. Fix indices in ALL 'bN' references because they just shifted
-  DA_STATE.brackets.forEach((b) => {
-    const fix = (val) => {
-      if (typeof val === 'string' && val.startsWith('b')) {
-        const idx = parseInt(val.slice(1), 10);
-        if (idx > bracketIdx) return 'b' + (idx - 1);
+  // Transitive closure of brackets whose from/to chain rests on the doomed one.
+  const doomedIds = new Set([bToDelete.id]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    DA_STATE.brackets.forEach((b) => {
+      if (doomedIds.has(b.id)) return;
+      if (doomedIds.has(b.from) || doomedIds.has(b.to)) {
+        doomedIds.add(b.id);
+        grew = true;
       }
-      return val;
-    };
-    b.from = fix(b.from);
-    b.to = fix(b.to);
-  });
+    });
+  }
 
-  // 4. Update comments references
-  DA_STATE.comments = DA_STATE.comments.filter((c) => c.type !== 'bracket' || c.target?.bracketIdx !== bracketIdx);
-  DA_STATE.comments.forEach((c) => {
-    if (c.type === 'bracket' && c.target?.bracketIdx > bracketIdx) c.target.bracketIdx--;
-  });
+  const dependents = doomedIds.size - 1;
+  if (dependents > 0) {
+    const ok = confirm(
+      `This bracket has ${dependents} larger bracket${dependents === 1 ? '' : 's'} built on it, ` +
+      `which can't stand without it.\n\nDelete all ${doomedIds.size} brackets? (Undo restores them.)`
+    );
+    if (!ok) return 0;
+  }
 
-  // 5. Update bracketHighlights references
-  const _dh = {};
-  Object.entries(DA_STATE.bracketHighlights).forEach(([k, v]) => {
-    const idx = parseInt(k, 10);
-    if (idx < bracketIdx) _dh[idx] = v;
-    else if (idx > bracketIdx) _dh[idx - 1] = v;
-  });
-  DA_STATE.bracketHighlights = _dh;
+  DA_STATE.pushUndo(dependents > 0 ? 'delete brackets' : 'delete bracket');
+
+  DA_STATE.brackets = DA_STATE.brackets.filter((b) => !doomedIds.has(b.id));
+  DA_STATE.comments = DA_STATE.comments.filter((c) => c.type !== 'bracket' || !doomedIds.has(c.target?.bracketId));
+  doomedIds.forEach((id) => { delete DA_STATE.bracketHighlights[id]; });
+
+  // Clear transient references into the doomed set (mid "Connect to…" etc.).
+  if (doomedIds.has(DA_STATE.firstBracketPoint)) {
+    DA_STATE.firstBracketPoint = null;
+    DA_STATE.bracketSelectStep = 0;
+  }
+  if (DA_STATE.activeCommentTarget && doomedIds.has(DA_STATE.activeCommentTarget.bracketId)) {
+    DA_STATE.activeCommentTarget = null;
+  }
 
   if (window.DA_RENDERER) DA_RENDERER.renderAll();
+  return doomedIds.size;
 }
 
 function findBestAttachment(pId, proposedMin, proposedMax) {
-    if (pId.toString().startsWith('b')) return pId;
-    
+    if (!DA_STATE.isPropRef(pId)) return pId; // already a bracket id
+
     let bestB = null;
     let minRange = Infinity;
-    
+
     DA_STATE.brackets.forEach((b, i) => {
         const range = DA_RENDERER.getBracketExtent(i);
         if (range.from <= proposedMin && range.to >= proposedMax) {
@@ -456,12 +487,12 @@ function findBestAttachment(pId, proposedMin, proposedMax) {
                 // If it's a bracket, we can only attach if it points directly to our target node
                 if (b.from === pId || b.to === pId) {
                     minRange = size;
-                    bestB = 'b' + i;
+                    bestB = b.id;
                 }
             }
         }
     });
-    
+
     return bestB || pId;
 }
 
@@ -509,10 +540,20 @@ function handleDotClick(pointId, x, y) {
     const firstEnd = Math.min(ext1.to, ext2.to);
     const secondStart = Math.max(ext1.from, ext2.from);
 
+    // A forward gap between the two sides means the user "jumped over" the lines
+    // in between. This is allowed only as a SERIES — the line(s) in the gap become
+    // implicit members of one flat series (their dots are hidden at render time).
+    // The cross-check below still rejects anything that would truly cross out of
+    // the new range. Overlap (firstEnd + 1 > secondStart) keeps the old error.
+    let isSeriesJumpOver = false;
     if (firstEnd + 1 !== secondStart) {
-        DA_UI.showStatus('Brackets must connect adjacent items. No "jumping over" allowed.', 'error');
-        resetBracketSelection();
-        return;
+        if (firstEnd + 1 < secondStart) {
+            isSeriesJumpOver = true;
+        } else {
+            DA_UI.showStatus('Brackets must connect adjacent items. No "jumping over" allowed.', 'error');
+            resetBracketSelection();
+            return;
+        }
     }
 
     // If both resolve to the same target, block creation
@@ -551,8 +592,8 @@ function handleDotClick(pointId, x, y) {
         return;
     }
 
-    const finalP1IsNode = finalP1.toString().startsWith('p');
-    const finalP2IsNode = finalP2.toString().startsWith('p');
+    const finalP1IsNode = DA_STATE.isPropRef(finalP1);
+    const finalP2IsNode = DA_STATE.isPropRef(finalP2);
     const p1AlreadyBusy = DA_STATE.brackets.some(b => b.from === finalP1 || b.to === finalP1);
     const p2AlreadyBusy = DA_STATE.brackets.some(b => b.from === finalP2 || b.to === finalP2);
 
@@ -574,18 +615,31 @@ function handleDotClick(pointId, x, y) {
 
     DA_STATE.pushUndo('add bracket');
 
+    // Assign from/to by TEXT order (earlier proposition first), not click
+    // order — from always renders on the top arm, so without this, whichever
+    // dot the user happened to click first would silently decide which half of
+    // the label lands on top (e.g. Ground's star). ext1/ext2 are already
+    // resolved above for the adjacency check, so reuse them. Ties (same start)
+    // fall back to .to, then to click order, so this never leaves from/to
+    // undefined for an unexpected shape.
+    let orderedFrom = finalP1, orderedTo = finalP2;
+    if (ext1.from > ext2.from || (ext1.from === ext2.from && ext1.to > ext2.to)) {
+      orderedFrom = finalP2;
+      orderedTo = finalP1;
+    }
+
     const newBracket = {
-      id: Date.now().toString(),
-      from: finalP1,
-      to: finalP2,
-      type: DA_STATE.currentRelationshipType || 'unspecified',
+      id: DA_STATE.newBracketId(),
+      from: orderedFrom,
+      to: orderedTo,
+      type: isSeriesJumpOver ? 'series' : (DA_STATE.currentRelationshipType || 'unspecified'),
       labelsSwapped: false,
-      dominanceFlipped: false
+      dominanceFlipped: false,
+      ...(isSeriesJumpOver && { isJumpOver: true })
     };
 
     DA_STATE.brackets.push(newBracket);
     const newIdx = DA_STATE.brackets.length - 1;
-    const newBracketId = `b${newIdx}`;
     const newRange = DA_RENDERER.getBracketExtent(newIdx);
 
     DA_STATE.brackets.forEach((oldB, i) => {
@@ -594,15 +648,17 @@ function handleDotClick(pointId, x, y) {
         if (newRange.from <= oldRange.from && newRange.to >= oldRange.to) return;
 
         const fromRange = DA_RENDERER.getPointExtent(oldB.from);
-        if (fromRange.from >= newRange.from && fromRange.to <= newRange.to) oldB.from = newBracketId;
+        if (fromRange.from >= newRange.from && fromRange.to <= newRange.to) oldB.from = newBracket.id;
 
         const toRange = DA_RENDERER.getPointExtent(oldB.to);
-        if (toRange.from >= newRange.from && toRange.to <= newRange.to) oldB.to = newBracketId;
+        if (toRange.from >= newRange.from && toRange.to <= newRange.to) oldB.to = newBracket.id;
     });
 
-    DA_UI.showStatus('Bracket created', 'success');
     resetBracketSelection();
 
+    // Both paths open the label picker (jump-over brackets get a restricted one,
+    // keyed off bracket.isJumpOver inside showLabelPicker); only the toast differs.
+    DA_UI.showStatus(isSeriesJumpOver ? 'Jump-over bracket created' : 'Bracket created', 'success');
     if (x !== undefined && y !== undefined && window.showLabelPicker) {
       window.showLabelPicker(DA_STATE.brackets.length - 1, y, x);
     }

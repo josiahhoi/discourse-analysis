@@ -8,11 +8,19 @@ const DA_EXPORT = {
    * Helper to build a clean JSON representation of the current state.
    */
   buildBracketData() {
+    // Persist script/direction so Hebrew (RTL) and Greek projects survive a
+    // save/load round-trip. Without these, reloading a saved Hebrew passage came
+    // back left-to-right with the wrong font.
+    const propsEl = document.getElementById('propositions');
     return {
-      version: 1,
+      version: 3, // v3: structured verseBreaks; v2: stable bracket ids (see normalizeBracketData)
       passageRef: DA_STATE.passageRef,
+      isRTL: !!DA_STATE.isRTL,
+      isHebrew: !!propsEl?.classList.contains('hebrew-text'),
+      isGreek: !!propsEl?.classList.contains('greek-text'),
       propositions: DA_STATE.propositions,
       verseRefs: DA_STATE.verseRefs,
+      verseBreaks: DA_STATE.verseBreaks.map((a) => (a || []).slice()),
       brackets: DA_STATE.brackets.map((a) => ({ ...a })),
       formatTags: DA_STATE.formatTags.map((t) => ({ ...t })),
       wordArrows: DA_STATE.wordArrows.map((w) => ({ ...w })),
@@ -23,7 +31,7 @@ const DA_EXPORT = {
       })),
       copyrightLabel: document.getElementById('copyrightLabel')?.textContent || '',
       pageAuthor: (document.getElementById('pageAuthor')?.value || '').trim(),
-      activeProjectId: DA_STATE.activeProjectId || null,
+      activeProjectId: (window.DA_CLOUD && DA_CLOUD.getProjectId) ? DA_CLOUD.getProjectId() : (DA_STATE.activeProjectId || null),
       customLabels: (DA_STATE.customLabels || []).map(cl => ({ ...cl })),
       indentation: DA_STATE.indentation.slice(),
       bracketHighlights: Object.assign({}, DA_STATE.bracketHighlights),
@@ -49,6 +57,27 @@ const DA_EXPORT = {
   },
 
   /**
+   * Zoom is an on-screen reading preference, not a document property — exports
+   * should look the same regardless of what the user currently has it set to.
+   * Temporarily force 100% for the capture (not persisted; { persist: false }
+   * so this transient change never overwrites the user's real localStorage
+   * preference), returning the level to restore afterward.
+   */
+  enterBaseZoomForCapture() {
+    const prevZoom = DA_STATE.zoomLevel;
+    if (prevZoom !== DA_CONSTANTS.ZOOM_DEFAULT && window.DA_UI && DA_UI.applyZoom) {
+      DA_UI.applyZoom(DA_CONSTANTS.ZOOM_DEFAULT, { persist: false, rerender: false });
+    }
+    return prevZoom;
+  },
+
+  restoreZoomAfterCapture(prevZoom) {
+    if (prevZoom !== DA_CONSTANTS.ZOOM_DEFAULT && window.DA_UI && DA_UI.applyZoom) {
+      DA_UI.applyZoom(prevZoom, { persist: false, rerender: false });
+    }
+  },
+
+  /**
    * Applies specific styles to the cloned document during html2canvas capture.
    */
   applyExportCloneStyles(clonedDoc) {
@@ -62,14 +91,11 @@ const DA_EXPORT = {
       
       // Hide UI toolbars and buttons in export
       clonedDoc.querySelectorAll(`
-        .workspace-toolbar, 
-        .sidebar-toggle-btn, 
-        .cloud-sync-btn, 
-        .proposition-controls, 
-        .proposition-handle, 
-        .connection-node, 
-        .bracket-hitbox, 
-        .bracket-comment-icon
+        .workspace-toolbar,
+        .sidebar-toggle-btn,
+        .cloud-sync-btn,
+        .connection-node,
+        .bracket-hitbox
       `).forEach(el => {
         el.style.display = 'none';
       });
@@ -157,14 +183,15 @@ const DA_EXPORT = {
     DA_UI.showStatus('Capturing diagram...', 'info');
 
     const wasBlock = this.enterBracketViewForCapture();
+    const prevZoom = this.enterBaseZoomForCapture();
 
     // Save current states and expand all for export
     const prevShowComments = DA_STATE.showCommentsEnabled;
     const savedCollapseStates = DA_STATE.brackets.map(b => b.isCollapsed);
-    
+
     DA_STATE.showCommentsEnabled = false;
     DA_STATE.brackets.forEach(b => b.isCollapsed = false);
-    
+
     if (window.renderAll) window.renderAll();
 
     // Wait for DOM to settle
@@ -173,10 +200,15 @@ const DA_EXPORT = {
     try {
       const options = await this.getCaptureOptions(workspace);
       const canvas = await html2canvas(workspace, options);
-      
+
       // Restore original states
       DA_STATE.showCommentsEnabled = prevShowComments;
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
+      // Zoom FIRST, then render: applyZoom({ rerender: false }) re-applies the
+      // CSS text scale immediately, so the renderAll below must run at the
+      // restored zoom — otherwise the bracket geometry stays at the capture's
+      // 100% positions under rescaled text (a visibly misaligned diagram).
+      this.restoreZoomAfterCapture(prevZoom);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
 
@@ -184,7 +216,7 @@ const DA_EXPORT = {
       const bracketData = this.buildBracketData();
       const dnaString = JSON.stringify(bracketData);
       const compressedDna = typeof LZString !== 'undefined' ? LZString.compressToEncodedURIComponent(dnaString) : dnaString;
-      
+
       const html = `
         <div style="font-family: sans-serif; background: white; padding: 10px;">
           <img src="${dataUrl}" alt="DISCOURSE_DNA:${compressedDna}" style="max-width: 100%; border: 1px solid #eee;" />
@@ -207,6 +239,11 @@ const DA_EXPORT = {
       console.error('Export failed:', err);
       // Ensure restoration on failure
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
+      // Zoom FIRST, then render: applyZoom({ rerender: false }) re-applies the
+      // CSS text scale immediately, so the renderAll below must run at the
+      // restored zoom — otherwise the bracket geometry stays at the capture's
+      // 100% positions under rescaled text (a visibly misaligned diagram).
+      this.restoreZoomAfterCapture(prevZoom);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
       DA_UI.showStatus('Capture failed.', 'error');
@@ -223,6 +260,7 @@ const DA_EXPORT = {
     DA_UI.showStatus('Generating image...', 'info');
 
     const wasBlock = this.enterBracketViewForCapture();
+    const prevZoom = this.enterBaseZoomForCapture();
     const savedCollapseStates = DA_STATE.brackets.map(b => b.isCollapsed);
     DA_STATE.brackets.forEach(b => b.isCollapsed = false);
     if (window.renderAll) window.renderAll();
@@ -231,9 +269,14 @@ const DA_EXPORT = {
     try {
       const options = await this.getCaptureOptions(workspace);
       const canvas = await html2canvas(workspace, options);
-      
+
       // Restore
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
+      // Zoom FIRST, then render: applyZoom({ rerender: false }) re-applies the
+      // CSS text scale immediately, so the renderAll below must run at the
+      // restored zoom — otherwise the bracket geometry stays at the capture's
+      // 100% positions under rescaled text (a visibly misaligned diagram).
+      this.restoreZoomAfterCapture(prevZoom);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
 
@@ -252,6 +295,11 @@ const DA_EXPORT = {
     } catch (err) {
       console.error(err);
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
+      // Zoom FIRST, then render: applyZoom({ rerender: false }) re-applies the
+      // CSS text scale immediately, so the renderAll below must run at the
+      // restored zoom — otherwise the bracket geometry stays at the capture's
+      // 100% positions under rescaled text (a visibly misaligned diagram).
+      this.restoreZoomAfterCapture(prevZoom);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
       DA_UI.showStatus('Save failed.', 'error');
@@ -271,6 +319,7 @@ const DA_EXPORT = {
     const workspace = document.getElementById('workspace');
 
     const wasBlock = this.enterBracketViewForCapture();
+    const prevZoom = this.enterBaseZoomForCapture();
     const savedCollapseStates = DA_STATE.brackets.map(b => b.isCollapsed);
     DA_STATE.brackets.forEach(b => b.isCollapsed = false);
     if (window.renderAll) window.renderAll();
@@ -279,9 +328,14 @@ const DA_EXPORT = {
     try {
       const options = await this.getCaptureOptions(workspace);
       const canvas = await html2canvas(workspace, options);
-      
+
       // Restore
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
+      // Zoom FIRST, then render: applyZoom({ rerender: false }) re-applies the
+      // CSS text scale immediately, so the renderAll below must run at the
+      // restored zoom — otherwise the bracket geometry stays at the capture's
+      // 100% positions under rescaled text (a visibly misaligned diagram).
+      this.restoreZoomAfterCapture(prevZoom);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
 
@@ -313,6 +367,11 @@ const DA_EXPORT = {
     } catch (err) {
       console.error(err);
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
+      // Zoom FIRST, then render: applyZoom({ rerender: false }) re-applies the
+      // CSS text scale immediately, so the renderAll below must run at the
+      // restored zoom — otherwise the bracket geometry stays at the capture's
+      // 100% positions under rescaled text (a visibly misaligned diagram).
+      this.restoreZoomAfterCapture(prevZoom);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
       DA_UI.showStatus('PDF export failed.', 'error');
