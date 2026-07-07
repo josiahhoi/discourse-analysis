@@ -41,9 +41,16 @@ const ENV = loadDotEnv();
 ipcMain.handle('fetch-esv-passage', async (_event, query) => {
   if (!ENV.ESV_API_KEY) return { ok: false, noKey: true };
   try {
+    // include-short-copyright is deliberately false: when true, the API appends
+    // " (ESV)" directly onto the last verse's text, which then flows straight
+    // into the diagrammed content (see parseBollsText in bible-service.js — it
+    // has no marker to split on, so it lands inside the last proposition). The
+    // app already shows its own copyright badge (bible-service.js's
+    // fetchFromESVApi hardcodes copyright: '(ESV)'), so the API's copy isn't
+    // needed at all.
     const url = `https://api.esv.org/v3/passage/text/?q=${encodeURIComponent(query)}`
       + '&include-headings=false&include-footnotes=false&include-verse-numbers=true'
-      + '&include-short-copyright=true&include-passage-references=false';
+      + '&include-short-copyright=false&include-passage-references=false';
     const res = await fetch(url, { headers: { Authorization: `Token ${ENV.ESV_API_KEY}` } });
     if (!res.ok) return { ok: false, status: res.status };
     const data = await res.json();
