@@ -46,6 +46,8 @@ const APP_GLOBALS = {
   // ui-dialogs.js
   saveState: 'readonly', restoreState: 'readonly', showMagicPasteBanner: 'readonly',
   initTheme: 'readonly', toggleTheme: 'readonly', updateThemeButtonText: 'readonly',
+  initZoom: 'readonly', applyZoom: 'readonly', setZoomLevel: 'readonly',
+  zoomIn: 'readonly', zoomOut: 'readonly', resetZoom: 'readonly', getZoomFactor: 'readonly',
   openSettings: 'readonly', closeSettings: 'readonly', openReferenceGuide: 'readonly',
   closeReferenceGuide: 'readonly', maybeShowWelcome: 'readonly',
   updateFontByAuthor: 'readonly', syncPassageAuthorDisplay: 'readonly',

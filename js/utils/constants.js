@@ -182,6 +182,13 @@ const REVIEWER_NAME_KEY = 'biblebracket_reviewer_name';
 const PAGE_AUTHOR_KEY = 'biblebracket_page_author';
 const WELCOME_SEEN_KEY = 'biblebracket_welcome_seen';
 
+// Zoom: a personal on-screen reading preference (persisted like theme), not a
+// document property — never saved into bracket files. Discrete steps rather
+// than a continuous slider, matching browser/Word/Figma zoom conventions.
+const ZOOM_KEY = 'biblebracket_zoom';
+const ZOOM_LEVELS = [75, 90, 100, 110, 125, 150];
+const ZOOM_DEFAULT = 100;
+
 const RELATIONSHIP_COLORS = {
   series: '#ef4444',             // Red
   progression: '#f97316',        // Orange
@@ -242,5 +249,6 @@ window.DA_CONSTANTS = {
     BRACKET_LABELS, RELATIONSHIP_LABELS, RELATIONSHIP_GROUPS_HIERARCHY,
     SINGLE_LABEL_TYPES, BRACKET_GEO,
     RELATIONSHIP_COLORS, RELATIONSHIP_DEFINITIONS,
-    THEME_KEY, COMMENT_AUTHOR_KEY, REVIEWER_NAME_KEY, PAGE_AUTHOR_KEY, WELCOME_SEEN_KEY
+    THEME_KEY, COMMENT_AUTHOR_KEY, REVIEWER_NAME_KEY, PAGE_AUTHOR_KEY, WELCOME_SEEN_KEY,
+    ZOOM_KEY, ZOOM_LEVELS, ZOOM_DEFAULT
 };

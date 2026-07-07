@@ -112,6 +112,68 @@ function updateThemeButtonText() {
     btn.textContent = current === 'dark' ? 'Light Mode' : 'Dark Mode';
 }
 
+/**
+ * Zoom: a persisted on-screen reading preference (mirrors initTheme), applied
+ * as a numeric CSS custom property (--da-zoom, e.g. 1.25 for 125%) that the
+ * relevant text/label CSS rules multiply against. Never part of the saved
+ * bracket file — purely a viewer preference, like theme.
+ */
+function initZoom() {
+    const saved = parseInt(localStorage.getItem(DA_CONSTANTS.ZOOM_KEY), 10);
+    const level = DA_CONSTANTS.ZOOM_LEVELS.includes(saved) ? saved : DA_CONSTANTS.ZOOM_DEFAULT;
+    applyZoom(level, { persist: false, rerender: false });
+}
+
+function applyZoom(level, { persist = true, rerender = true } = {}) {
+    DA_STATE.zoomLevel = level;
+    document.documentElement.style.setProperty('--da-zoom', (level / 100).toString());
+    updateZoomButtonText();
+    if (persist) {
+        try { localStorage.setItem(DA_CONSTANTS.ZOOM_KEY, String(level)); } catch (_) { }
+    }
+    // Text size changed, which shifts dot positions; bracket-gutter geometry and
+    // inline SVG label sizes also read DA_STATE.zoomLevel — a full re-render
+    // picks up all three (rendering-engine.js's getZoomFactor()).
+    if (rerender && window.renderAll) window.renderAll();
+}
+
+function setZoomLevel(level) {
+    if (!DA_CONSTANTS.ZOOM_LEVELS.includes(level)) return;
+    applyZoom(level);
+}
+
+/** Step to the next/previous defined zoom level; silently clamps at the ends
+ *  (matches browser zoom buttons — no toast when already at the limit). */
+function stepZoom(direction) {
+    const levels = DA_CONSTANTS.ZOOM_LEVELS;
+    const idx = levels.indexOf(DA_STATE.zoomLevel);
+    const nextIdx = Math.max(0, Math.min(levels.length - 1, (idx === -1 ? levels.indexOf(DA_CONSTANTS.ZOOM_DEFAULT) : idx) + direction));
+    applyZoom(levels[nextIdx]);
+}
+
+function zoomIn() { stepZoom(1); }
+function zoomOut() { stepZoom(-1); }
+function resetZoom() { setZoomLevel(DA_CONSTANTS.ZOOM_DEFAULT); }
+
+function updateZoomButtonText() {
+    const label = document.getElementById('zoomLevelBtn');
+    if (label) label.textContent = `${DA_STATE.zoomLevel}%`;
+    const outBtn = document.getElementById('zoomOutBtn');
+    const inBtn = document.getElementById('zoomInBtn');
+    const levels = DA_CONSTANTS.ZOOM_LEVELS;
+    const idx = levels.indexOf(DA_STATE.zoomLevel);
+    if (outBtn) outBtn.disabled = idx <= 0;
+    if (inBtn) inBtn.disabled = idx === -1 || idx >= levels.length - 1;
+}
+
+/** Current zoom as a plain multiplier (e.g. 1.25 for 125%) — the single place
+ *  the "percent / 100" conversion lives. Used by rendering-engine.js/
+ *  render-labels.js to scale bracket-gutter geometry and inline SVG font
+ *  sizes/radii that CSS custom properties can't reach (see those files). */
+function getZoomFactor() {
+    return (DA_STATE.zoomLevel || DA_CONSTANTS.ZOOM_DEFAULT) / 100;
+}
+
 function openSettings() {
     const modal = document.getElementById('settingsModal');
     if (modal) {
@@ -419,5 +481,6 @@ function formatBracketType(type) {
 }
 
 window.DA_UI = Object.assign(window.DA_UI || {}, {
-  saveState, restoreState, showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings, openReferenceGuide, closeReferenceGuide, maybeShowWelcome, updateFontByAuthor, syncPassageAuthorDisplay, handleNewBracket, startNewBracket, parsePastedText, formatBracketType
+  saveState, restoreState, showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings, openReferenceGuide, closeReferenceGuide, maybeShowWelcome, updateFontByAuthor, syncPassageAuthorDisplay, handleNewBracket, startNewBracket, parsePastedText, formatBracketType,
+  initZoom, applyZoom, setZoomLevel, zoomIn, zoomOut, resetZoom, getZoomFactor
 });

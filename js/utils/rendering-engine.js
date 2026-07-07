@@ -13,17 +13,22 @@ const _JUMP_OVER_TYPES = new Set(
 
 /**
  * Create an SVG text element with the given label, rendering stars in a larger
- * font-size (20px) for better visibility of dominance marking.
+ * font-size (20px at 100% zoom) for better visibility of dominance marking.
+ * These sizes are set as inline attributes/styles specifically so the CSS
+ * .bracket-label rule can't override them (see comment below) — which also
+ * means CSS custom properties can't reach them, so zoom is applied here in JS
+ * via the same getZoomFactor() the bracket-gutter geometry uses.
  */
 function createLabelText(label, attrs = {}) {
   const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
   for (const [key, value] of Object.entries(attrs)) {
     text.setAttribute(key, value);
   }
+  const z = _zoom();
 
   if (!label || !label.includes('*')) {
     // Inference symbol is tiny at the default 11px — use inline style (beats CSS).
-    if (label === '∴') text.setAttribute('style', 'font-size: 30px');
+    if (label === '∴') text.setAttribute('style', `font-size: ${30 * z}px`);
     text.textContent = label;
     return text;
   }
@@ -43,7 +48,7 @@ function createLabelText(label, attrs = {}) {
     // Add star between parts (except after the last part)
     if (i < parts.length - 1) {
       const star = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-      star.setAttribute('font-size', '20px');
+      star.setAttribute('font-size', `${20 * z}px`);
       star.textContent = '*';
       text.appendChild(star);
     }
@@ -853,17 +858,28 @@ function _mirrorGutterX(xv) {
 
 // Width of the bracket gutter (text padding) given the current nesting depth.
 // Shared by renderPropositions (as padding) and getBracketX (as the origin).
+// BRACKET_GEO is defined in raw px for 100% zoom. Everything computed from it
+// is scaled by the current zoom factor so the gutter/nesting geometry stays
+// proportionate to the (CSS-scaled) text instead of looking cramped or
+// oversized at any zoom level besides 100%. Falls back to 1 (no scaling) when
+// DA_UI isn't loaded, e.g. isolated unit tests.
+function _zoom() {
+  return (window.DA_UI && DA_UI.getZoomFactor) ? DA_UI.getZoomFactor() : 1;
+}
+
 function getGutterPadding() {
   const { GAP, BRACKET_WIDTH, SLOT_WIDTH, BASE_PADDING } = DA_CONSTANTS.BRACKET_GEO;
-  return Math.max(200, DA_STATE.brackets.length
-    ? BASE_PADDING + GAP + BRACKET_WIDTH + (_maxSlot + 1) * SLOT_WIDTH
-    : BASE_PADDING);
+  const z = _zoom();
+  return Math.max(200 * z, DA_STATE.brackets.length
+    ? BASE_PADDING * z + GAP * z + BRACKET_WIDTH * z + (_maxSlot + 1) * SLOT_WIDTH * z
+    : BASE_PADDING * z);
 }
 
 function getBracketX(bracketIdx) {
   const slot = _slotForIdx[bracketIdx] ?? 0;
   const { GAP, BRACKET_WIDTH, SLOT_WIDTH } = DA_CONSTANTS.BRACKET_GEO;
-  return getGutterPadding() - GAP - BRACKET_WIDTH - slot * SLOT_WIDTH;
+  const z = _zoom();
+  return getGutterPadding() - GAP * z - BRACKET_WIDTH * z - slot * SLOT_WIDTH * z;
 }
 
 function renderBrackets() {
@@ -949,10 +965,13 @@ function renderBrackets() {
   const _rtl = DA_STATE.isRTL;
   _bracketCanvasW = svg.getBoundingClientRect().width;
   const MX = _mirrorGutterX;                        // mirror a computed gutter X
-  const _labelDX = _rtl ? -5 : 5;                   // label sits toward the text
+  const _z = _zoom();                               // scales the small offsets below too,
+                                                      // so labels/nodes/stars don't look
+                                                      // glued to the spine at high zoom
+  const _labelDX = (_rtl ? -5 : 5) * _z;             // label sits toward the text
   const _labelAnchor = _rtl ? 'end' : 'start';
-  const _nodeDX = _rtl ? 15 : -15;                  // node sits away from the text
-  const _starDX = _rtl ? 12 : -12;
+  const _nodeDX = (_rtl ? 15 : -15) * _z;            // node sits away from the text
+  const _starDX = (_rtl ? 12 : -12) * _z;
   const _starAnchor = _rtl ? 'start' : 'end';
 
   // Connection-nodes to suppress: a bracket "jumped over" by a series or
@@ -1132,7 +1151,7 @@ function renderBrackets() {
         'text-anchor': _starAnchor,
         'dominant-baseline': 'middle',
         class: 'main-point-star',
-        'font-size': '50px',
+        'font-size': `${50 * _z}px`,
         fill: '#e53935',
         'pointer-events': 'none'
       })).textContent = '★';
@@ -1148,7 +1167,7 @@ function renderBrackets() {
     group.appendChild(createSVG('circle', {
       cx: x + _nodeDX,
       cy: nodeY,
-      r: 5,
+      r: 5 * _z,
       class: `${(DA_STATE.bracketSelectStep === 1 && DA_STATE.firstBracketPoint === bracket.id) ? 'connection-node active-node' : 'connection-node'} ${bracket.isCollapsed ? 'collapsed' : ''} ${_hiddenNodeIdx.has(i) ? 'series-absorbed' : ''}`,
       tabindex: 0,
       role: 'button',

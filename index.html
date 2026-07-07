@@ -65,6 +65,7 @@
             <div class="shortcut-item"><kbd>Esc</kbd> <span>Exit mode / close dialog</span></div>
             <div class="shortcut-item"><kbd>Tab</kbd>/<kbd>↑↓</kbd>+<kbd>Enter</kbd> <span>Brackets by keyboard (via the dots)</span></div>
             <div class="shortcut-item"><span>Drop File</span> <span>Import JSON/PNG/PDF</span></div>
+            <div class="shortcut-item"><span>Zoom (− / 100% / +)</span> <span>Scale text &amp; diagram (View, sidebar)</span></div>
             <hr>
             <div class="save-load-row">
               <button id="openReferenceGuideBtn" type="button" class="secondary">Relationship Guide</button>
@@ -77,6 +78,11 @@
           <div class="save-load-row">
             <button id="themeToggle" type="button" class="secondary" title="Switch between Light and Dark mode">Light Mode</button>
             <button id="toggleCommentsBtn" type="button" class="secondary" aria-keyshortcuts="c" title="Show or hide comments on brackets (C)">Show Comments (C)</button>
+          </div>
+          <div class="save-load-row zoom-row" role="group" aria-label="Zoom">
+            <button id="zoomOutBtn" type="button" class="secondary zoom-btn" title="Zoom out">−</button>
+            <button id="zoomLevelBtn" type="button" class="secondary zoom-level-btn" title="Reset zoom to 100%">100%</button>
+            <button id="zoomInBtn" type="button" class="secondary zoom-btn" title="Zoom in">+</button>
           </div>
         </div>
 

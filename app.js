@@ -65,8 +65,16 @@ function clearAllFormatting() {
 
 // Service Initializations
 DA_UI.initTheme();
+DA_UI.initZoom();
 
 if (themeToggle) themeToggle.addEventListener('click', DA_UI.toggleTheme);
+
+const zoomOutBtn = document.getElementById('zoomOutBtn');
+const zoomInBtn = document.getElementById('zoomInBtn');
+const zoomLevelBtn = document.getElementById('zoomLevelBtn');
+if (zoomOutBtn) zoomOutBtn.addEventListener('click', DA_UI.zoomOut);
+if (zoomInBtn) zoomInBtn.addEventListener('click', DA_UI.zoomIn);
+if (zoomLevelBtn) zoomLevelBtn.addEventListener('click', DA_UI.resetZoom);
 
 // Project Owner / Author Logic
 const pageAuthorInput = document.getElementById('pageAuthor');

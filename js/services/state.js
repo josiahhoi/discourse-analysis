@@ -32,6 +32,10 @@ window.DA_STATE = {
   selectedArrowIdx: null,
   pendingArrowStart: null,
   showCommentsEnabled: false,
+  // Personal on-screen reading preference (percent: 75-150, see ZOOM_LEVELS),
+  // never saved into bracket files. Default here; DA_UI.initZoom() overwrites
+  // it from localStorage at startup, same shape as isRTL below.
+  zoomLevel: 100,
   indentation: [],
   activeCommentTarget: null,
   bracketHighlights: {},

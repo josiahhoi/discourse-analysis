@@ -10,6 +10,15 @@
  * Run with `npm run test:e2e` (starts its own static server on :8766).
  */
 const { test, expect } = require('@playwright/test');
+const fs = require('fs');
+
+/** Read a PNG's pixel dimensions straight from its IHDR chunk (width/height
+ *  are big-endian uint32s at fixed byte offsets 16/20) — no image library
+ *  needed, just enough to compare two exports' sizes. */
+function pngDimensions(filePath) {
+  const buf = fs.readFileSync(filePath);
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
 
 // Console/page errors collected per test; network failures (fonts/Firebase CDN
 // blocked or offline) are expected in a test environment and not counted.
@@ -486,6 +495,90 @@ test('verse boundaries: merge joins with a visible space, survives export/import
   expect(after.props).toEqual(['In the beginning God created the heavens', 'And the earth was without form']);
   expect(after.refs).toEqual(['1', '2']);
   expect(after.breaks).toEqual([[], []]);
+
+  expect(errors).toEqual([]);
+});
+
+test('zoom: scales text and bracket diagram together, clamps, persists, and exports at 100% regardless of current zoom', async ({ page }) => {
+  const errors = collectErrors(page);
+  await importPassage(page);
+
+  // Create a bracket so we have something in the SVG gutter to check too.
+  await page.locator('.prop-dot').nth(0).click();
+  await page.locator('.prop-dot').nth(1).click();
+  await page.locator('#labelPicker button.ground').click();
+  await expect(page.locator('.bracket-group.ground')).toHaveCount(1);
+
+  const textFontSize = () => page.locator('.proposition-text').first().evaluate(
+    (el) => parseFloat(getComputedStyle(el).fontSize)
+  );
+  const labelFontSize = () => page.locator('.bracket-label').first().evaluate(
+    (el) => parseFloat(getComputedStyle(el).fontSize)
+  );
+  const gutterX = () => page.locator('.bracket-line').first().evaluate((el) => parseFloat(el.getAttribute('x1')));
+
+  const base = { text: await textFontSize(), label: await labelFontSize() };
+  await expect(page.locator('#zoomLevelBtn')).toHaveText('100%');
+
+  // Zoom in: text, SVG label CSS, and gutter geometry all grow proportionally.
+  await page.locator('#zoomInBtn').click();
+  await expect(page.locator('#zoomLevelBtn')).toHaveText('110%');
+  expect(await textFontSize()).toBeCloseTo(base.text * 1.1, 0);
+  expect(await labelFontSize()).toBeCloseTo(base.label * 1.1, 0);
+
+  await page.locator('#zoomInBtn').click(); // 125%
+  await page.locator('#zoomInBtn').click(); // 150% (top of ZOOM_LEVELS)
+  await expect(page.locator('#zoomLevelBtn')).toHaveText('150%');
+  expect(await textFontSize()).toBeCloseTo(base.text * 1.5, 0);
+  const gutterAt150 = await gutterX();
+
+  // Clamped at the top: the + button disables itself rather than wrapping or
+  // erroring. (Not clicked again here — Playwright refuses to click a
+  // genuinely disabled control, which would just hang; the data-level
+  // "one more step does nothing" case is covered by the unit tests.)
+  await expect(page.locator('#zoomInBtn')).toBeDisabled();
+
+  // Clicking the readout resets straight to 100%.
+  await page.locator('#zoomLevelBtn').click();
+  await expect(page.locator('#zoomLevelBtn')).toHaveText('100%');
+  expect(await textFontSize()).toBeCloseTo(base.text, 0);
+  expect(await gutterX()).not.toBeCloseTo(gutterAt150, 0);
+
+  // Zoom out past the bottom clamps at 75% and disables the − button.
+  await page.locator('#zoomOutBtn').click(); // 90%
+  await page.locator('#zoomOutBtn').click(); // 75% (bottom of ZOOM_LEVELS)
+  await expect(page.locator('#zoomLevelBtn')).toHaveText('75%');
+  await expect(page.locator('#zoomOutBtn')).toBeDisabled();
+
+  // Persists across a reload, like theme.
+  await page.reload();
+  await expect(page.locator('#zoomLevelBtn')).toHaveText('75%');
+
+  // ── Export normalization: always 100%, regardless of current zoom ──
+  await page.locator('#zoomLevelBtn').click(); // back to 100% for a clean baseline export
+  await expect(page.locator('#zoomLevelBtn')).toHaveText('100%');
+  await page.locator('#exportMenuBtn').click();
+  let dlPromise = page.waitForEvent('download');
+  await page.locator('#exportMenu [data-action="png"]').click();
+  const baselinePath = await (await dlPromise).path();
+  const baselineDims = pngDimensions(baselinePath);
+
+  await page.locator('#zoomInBtn').click(); // 110%
+  await page.locator('#zoomInBtn').click(); // 125%
+  await page.locator('#zoomInBtn').click(); // 150%
+  await expect(page.locator('#zoomLevelBtn')).toHaveText('150%');
+  await page.locator('#exportMenuBtn').click();
+  dlPromise = page.waitForEvent('download');
+  await page.locator('#exportMenu [data-action="png"]').click();
+  const zoomedPath = await (await dlPromise).path();
+  const zoomedDims = pngDimensions(zoomedPath);
+
+  expect(zoomedDims.width).toBe(baselineDims.width);
+  expect(zoomedDims.height).toBe(baselineDims.height);
+
+  // The export restores the user's actual on-screen zoom afterward — it
+  // shouldn't be stuck at 100% just because that's what got exported.
+  await expect(page.locator('#zoomLevelBtn')).toHaveText('150%');
 
   expect(errors).toEqual([]);
 });

@@ -20,6 +20,10 @@
 /* 1. Reset, Variables & Base Elements       */
 /* ========================================= */
 :root {
+  /* Zoom multiplier (1 = 100%), set from JS (DA_UI.applyZoom) and persisted
+     like theme. The default here is only a fallback for the instant before
+     JS runs — see js/utils/ui-dialogs.js initZoom(). */
+  --da-zoom: 1;
   --bg: #1a1a1c;
   --surface: #242428;
   --surface-elevated: #2e2e32;
@@ -896,6 +900,29 @@ body {
   background: var(--accent);
   color: var(--bg);
   border-color: var(--accent);
+}
+
+/* Zoom control: compact "− 100% +" row. The +/- buttons are narrower than the
+   level readout (which needs room for "150%"), and disable at the ends of
+   ZOOM_LEVELS instead of wrapping/looping. */
+.zoom-row .zoom-btn {
+  flex: 0 0 2rem;
+  font-weight: 600;
+}
+
+.zoom-row .zoom-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.zoom-row .zoom-btn:disabled:hover {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+.zoom-row .zoom-level-btn {
+  flex: 1;
+  font-variant-numeric: tabular-nums; /* steady width as the percent changes */
 }
 
 #saveBtn {
@@ -1844,7 +1871,7 @@ mark.comment-highlight.comment-highlight-card-hover {
 .bracket-canvas .bracket-label {
   pointer-events: all;
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: calc(15px * var(--da-zoom));
   font-weight: 600;
   fill: var(--bracket-color, var(--label-text));
   stroke: none;
@@ -1948,11 +1975,11 @@ body.text-edit-mode-active .proposition-block {
 
 .prop-dot {
   position: absolute;
-  left: -18px; /* Moved closer to the proposition box */
+  left: calc(-18px * var(--da-zoom)); /* Moved closer to the proposition box */
   top: 50%;
   transform: translateY(-50%);
-  width: 10px;
-  height: 10px;
+  width: calc(10px * var(--da-zoom));
+  height: calc(10px * var(--da-zoom));
   background: var(--border);
   border-radius: 50%;
   cursor: pointer;
@@ -1975,13 +2002,13 @@ body.text-edit-mode-active .proposition-block {
 
 .connection-node.active-node {
   fill: var(--accent) !important;
-  r: 8 !important;
+  r: calc(8px * var(--da-zoom)) !important;
   stroke-width: 2px;
 }
 
 .proposition-block .verse-ref {
   color: var(--text-muted);
-  font-size: 0.9em;
+  font-size: calc(0.9rem * var(--da-zoom)); /* was 0.9em; explicit so it scales with zoom */
   margin-right: 0.35em;
   user-select: none;
   padding: 1px 4px;
@@ -2004,17 +2031,23 @@ body.text-edit-mode-active .verse-ref {
   outline: none;
   white-space: pre-wrap; /* Preserve manual spaces/newlines but wrap long lines within the fixed-width container */
   overflow-wrap: break-word;
+  /* Explicit base (was an unset inherited 1rem) so zoom has something to scale.
+     1rem * 1 == the old inherited default, so 100% zoom is visually unchanged. */
+  font-size: calc(1rem * var(--da-zoom));
 }
 
-/* Greek text (SBLGNT) - slightly larger for readability */
+/* Greek text (SBLGNT) - slightly larger for readability. Was 1.05em (relative
+   to the inherited size); now an explicit rem*zoom value so it composes with
+   zoom the same way as the base rule above instead of double-applying it. */
 .propositions.greek-text .proposition-text {
-  font-size: 1.05em;
+  font-size: calc(1.05rem * var(--da-zoom));
 }
 
-/* Hebrew text (WLC) - serif Hebrew face, larger for niqqud legibility */
+/* Hebrew text (WLC) - serif Hebrew face, larger for niqqud legibility. Was
+   1.3em; see Greek comment above for why this is now rem*zoom. */
 .propositions.hebrew-text .proposition-text {
   font-family: 'Noto Serif Hebrew', 'SBL Hebrew', 'Times New Roman', serif;
-  font-size: 1.3em;
+  font-size: calc(1.3rem * var(--da-zoom));
   line-height: 2.2;
 }
 

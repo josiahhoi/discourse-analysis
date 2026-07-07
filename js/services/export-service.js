@@ -57,6 +57,27 @@ const DA_EXPORT = {
   },
 
   /**
+   * Zoom is an on-screen reading preference, not a document property — exports
+   * should look the same regardless of what the user currently has it set to.
+   * Temporarily force 100% for the capture (not persisted; { persist: false }
+   * so this transient change never overwrites the user's real localStorage
+   * preference), returning the level to restore afterward.
+   */
+  enterBaseZoomForCapture() {
+    const prevZoom = DA_STATE.zoomLevel;
+    if (prevZoom !== DA_CONSTANTS.ZOOM_DEFAULT && window.DA_UI && DA_UI.applyZoom) {
+      DA_UI.applyZoom(DA_CONSTANTS.ZOOM_DEFAULT, { persist: false, rerender: false });
+    }
+    return prevZoom;
+  },
+
+  restoreZoomAfterCapture(prevZoom) {
+    if (prevZoom !== DA_CONSTANTS.ZOOM_DEFAULT && window.DA_UI && DA_UI.applyZoom) {
+      DA_UI.applyZoom(prevZoom, { persist: false, rerender: false });
+    }
+  },
+
+  /**
    * Applies specific styles to the cloned document during html2canvas capture.
    */
   applyExportCloneStyles(clonedDoc) {
@@ -162,14 +183,15 @@ const DA_EXPORT = {
     DA_UI.showStatus('Capturing diagram...', 'info');
 
     const wasBlock = this.enterBracketViewForCapture();
+    const prevZoom = this.enterBaseZoomForCapture();
 
     // Save current states and expand all for export
     const prevShowComments = DA_STATE.showCommentsEnabled;
     const savedCollapseStates = DA_STATE.brackets.map(b => b.isCollapsed);
-    
+
     DA_STATE.showCommentsEnabled = false;
     DA_STATE.brackets.forEach(b => b.isCollapsed = false);
-    
+
     if (window.renderAll) window.renderAll();
 
     // Wait for DOM to settle
@@ -178,18 +200,19 @@ const DA_EXPORT = {
     try {
       const options = await this.getCaptureOptions(workspace);
       const canvas = await html2canvas(workspace, options);
-      
+
       // Restore original states
       DA_STATE.showCommentsEnabled = prevShowComments;
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
+      this.restoreZoomAfterCapture(prevZoom);
 
       const dataUrl = canvas.toDataURL('image/png');
       const bracketData = this.buildBracketData();
       const dnaString = JSON.stringify(bracketData);
       const compressedDna = typeof LZString !== 'undefined' ? LZString.compressToEncodedURIComponent(dnaString) : dnaString;
-      
+
       const html = `
         <div style="font-family: sans-serif; background: white; padding: 10px;">
           <img src="${dataUrl}" alt="DISCOURSE_DNA:${compressedDna}" style="max-width: 100%; border: 1px solid #eee;" />
@@ -214,6 +237,7 @@ const DA_EXPORT = {
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
+      this.restoreZoomAfterCapture(prevZoom);
       DA_UI.showStatus('Capture failed.', 'error');
     }
   },
@@ -228,6 +252,7 @@ const DA_EXPORT = {
     DA_UI.showStatus('Generating image...', 'info');
 
     const wasBlock = this.enterBracketViewForCapture();
+    const prevZoom = this.enterBaseZoomForCapture();
     const savedCollapseStates = DA_STATE.brackets.map(b => b.isCollapsed);
     DA_STATE.brackets.forEach(b => b.isCollapsed = false);
     if (window.renderAll) window.renderAll();
@@ -236,11 +261,12 @@ const DA_EXPORT = {
     try {
       const options = await this.getCaptureOptions(workspace);
       const canvas = await html2canvas(workspace, options);
-      
+
       // Restore
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
+      this.restoreZoomAfterCapture(prevZoom);
 
       const bracketData = this.buildBracketData();
       const rawBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
@@ -259,6 +285,7 @@ const DA_EXPORT = {
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
+      this.restoreZoomAfterCapture(prevZoom);
       DA_UI.showStatus('Save failed.', 'error');
     }
   },
@@ -276,6 +303,7 @@ const DA_EXPORT = {
     const workspace = document.getElementById('workspace');
 
     const wasBlock = this.enterBracketViewForCapture();
+    const prevZoom = this.enterBaseZoomForCapture();
     const savedCollapseStates = DA_STATE.brackets.map(b => b.isCollapsed);
     DA_STATE.brackets.forEach(b => b.isCollapsed = false);
     if (window.renderAll) window.renderAll();
@@ -284,11 +312,12 @@ const DA_EXPORT = {
     try {
       const options = await this.getCaptureOptions(workspace);
       const canvas = await html2canvas(workspace, options);
-      
+
       // Restore
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
+      this.restoreZoomAfterCapture(prevZoom);
 
       const imgData = canvas.toDataURL('image/png');
       const { jsPDF } = jspdf;
@@ -320,6 +349,7 @@ const DA_EXPORT = {
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
+      this.restoreZoomAfterCapture(prevZoom);
       DA_UI.showStatus('PDF export failed.', 'error');
     }
   }
