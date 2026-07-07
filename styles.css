@@ -132,7 +132,10 @@ body {
 /* 2. Main App Layout & Header               */
 /* ========================================= */
 .app {
-  min-height: 100vh;
+  /* Pin the shell to the viewport: the workspace scrolls internally, so its
+     scrollbars (incl. horizontal, for wide parallel/bracket layouts) sit at
+     the screen edge instead of below the fold at the document's bottom. */
+  height: 100vh;
   display: flex;
   flex-direction: column;
 }
@@ -309,6 +312,7 @@ body {
 /* Main layout */
 .main {
   flex: 1;
+  min-height: 0; /* let the workspace/sidebar scroll instead of stretching the shell */
   display: flex;
   overflow: hidden;
   /* Removed padding/gap here to let sidebar sit flush */
@@ -997,13 +1001,34 @@ body {
   min-width: 0;
   overflow-x: auto;
   padding: 1.5rem 2rem; /* Add consistent padding here */
-  /* Hide the horizontal scrollbar but keep the area scrollable (wide bracket
-     diagrams stay reachable via trackpad / shift-scroll). */
-  scrollbar-width: none; /* Firefox */
+  /* Thin, theme-matched scrollbars. Wide layouts (parallel column, nested
+     brackets) need a visible, grabbable horizontal scrollbar — trackpad-only
+     scrolling left users with no way to pan sideways. */
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: var(--border) transparent;
 }
 
 .workspace::-webkit-scrollbar {
-  display: none; /* WebKit / Chromium (Electron) */
+  width: 12px;
+  height: 12px;
+}
+
+.workspace::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.workspace::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+  /* Inset the thumb from the edges so it reads as a slim rounded bar. */
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.workspace::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+  border-width: 2px;
+  background-clip: padding-box;
 }
 
 /* Comments preview (right sidebar) */
@@ -1554,6 +1579,11 @@ body {
   width: fit-content; /* Shrink-wrap around content */
   min-width: min-content; /* Ensure it contains brackets and text */
   min-height: 100px;
+  /* The workspace is a flex column; without this the wrapper (a flex child) is
+     compressed below its content height when the passage is taller than the
+     viewport, clipping the last rows — most visibly a tall parallel-column
+     cell. Keeping it unshrinkable lets the workspace's own overflow scroll. */
+  flex-shrink: 0;
   background: var(--surface);
   border-radius: var(--radius);
   border: 1px solid var(--border);
@@ -1923,6 +1953,52 @@ mark.comment-highlight.comment-highlight-card-hover {
   /* Removed height: 100% to prevent vertical stretching */
 }
 
+/* Parallel column (Alternate Views): widen the content area to make room for
+   the view-only translation cell appended to each row. */
+.propositions.has-parallel {
+  width: 1280px; /* base 900 + 380 for the parallel column */
+}
+
+/* When the column is shown, the primary text must fill the whole primary area
+   (not hug its content) so the parallel cell always begins at the same x on
+   every row — otherwise a short line lets its cell slide left and the column
+   looks ragged. flex-grow absorbs the slack; min-width:0 lets a long line wrap
+   instead of pushing the cell out. */
+.propositions.has-parallel .proposition-text {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.parallel-text {
+  flex: none;
+  width: 360px;
+  margin-left: 1rem;
+  padding-left: 1rem;
+  border-left: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: calc(0.95rem * var(--da-zoom));
+  line-height: 1.6;
+  user-select: text;    /* copyable, but view-only (no contenteditable) */
+  white-space: normal;
+}
+
+/* In RTL (Hebrew) the flex row is reversed, putting the cell on the left; the
+   separator border swaps sides to stay between the columns. dir="auto" on the
+   cell keeps e.g. Chinese rendering LTR inside it. */
+body.rtl-mode .parallel-text {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: none;
+  margin-right: 1rem;
+  padding-right: 1rem;
+  border-right: 1px solid var(--border);
+  text-align: left;
+}
+
+.parallel-badge {
+  color: var(--text-muted);
+}
+
 .propositions.bracket-gutter {
   /* padding-left is set dynamically in JS based on actual bracket nesting depth */
 }
@@ -2267,8 +2343,12 @@ body.rtl-mode .proposition-block .proposition-text {
   font-size: 11px;
   padding: 2px 0;
   letter-spacing: 3px;
-  pointer-events: none;
+  cursor: pointer;
   user-select: none;
+}
+.fold-gap:hover,
+.fold-gap:focus-visible {
+  color: var(--accent);
 }
 
 .connection-node.collapsed {
@@ -2276,7 +2356,12 @@ body.rtl-mode .proposition-block .proposition-text {
   opacity: 0.75;
   stroke: #fff;
   stroke-width: 1.5px;
-  cursor: zoom-in;
+  cursor: zoom-in; /* honest now: clicking a collapsed node expands it */
+}
+
+/* Mid-connection the collapsed node acts as a connect target again */
+.bracket-canvas.connect-mode .connection-node.collapsed {
+  cursor: crosshair;
 }
 
 /* All collapsed brackets: bracket's own color, dashed */
@@ -2461,7 +2546,7 @@ body.rtl-mode .proposition-block .proposition-text {
 .word-arrow-group {
   cursor: pointer;
 }
-.word-arrow-group:hover path {
+.word-arrow-group:hover .word-arrow-path {
   stroke-width: 3;
 }
 
@@ -2684,6 +2769,27 @@ body.rtl-mode .proposition-block .proposition-text {
   opacity: 1;
 }
 
+/* Wide invisible stroke that makes the whole arrow an easy click target
+   (mirrors .bracket-hitbox on brackets). */
+.word-arrow-hitbox {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 12;
+  pointer-events: stroke;
+}
+
+/* Selected arrow (click to select, Delete/right-click to remove): the line
+   itself lights up, not just its anchor words — the endpoints may be
+   off-screen on a long arrow. */
+.word-arrow-group.is-selected .word-arrow-path {
+  stroke: var(--accent);
+  stroke-width: 3.5;
+  opacity: 1;
+}
+.word-arrow-group.is-selected .word-arrow-head {
+  fill: var(--accent);
+}
+
 /* Context Menu (for Export As) */
 .context-menu {
   position: fixed;
@@ -2712,6 +2818,14 @@ body.rtl-mode .proposition-block .proposition-text {
 
 .context-menu .menu-item:hover {
   background: var(--hover-bg);
+}
+
+.context-menu .menu-item.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.context-menu .menu-item.disabled:hover {
+  background: none;
 }
 
 .context-menu hr {

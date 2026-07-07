@@ -404,6 +404,8 @@ function startNewBracket() {
     propositions: [],
     verseRefs: [],
     verseBreaks: [],
+    parallelVerses: {},
+    parallelLabel: '',
     brackets: [],
     formatTags: [],
     wordArrows: [],

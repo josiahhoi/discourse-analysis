@@ -82,9 +82,9 @@ window.DA_KEYBOARD = {
           if (window.renderAll) window.renderAll();
           return;
         }
-        if (DA_STATE.arrowMode && window.pendingArrowStart) {
-          window.pendingArrowStart = null;
-          if (window.arrowHighlight) window.arrowHighlight.style.display = 'none';
+        if (DA_STATE.arrowMode && DA_STATE.pendingArrowStart) {
+          DA_STATE.pendingArrowStart = null;
+          if (window.DA_MOUSE) DA_MOUSE.hideArrowHighlight();
           DA_UI.showStatus('Arrow selection cancelled.', 'info');
           return;
         }
@@ -93,6 +93,7 @@ window.DA_KEYBOARD = {
         // (DA_UI.manageDialogFocus), so Escape must be able to close all of them.
         const labelPicker = document.getElementById('labelPicker');
         const bracketActions = document.getElementById('bracketActions');
+        const arrowActions = document.getElementById('arrowActions');
         const commentPopover = document.getElementById('commentPopover');
         const textContextMenu = document.getElementById('textContextMenu');
         const exportMenu = document.getElementById('exportMenu');
@@ -103,7 +104,7 @@ window.DA_KEYBOARD = {
         const referenceModal = document.getElementById('referenceModal');
         const referenceOpen = referenceModal && referenceModal.style.display === 'flex';
 
-        if (labelPicker || bracketActions || commentPopover || textContextMenu
+        if (labelPicker || bracketActions || arrowActions || commentPopover || textContextMenu
             || exportMenu || openPicker || customLabelDialog || settingsOpen || referenceOpen) {
           // The custom-label dialog sits on top of the label picker — close only
           // the dialog first; a second Escape closes the picker underneath.
@@ -112,6 +113,13 @@ window.DA_KEYBOARD = {
           if (bracketActions) {
             bracketActions.remove();
             DA_UI.clearPropositionHighlights();
+          }
+          if (arrowActions) {
+            arrowActions.remove();
+            if (DA_STATE.selectedArrowIdx !== null) {
+              DA_STATE.selectedArrowIdx = null;
+              if (window.renderAll) window.renderAll();
+            }
           }
           if (commentPopover) commentPopover.remove();
           if (textContextMenu) textContextMenu.remove();
@@ -397,6 +405,15 @@ window.DA_KEYBOARD = {
 
             if (preText.length === 0 && i > 0) {
               e.preventDefault();
+
+              // Never merge into a row hidden inside a collapsed section: the
+              // text would vanish from view, and the merge's bracket cascade
+              // can delete brackets the user can't see happening.
+              const _aboveBlock = container.querySelector(`.proposition-block[data-index="${i - 1}"]`);
+              if (_aboveBlock && _aboveBlock.classList.contains('folded-hidden')) {
+                DA_UI.showStatus('The row above is in a collapsed section. Expand it before merging.', 'warning');
+                return;
+              }
 
               // Commit this block's current text before merging — edits otherwise
               // only commit on focusout, so a merge would run on stale text.

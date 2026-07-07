@@ -26,8 +26,13 @@ function showBracketActions(bracketIdx, centerY, centerX) {
 
   const isMainPoint = !!bracket.isMainPoint;
 
+  // Collapsing a bracket whose endpoints are its only rows hides nothing (e.g.
+  // a 2-row coordinate bracket) — offer the item disabled instead of a no-op.
+  const foldWouldHide = bracket.isCollapsed
+    || (window.DA_RENDERER?.getCollapseInfo && DA_RENDERER.getCollapseInfo(bracketIdx).hiddenRows.length > 0);
+
   popover.innerHTML = `
-    <div class="menu-item" data-action="fold">${bracket.isCollapsed ? 'Expand Section' : 'Collapse Section'}</div>
+    <div class="menu-item${foldWouldHide ? '' : ' disabled'}" data-action="fold"${foldWouldHide ? '' : ' title="Nothing to fold — both endpoints stay visible"'}>${bracket.isCollapsed ? 'Expand Section' : 'Collapse Section'}</div>
     <div class="menu-item" data-action="comment">${hasComment ? 'View Comment' : 'Add Comment'}</div>
     <div class="menu-item" data-action="select">Connect to...</div>
     <div class="menu-item${isMainPoint ? ' active' : ''}" data-action="main-point">${isMainPoint ? '★ Unmark Passage Main Point' : '☆ Mark Passage Main Point'}</div>
@@ -59,6 +64,7 @@ function showBracketActions(bracketIdx, centerY, centerX) {
 
   popover.querySelector('[data-action="fold"]').addEventListener('click', (e) => {
     e.stopPropagation();
+    if (!foldWouldHide) return;
     DA_EDITOR.toggleBracketCollapse(bracketIdx);
     clearAndDismiss();
   });
@@ -582,6 +588,136 @@ function showExportMenu(e) {
   setupClickOutside(menu, () => menu.remove());
 }
 
+/**
+ * "Alternate Views" toolbar dropdown: Block Diagram (existing view toggle) and
+ * the view-only Parallel Column (second translation, keyed by verse, never
+ * saved into the project — see DA_STATE.parallelVerses).
+ */
+function showAlternateViewsMenu(e) {
+  const existing = document.getElementById('alternateViewsMenu');
+  if (existing) { existing.remove(); return; }
+
+  const blockActive = !!(window.DA_BLOCK && DA_BLOCK.isActive());
+  const parallelActive = !!(DA_STATE.parallelLabel && Object.keys(DA_STATE.parallelVerses).length);
+
+  const menu = document.createElement('div');
+  menu.id = 'alternateViewsMenu';
+  menu.className = 'context-menu';
+  menu.innerHTML = `
+    <div class="menu-item${blockActive ? ' active' : ''}" data-action="block-diagram">${blockActive ? 'Bracket View (B)' : 'Block Diagram (B)'}</div>
+    <hr>
+    ${parallelActive ? `
+      <div class="menu-item" data-action="parallel-change">Change Parallel Translation… (${DA_UI.escapeHtml(DA_STATE.parallelLabel)})</div>
+      <div class="menu-item" data-action="parallel-hide">Hide Parallel Column</div>
+    ` : `
+      <div class="menu-item" data-action="parallel-show">Show Parallel Column…</div>
+    `}
+  `;
+
+  document.body.appendChild(menu);
+  const menuW = menu.offsetWidth || 200;
+  const menuH = menu.offsetHeight || 120;
+  let left = e.clientX;
+  let top = e.clientY;
+  if (left + menuW > window.innerWidth) left = window.innerWidth - menuW - 10;
+  if (top + menuH > window.innerHeight) top = window.innerHeight - menuH - 10;
+  menu.style.left = `${Math.max(5, left)}px`;
+  menu.style.top = `${Math.max(5, top)}px`;
+
+  menu.querySelectorAll('.menu-item').forEach((item) => {
+    item.addEventListener('click', () => {
+      const action = item.dataset.action;
+      menu.remove();
+      if (action === 'block-diagram') DA_BLOCK.toggle();
+      if (action === 'parallel-show' || action === 'parallel-change') showParallelDialog();
+      if (action === 'parallel-hide') {
+        DA_STATE.parallelVerses = {};
+        DA_STATE.parallelLabel = '';
+        if (window.renderAll) window.renderAll();
+        showStatus('Parallel column hidden.', 'info');
+      }
+    });
+  });
+
+  manageDialogFocus(menu);
+  setupClickOutside(menu, () => menu.remove());
+}
+
+// Curated Bolls translation codes for the parallel column.
+const PARALLEL_TRANSLATIONS = [
+  { code: 'CUV', name: '中文和合本 — Chinese Union (Traditional)' },
+  { code: 'CUNPS', name: '新标点和合本 — Chinese Union (Simplified)' },
+  { code: 'KRV', name: '개역한글 — Korean Revised' },
+  { code: 'RV1960', name: 'Reina-Valera 1960 (Español)' },
+  { code: 'LUT', name: 'Luther 1912 (Deutsch)' },
+  { code: 'NVIPT', name: 'Nova Versão Internacional (Português)' },
+  { code: 'ESV', name: 'English Standard Version' },
+  { code: 'NASB', name: 'NASB (1995)' },
+  { code: 'SBLGNT', name: 'Ελληνικά — Greek NT (SBLGNT)' },
+  { code: 'LXX', name: 'Ελληνικά — Greek OT (Septuagint)' },
+  { code: 'WLC', name: 'עברית — Hebrew OT (Westminster Leningrad)' },
+];
+
+/** Pick a translation and fetch it into the view-only parallel column. */
+function showParallelDialog() {
+  const existing = document.querySelector('.parallel-dialog');
+  if (existing) existing.remove();
+
+  const dialog = document.createElement('div');
+  dialog.className = 'label-picker custom-label-dialog parallel-dialog';
+  dialog.style.width = '300px';
+  dialog.innerHTML = `
+    <div class="picker-title">Parallel Column</div>
+    <div style="padding: 5px;">
+      <select id="parallelTranslationSelect" aria-label="Parallel translation" style="width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); box-sizing: border-box;">
+        ${PARALLEL_TRANSLATIONS.map((t) => `<option value="${t.code}"${t.code === DA_STATE.parallelLabel ? ' selected' : ''}>${DA_UI.escapeHtml(t.name)}</option>`).join('')}
+      </select>
+      <div class="hint-small" style="margin: 6px 0 8px; font-size: 0.7rem;">View-only, shown beside the text by verse. Not saved with the project.</div>
+      <button id="parallelShowBtn" class="series" style="width: 100%; padding: 6px;">Show</button>
+    </div>
+  `;
+  document.body.appendChild(dialog);
+  dialog.style.left = `${Math.max(8, window.innerWidth / 2 - 150)}px`;
+  dialog.style.top = '25%';
+
+  makeFixedDraggable(dialog, '.picker-title');
+
+  dialog.querySelector('#parallelShowBtn').addEventListener('click', async () => {
+    const code = dialog.querySelector('#parallelTranslationSelect').value;
+    dialog.remove();
+
+    // The parallel column belongs to the bracket view.
+    if (window.DA_BLOCK && DA_BLOCK.isActive()) DA_BLOCK.setActive(false);
+
+    showStatus(`Fetching ${code}…`, 'info');
+    try {
+      const chapterMap = await DA_BIBLE.fetchParallelVerses(code, DA_STATE.passageRef || '');
+      // Keep only the verses actually on screen.
+      const wanted = new Set();
+      DA_STATE.verseRefs.forEach((ref) => {
+        const parts = String(ref || '').split('-');
+        const a = parseInt(parts[0], 10);
+        const b = parseInt(parts[parts.length - 1], 10);
+        if (isNaN(a) || isNaN(b)) return;
+        for (let v = a; v <= b; v++) wanted.add(String(v));
+      });
+      const kept = {};
+      wanted.forEach((v) => { if (chapterMap[v]) kept[v] = chapterMap[v]; });
+      if (!Object.keys(kept).length) throw new Error('No matching verses found for this passage.');
+
+      DA_STATE.parallelVerses = kept;
+      DA_STATE.parallelLabel = code;
+      if (window.renderAll) window.renderAll();
+      showStatus(`Parallel column: ${code}.`, 'success');
+    } catch (err) {
+      showStatus(err.message || 'Could not fetch the parallel translation.', 'error');
+    }
+  });
+
+  manageDialogFocus(dialog);
+  setupClickOutside(dialog, () => dialog.remove());
+}
+
 function showOpenMenu(e) {
   const existing = document.getElementById('openPicker');
   if (existing) {
@@ -735,6 +871,42 @@ function showCustomLabelDialog(bracketIdx, centerY, centerX, mainPicker) {
   setupClickOutside(dialog, () => dialog.remove());
 }
 
+function showArrowActions(arrowIdx, centerY, centerX) {
+  const existing = document.getElementById('arrowActions');
+  if (existing) existing.remove();
+  if (!DA_STATE.wordArrows[arrowIdx]) return;
+
+  const popover = document.createElement('div');
+  popover.id = 'arrowActions';
+  popover.className = 'context-menu';
+  popover.innerHTML = `
+    <div class="menu-item danger" data-action="delete">Delete Arrow</div>
+  `;
+
+  popover.style.left = `${centerX}px`;
+  popover.style.top = `${centerY}px`;
+  document.body.appendChild(popover);
+  clampToViewport(popover);
+
+  const dismiss = () => {
+    popover.remove();
+    if (DA_STATE.selectedArrowIdx !== null) {
+      DA_STATE.selectedArrowIdx = null;
+      if (window.renderAll) window.renderAll();
+    }
+  };
+
+  popover.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
+    e.stopPropagation();
+    DA_STATE.pushUndo('delete arrow');
+    DA_STATE.wordArrows.splice(arrowIdx, 1);
+    dismiss();
+    showStatus('Arrow removed.', 'success');
+  });
+
+  setupClickOutside(popover, dismiss);
+}
+
 window.DA_UI = Object.assign(window.DA_UI || {}, {
-  showBracketActions, showTextContextMenu, showLabelPicker, showExportMenu, showOpenMenu
+  showBracketActions, showTextContextMenu, showLabelPicker, showExportMenu, showOpenMenu, showAlternateViewsMenu, showParallelDialog, showArrowActions
 });

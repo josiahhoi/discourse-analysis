@@ -79,6 +79,11 @@ function renderWordArrows() {
     const fromR = anchorRect(fromEl);
     const toR = anchorRect(toEl);
 
+    // An anchor inside a folded (display:none) row measures as a zero rect at
+    // the origin — drawing from it produces a stray line across the workspace.
+    // Skip the arrow until both rows are visible again.
+    if ((fromR.width === 0 && fromR.height === 0) || (toR.width === 0 && toR.height === 0)) return;
+
     // word boundaries relative to wrapper
     const fL = fromR.left - wrapperRect.left;
     const fR = fromR.right - wrapperRect.left;
@@ -182,8 +187,15 @@ function renderWordArrows() {
     }
 
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    g.setAttribute('class', 'word-arrow-group');
+    g.setAttribute('class', `word-arrow-group ${idx === DA_STATE.selectedArrowIdx ? 'is-selected' : ''}`);
     g.dataset.index = idx;
+
+    // Invisible wide stroke under the visible path so the arrow doesn't have to
+    // be hit on its 2px line — same pattern as the brackets' .bracket-hitbox.
+    const hitbox = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    hitbox.setAttribute('d', d);
+    hitbox.setAttribute('class', 'word-arrow-hitbox');
+    g.appendChild(hitbox);
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', d);

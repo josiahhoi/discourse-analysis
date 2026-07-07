@@ -163,39 +163,19 @@ function renderPropositions() {
   const existingBlocks = Array.from(container.querySelectorAll('.proposition-block'));
   const targetCount = DA_STATE.propositions.length;
 
-  // Calculate hidden indices from collapsed brackets
+  // Calculate hidden indices from collapsed brackets (getCollapseInfo is the
+  // shared row/arm decision). _hiddenBy remembers which bracket(s) hid each row
+  // so the fold-gap indicator can expand exactly those on click.
   const hiddenIndices = new Set();
-  const _coordinateTypes = new Set(DA_CONSTANTS.RELATIONSHIP_GROUPS_HIERARCHY[0].types);
+  const _hiddenBy = new Map();
   DA_STATE.brackets.forEach((b, idx) => {
-    if (b.isCollapsed) {
-      const labels = getBracketLabels(b.type, b.labelsSwapped, b.dominanceFlipped);
-      const rangeFrom = getRepresentativeRange(b.from);
-      const rangeTo = getRepresentativeRange(b.to);
-      const fullRange = getBracketExtent(idx);
-
-      const isCoordinate = _coordinateTypes.has(b.type.toLowerCase());
-      const hasStarTop = (labels.top && labels.top.includes('*')) || labels.single === '*';
-      const hasStarBottom = (labels.bottom && labels.bottom.includes('*'));
-
-      if (!isCoordinate && hasStarTop && !hasStarBottom) {
-        // Show Dominant TOP (from), hide the rest
-        for (let k = fullRange.from; k <= fullRange.to; k++) {
-          if (k < rangeFrom.from || k > rangeFrom.to) hiddenIndices.add(k);
-        }
-      } else if (!isCoordinate && hasStarBottom && !hasStarTop) {
-        // Show Dominant BOTTOM (to), hide the rest
-        for (let k = fullRange.from; k <= fullRange.to; k++) {
-          if (k < rangeTo.from || k > rangeTo.to) hiddenIndices.add(k);
-        }
-      } else {
-        // Coordinate (or ambiguous): show both ends, hide the middle
-        for (let k = fullRange.from; k <= fullRange.to; k++) {
-          const isAtFrom = k >= rangeFrom.from && k <= rangeFrom.to;
-          const isAtTo = k >= rangeTo.from && k <= rangeTo.to;
-          if (!isAtFrom && !isAtTo) hiddenIndices.add(k);
-        }
-      }
-    }
+    if (!b.isCollapsed) return;
+    getCollapseInfo(idx).hiddenRows.forEach((k) => {
+      hiddenIndices.add(k);
+      const owners = _hiddenBy.get(k) || [];
+      owners.push(idx);
+      _hiddenBy.set(k, owners);
+    });
   });
 
   // Interior members of a series read as one unit with the ends, so their
@@ -223,18 +203,28 @@ function renderPropositions() {
   // id lookup + recursive extent walk).
   const _hlForPass = computeHighlightEntries();
 
+  // Parallel column (Alternate Views): view-only second translation, keyed by
+  // verse. null when the column is off; otherwise a per-row cell-text array.
+  const _parallelCells = computeParallelCells();
+  container.classList.toggle('has-parallel', _parallelCells !== null);
+  const _parallelBadge = document.getElementById('parallelBadge');
+  if (_parallelBadge) {
+    _parallelBadge.style.display = _parallelCells !== null ? '' : 'none';
+    _parallelBadge.textContent = _parallelCells !== null ? `+ ${DA_STATE.parallelLabel}` : '';
+  }
+
   // Update existing or create new blocks
   DA_STATE.propositions.forEach((text, i) => {
     let block = existingBlocks[i];
     if (!block) {
-      block = createPropositionBlock(text, i, _verseSuffixMap[i], _hlForPass);
+      block = createPropositionBlock(text, i, _verseSuffixMap[i], _hlForPass, _parallelCells);
       container.appendChild(block);
     }
 
     // Toggle visibility based on folding
     block.classList.toggle('folded-hidden', hiddenIndices.has(i));
     block.classList.toggle('series-member', seriesMemberIndices.has(i));
-    updatePropositionBlock(block, text, i, _verseSuffixMap[i], _hlForPass);
+    updatePropositionBlock(block, text, i, _verseSuffixMap[i], _hlForPass, _parallelCells);
   });
 
   // Remove stale gap indicators then re-insert for current hidden runs
@@ -255,6 +245,26 @@ function renderPropositions() {
       const gap = document.createElement('div');
       gap.className = 'fold-gap';
       gap.textContent = `··· ${count} row${count !== 1 ? 's' : ''} collapsed ···`;
+
+      // Clicking (or Enter/Space on) the gap expands every collapsed bracket
+      // that hides a row in this run. Gaps are rebuilt each render, so the
+      // owner indices captured here can't go stale.
+      const owners = new Set();
+      for (let k = start; k <= end; k++) (_hiddenBy.get(k) || []).forEach((bi) => owners.add(bi));
+      gap.setAttribute('role', 'button');
+      gap.tabIndex = 0;
+      gap.title = 'Click to expand';
+      gap.setAttribute('aria-label', `Expand ${count} collapsed row${count !== 1 ? 's' : ''}`);
+      const expandRun = () => {
+        DA_STATE.pushUndo('expand section');
+        owners.forEach((bi) => { const b = DA_STATE.brackets[bi]; if (b) b.isCollapsed = false; });
+        if (window.renderAll) window.renderAll();
+      };
+      gap.addEventListener('click', expandRun);
+      gap.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); expandRun(); }
+      });
+
       if (start === 0) {
         container.insertBefore(gap, container.querySelector('.proposition-block'));
       } else {
@@ -492,7 +502,36 @@ function computeHighlightEntries() {
   return out;
 }
 
-function createPropositionBlock(text, i, verseDisplay, highlightEntries) {
+/**
+ * Per-render map of row index → parallel-column cell text, or null when the
+ * column is off. Parallel text is keyed by VERSE (split/merge-proof); a verse's
+ * text appears once, on the FIRST row where that verse begins — later rows of
+ * the same verse get an empty cell. A merged '3-5' row shows verses 3–5 joined.
+ */
+function computeParallelCells() {
+  if (!DA_STATE.parallelLabel || !Object.keys(DA_STATE.parallelVerses || {}).length) return null;
+
+  const seen = new Set();
+  return DA_STATE.verseRefs.map((ref) => {
+    if (!ref) return '';
+    const parts = String(ref).split('-');
+    const startN = parseInt(parts[0], 10);
+    const endN = parseInt(parts[parts.length - 1], 10);
+    // Non-numeric refs (e.g. '3:14' from pasted markers) can't map to Bolls
+    // verse numbers — those rows just get an empty cell.
+    if (isNaN(startN) || isNaN(endN)) return '';
+    const texts = [];
+    for (let v = startN; v <= endN; v++) {
+      const key = String(v);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (DA_STATE.parallelVerses[key]) texts.push(DA_STATE.parallelVerses[key]);
+    }
+    return texts.join(' ');
+  });
+}
+
+function createPropositionBlock(text, i, verseDisplay, highlightEntries, parallelCells) {
   const block = document.createElement('div');
   block.className = 'proposition-block';
   block.dataset.index = i;
@@ -517,11 +556,11 @@ function createPropositionBlock(text, i, verseDisplay, highlightEntries) {
   textSpan.spellcheck = false;
   block.appendChild(textSpan);
 
-  updatePropositionBlock(block, text, i, verseDisplay, highlightEntries);
+  updatePropositionBlock(block, text, i, verseDisplay, highlightEntries, parallelCells);
   return block;
 }
 
-function updatePropositionBlock(block, text, i, verseDisplay, highlightEntries) {
+function updatePropositionBlock(block, text, i, verseDisplay, highlightEntries, parallelCells) {
   block.dataset.index = i;
   const dot = block.querySelector('.prop-dot');
   if (dot) {
@@ -607,6 +646,25 @@ function updatePropositionBlock(block, text, i, verseDisplay, highlightEntries) 
     if (!isFocused || forceUpdate) {
       renderInlineContent(textSpan, text, i);
     }
+  }
+
+  // Parallel column cell (view-only; the differential renderer reuses blocks,
+  // so the span must be added/removed when the column toggles mid-session).
+  const cells = parallelCells !== undefined ? parallelCells : computeParallelCells();
+  let pSpan = block.querySelector('.parallel-text');
+  if (cells === null) {
+    if (pSpan) pSpan.remove();
+  } else {
+    if (!pSpan) {
+      pSpan = document.createElement('span');
+      pSpan.className = 'parallel-text';
+      // dir=auto: e.g. Chinese must render LTR inside its cell even when the
+      // primary passage is Hebrew and the whole row is direction: rtl.
+      pSpan.setAttribute('dir', 'auto');
+      block.appendChild(pSpan);
+    }
+    const cellText = cells[i] || '';
+    if (pSpan.textContent !== cellText) pSpan.textContent = cellText;
   }
 }
 
@@ -948,8 +1006,6 @@ function renderBrackets() {
     });
   }
 
-  const _coordTypes = new Set(DA_CONSTANTS.RELATIONSHIP_GROUPS_HIERARCHY[0].types);
-
   // All bracket extents for this pass, computed once. Several checks below run
   // over bracket pairs; recomputing recursive extents inside those loops is
   // what made deep nestings quadratic-to-cubic per frame.
@@ -1012,7 +1068,9 @@ function renderBrackets() {
     let { topY, topLeft, bottomY, bottomLeft } = getConnectionPoints(bracket.from, bracket.to, dotPositions, i);
     const x = MX(getBracketX(i));
 
-    const isCollapsedCoord = bracket.isCollapsed && _coordTypes.has(bracket.type.toLowerCase());
+    // Shared with the row hider in renderPropositions so rows and arms agree.
+    const _collapseInfo = bracket.isCollapsed ? getCollapseInfo(i) : null;
+    const isCollapsedCoord = !!(_collapseInfo && _collapseInfo.isCoordinateShape);
 
     if (bracket.isCollapsed) {
       if (isCollapsedCoord) {
@@ -1034,14 +1092,11 @@ function renderBrackets() {
           }
         }
       } else {
-        // Subordinate collapsed: snap to the representative dot of the dominant endpoint.
-        // Use getRepresentativeRange so that bN refs resolve to the actual proposition dot
-        // rather than the bracket node x position (which may be hidden/unrendered).
-        const labelsC = getBracketLabels(bracket.type, bracket.labelsSwapped, bracket.dominanceFlipped);
-        const isTopStar = labelsC.top && labelsC.top.includes('*');
-        const isBottomStar = labelsC.bottom && labelsC.bottom.includes('*');
-        const dominantId = (isBottomStar && !isTopStar) ? bracket.to : bracket.from;
-        const repDominant = getRepresentativeRange(dominantId);
+        // Subordinate collapsed: snap to the representative dot of the dominant
+        // endpoint (already resolved by getCollapseInfo). getRepresentativeRange
+        // makes bN refs land on the actual proposition dot rather than the
+        // bracket node x position (which may be hidden/unrendered).
+        const repDominant = getRepresentativeRange(_collapseInfo.dominantId);
         const dominantPos = dotPositions[repDominant.from];
         if (dominantPos && dominantPos.midY > 0) {
           topY = bottomY = dominantPos.midY;
@@ -1171,7 +1226,9 @@ function renderBrackets() {
       class: `${(DA_STATE.bracketSelectStep === 1 && DA_STATE.firstBracketPoint === bracket.id) ? 'connection-node active-node' : 'connection-node'} ${bracket.isCollapsed ? 'collapsed' : ''} ${_hiddenNodeIdx.has(i) ? 'series-absorbed' : ''}`,
       tabindex: 0,
       role: 'button',
-      'aria-label': `${_spokenType} bracket node: select for bracket`,
+      'aria-label': bracket.isCollapsed
+        ? `${_spokenType} bracket node: collapsed, press Enter to expand`
+        : `${_spokenType} bracket node: select for bracket`,
       dataset: { bracketIdx: i }
     }));
 
@@ -1290,6 +1347,54 @@ function getRepresentativeRange(id, _seen) {
   }
 }
 
+// Lazy so this file doesn't depend on constants.js load order.
+let _coordTypesCache = null;
+function _coordinateTypeSet() {
+  if (!_coordTypesCache) _coordTypesCache = new Set(DA_CONSTANTS.RELATIONSHIP_GROUPS_HIERARCHY[0].types);
+  return _coordTypesCache;
+}
+
+/**
+ * The single source of truth for what collapsing a bracket does. Both the row
+ * hider (renderPropositions) and the arm drawer (renderBrackets) consume this,
+ * so they can never disagree about which rows represent a collapsed bracket —
+ * previously a no-star subordinate label kept both endpoint rows visible but
+ * drew only one arm, leaving the other row dangling.
+ *
+ * A subordinate type with exactly one starred arm collapses to that dominant
+ * end (isCoordinateShape false, dominantId set). Everything else — coordinate
+ * types, no-star labels (e.g. dominance display off), double-star labels —
+ * keeps both ends and hides the middle (isCoordinateShape true).
+ */
+function getCollapseInfo(bracketIdx) {
+  const b = DA_STATE.brackets[bracketIdx];
+  if (!b) return { hiddenRows: [], isCoordinateShape: true, dominantId: null };
+  const labels = getBracketLabels(b.type, b.labelsSwapped, b.dominanceFlipped);
+  const starTop = !!((labels.top && labels.top.includes('*')) || labels.single === '*');
+  const starBottom = !!(labels.bottom && labels.bottom.includes('*'));
+  const isCoordinate = _coordinateTypeSet().has(b.type.toLowerCase());
+  const fullRange = getBracketExtent(bracketIdx);
+  const hiddenRows = [];
+
+  if (!isCoordinate && starTop !== starBottom) {
+    const dominantId = starTop ? b.from : b.to;
+    const rep = getRepresentativeRange(dominantId);
+    for (let k = fullRange.from; k <= fullRange.to; k++) {
+      if (k < rep.from || k > rep.to) hiddenRows.push(k);
+    }
+    return { hiddenRows, isCoordinateShape: false, dominantId };
+  }
+
+  const repFrom = getRepresentativeRange(b.from);
+  const repTo = getRepresentativeRange(b.to);
+  for (let k = fullRange.from; k <= fullRange.to; k++) {
+    const atFrom = k >= repFrom.from && k <= repFrom.to;
+    const atTo = k >= repTo.from && k <= repTo.to;
+    if (!atFrom && !atTo) hiddenRows.push(k);
+  }
+  return { hiddenRows, isCoordinateShape: true, dominantId: null };
+}
+
 function getConnectionPoints(fromId, toId, dotPositions, excludeBracketIdx = -1, _seen) {
   const _cacheKey = _connCache ? `${fromId}|${toId}` : null;
   if (_cacheKey && _connCache.has(_cacheKey)) return _connCache.get(_cacheKey);
@@ -1359,7 +1464,7 @@ function getPointExtent(id) {
 window.DA_RENDERER = Object.assign(window.DA_RENDERER || {}, {
     renderAll, renderPropositions, renderBrackets,
     computeSlotAssignments, getBracketX, getConnectionPoints,
-    getPointExtent, getBracketExtent, getRepresentativeRange, updateBracketPositions,
-    scheduleVisualUpdate, computeVerseDisplay, clampToWordAnchor,
+    getPointExtent, getBracketExtent, getRepresentativeRange, getCollapseInfo, updateBracketPositions,
+    scheduleVisualUpdate, computeVerseDisplay, clampToWordAnchor, computeParallelCells,
     getBracketSlots: () => ({ ..._slotForIdx })
 });

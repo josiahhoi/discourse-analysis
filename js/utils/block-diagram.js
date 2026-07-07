@@ -247,11 +247,11 @@
     _active = !!on;
     const wrapper = document.querySelector('.bracket-canvas-wrapper');
     if (wrapper) wrapper.classList.toggle('block-diagram-active', _active);
-    const btn = document.getElementById('blockDiagramBtn');
-    if (btn) {
-      btn.classList.toggle('active', _active);
-      btn.textContent = _active ? 'Bracket View (B)' : 'Block Diagram (B)';
-    }
+    // The view lives under the "Alternate Views" dropdown; light its trigger
+    // up while any alternate view is active. (The menu itself relabels its
+    // Block Diagram entry from live state each time it opens.)
+    const trigger = document.getElementById('alternateViewsBtn');
+    if (trigger) trigger.classList.toggle('active', _active);
     if (_active) {
       render();
     } else {
@@ -262,17 +262,6 @@
 
   function toggle() { setActive(!_active); }
   function isActive() { return _active; }
-
-  function init() {
-    const btn = document.getElementById('blockDiagramBtn');
-    if (btn) btn.addEventListener('click', toggle);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
 
   window.DA_BLOCK = { render, toggle, isActive, setActive, computeLevels, computeLabels };
 })();

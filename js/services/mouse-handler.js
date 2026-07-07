@@ -1,4 +1,39 @@
+// The floating word-highlight overlay for arrow mode. Module state (not
+// window.*) so mode exits can reliably hide it via hideArrowHighlight().
+let _arrowHighlight = null;
+
 window.DA_MOUSE = {
+  hideArrowHighlight: function() {
+    if (_arrowHighlight) _arrowHighlight.style.display = 'none';
+  },
+
+  /**
+   * Second click of arrow creation. Always consumes the pending start; returns
+   * 'cancelled' (clicked the start word again), 'duplicate' (an arrow with these
+   * exact anchors already exists — direction matters, so the reverse is allowed),
+   * or 'created'.
+   */
+  completeArrow: function(start, word) {
+    DA_STATE.pendingArrowStart = null;
+    if (start.propIndex === word.propIndex && start.start === word.start) {
+      return 'cancelled';
+    }
+    const isDuplicate = DA_STATE.wordArrows.some(wa =>
+      wa.fromProp === start.propIndex && wa.fromStart === start.start &&
+      wa.toProp === word.propIndex && wa.toStart === word.start);
+    if (isDuplicate) return 'duplicate';
+    DA_STATE.pushUndo('add arrow');
+    DA_STATE.wordArrows.push({
+      fromProp: start.propIndex,
+      fromStart: start.start,
+      fromEnd: start.end,
+      toProp: word.propIndex,
+      toStart: word.start,
+      toEnd: word.end
+    });
+    return 'created';
+  },
+
   initWorkspaceMouseHandlers: function(propositionsContainer, bracketCanvas, wordArrowsSvg) {
     if (propositionsContainer) {
       // Input events are handled by rendering-engine.js to schedule visual updates.
@@ -36,24 +71,24 @@ window.DA_MOUSE = {
         // getWordAtPoint logic needs to be moved here or made globally accessible.
         const word = window.DA_MOUSE.getWordAtPoint(e);
         if (word) {
-          if (!window.arrowHighlight) {
-            window.arrowHighlight = document.createElement('div');
-            window.arrowHighlight.className = 'word-highlight-overlay';
-            document.body.appendChild(window.arrowHighlight);
+          if (!_arrowHighlight) {
+            _arrowHighlight = document.createElement('div');
+            _arrowHighlight.className = 'word-highlight-overlay';
+            document.body.appendChild(_arrowHighlight);
           }
-          window.arrowHighlight.style.left = word.rect.left + window.scrollX + 'px';
-          window.arrowHighlight.style.top = word.rect.top + window.scrollY + 'px';
-          window.arrowHighlight.style.width = word.rect.width + 'px';
-          window.arrowHighlight.style.height = word.rect.height + 'px';
-          window.arrowHighlight.style.display = 'block';
-          window.arrowHighlight.classList.toggle('pending', !!window.pendingArrowStart);
+          _arrowHighlight.style.left = word.rect.left + window.scrollX + 'px';
+          _arrowHighlight.style.top = word.rect.top + window.scrollY + 'px';
+          _arrowHighlight.style.width = word.rect.width + 'px';
+          _arrowHighlight.style.height = word.rect.height + 'px';
+          _arrowHighlight.style.display = 'block';
+          _arrowHighlight.classList.toggle('pending', !!DA_STATE.pendingArrowStart);
         } else {
-          if (window.arrowHighlight) window.arrowHighlight.style.display = 'none';
+          window.DA_MOUSE.hideArrowHighlight();
         }
       });
 
       propositionsContainer.addEventListener('mouseleave', () => {
-        if (window.arrowHighlight) window.arrowHighlight.style.display = 'none';
+        window.DA_MOUSE.hideArrowHighlight();
       });
 
       propositionsContainer.addEventListener('mousedown', (e) => {
@@ -61,27 +96,19 @@ window.DA_MOUSE = {
         const word = window.DA_MOUSE.getWordAtPoint(e);
         if (!word) return;
 
-        if (!window.pendingArrowStart) {
-          window.pendingArrowStart = word;
+        if (!DA_STATE.pendingArrowStart) {
+          DA_STATE.pendingArrowStart = word;
           DA_UI.showStatus('Start word selected. Now click the target word.', 'success');
         } else {
-          if (window.pendingArrowStart.propIndex === word.propIndex && window.pendingArrowStart.start === word.start) {
-            window.pendingArrowStart = null;
+          const outcome = window.DA_MOUSE.completeArrow(DA_STATE.pendingArrowStart, word);
+          if (outcome === 'created') {
+            if (window.renderAll) window.renderAll();
+            DA_UI.showStatus('Arrow created.', 'success');
+          } else if (outcome === 'duplicate') {
+            DA_UI.showStatus('An identical arrow already exists.', 'warning');
+          } else {
             DA_UI.showStatus('Arrow cancelled.', 'info');
-            return;
           }
-          DA_STATE.pushUndo('add arrow');
-          DA_STATE.wordArrows.push({
-            fromProp: window.pendingArrowStart.propIndex,
-            fromStart: window.pendingArrowStart.start,
-            fromEnd: window.pendingArrowStart.end,
-            toProp: word.propIndex,
-            toStart: word.start,
-            toEnd: word.end
-          });
-          window.pendingArrowStart = null;
-          if (window.renderAll) window.renderAll();
-          DA_UI.showStatus('Arrow created.', 'success');
         }
       });
 
@@ -97,8 +124,17 @@ window.DA_MOUSE = {
       bracketCanvas.addEventListener('click', (e) => {
         const node = e.target.closest('.connection-node');
         if (node) {
-          const b = DA_STATE.brackets[parseInt(node.dataset.bracketIdx, 10)];
-          if (b) DA_EDITOR.handleDotClick(b.id, e.clientX, e.clientY);
+          const idx = parseInt(node.dataset.bracketIdx, 10);
+          const b = DA_STATE.brackets[idx];
+          if (!b) return;
+          // A collapsed node advertises zoom-in, so clicking it expands the
+          // section. Mid-connection (step 1) it stays a connect target so a
+          // collapsed bracket can be bracketed without expanding it first.
+          if (b.isCollapsed && DA_STATE.bracketSelectStep === 0) {
+            DA_EDITOR.toggleBracketCollapse(idx);
+            return;
+          }
+          DA_EDITOR.handleDotClick(b.id, e.clientX, e.clientY);
           return;
         }
 
@@ -128,8 +164,15 @@ window.DA_MOUSE = {
         const node = e.target.closest?.('.connection-node');
         if (node) {
           e.preventDefault();
-          const b = DA_STATE.brackets[parseInt(node.dataset.bracketIdx, 10)];
+          const idx = parseInt(node.dataset.bracketIdx, 10);
+          const b = DA_STATE.brackets[idx];
           if (b) {
+            // Same rule as the click handler: a collapsed node expands unless
+            // a connection is already in progress.
+            if (b.isCollapsed && DA_STATE.bracketSelectStep === 0) {
+              DA_EDITOR.toggleBracketCollapse(idx);
+              return;
+            }
             const rect = node.getBoundingClientRect();
             DA_EDITOR.handleDotClick(b.id, rect.left + rect.width / 2, rect.top + rect.height / 2);
           }
@@ -161,6 +204,17 @@ window.DA_MOUSE = {
             if (window.renderAll) window.renderAll();
           }
         }
+      });
+
+      wordArrowsSvg.addEventListener('contextmenu', (e) => {
+        const group = e.target.closest('.word-arrow-group');
+        if (!group) return;
+        e.preventDefault();
+        const i = parseInt(group.dataset.index, 10);
+        if (isNaN(i)) return;
+        DA_STATE.selectedArrowIdx = i;
+        if (window.renderAll) window.renderAll();
+        DA_UI.showArrowActions(i, e.clientY, e.clientX);
       });
 
       wordArrowsSvg.addEventListener('mouseover', (e) => {

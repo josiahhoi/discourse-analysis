@@ -301,7 +301,10 @@ function importBracket(data) {
     undoStack: [],
     redoStack: [],
     bracketSelectStep: 0,
-    firstBracketPoint: null
+    firstBracketPoint: null,
+    // Parallel column is transient view state for the previous passage.
+    parallelVerses: {},
+    parallelLabel: ''
   });
 
   // The file may carry the project id it was shared under — remember it (state

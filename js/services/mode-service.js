@@ -39,6 +39,10 @@ function toggleArrowMode(forceState) {
         if (DA_STATE.textEditMode) toggleTextEditMode();
         DA_UI.showStatus('Arrow mode on. Click a word to start.', 'success');
     } else {
+        // Leaving the mode discards any half-built arrow — otherwise the stale
+        // start would silently complete on the first click of a later session.
+        DA_STATE.pendingArrowStart = null;
+        if (window.DA_MOUSE) DA_MOUSE.hideArrowHighlight();
         if (forceState === undefined) DA_UI.showStatus('Arrow mode off.', 'success');
     }
 }

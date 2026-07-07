@@ -36,12 +36,12 @@ const undoDivideBtn = document.getElementById('undoDivideBtn');
 const redoBtn = document.getElementById('redoBtn');
 const textEditModeBtn = document.getElementById('textEditModeBtn');
 const arrowModeBtn = document.getElementById('arrowModeBtn');
+const alternateViewsBtn = document.getElementById('alternateViewsBtn');
 const openMenuBtn = document.getElementById('openMenuBtn');
 const reviewerNameInput = document.getElementById('reviewerName');
 const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 const openReferenceGuideBtn = document.getElementById('openReferenceGuideBtn');
 const closeReferenceBtn = document.getElementById('closeReferenceBtn');
-// arrowHighlight and pendingArrowStart are managed on window.* by mouse-handler.js
 
 // Global Aliases for backward compatibility in legacy handlers
 window.renderAll = () => DA_RENDERER.renderAll();
@@ -242,6 +242,9 @@ async function fetchPassage() {
     DA_STATE.propositions = result.propositions;
     DA_STATE.verseRefs = result.verseRefs;
     DA_STATE.verseBreaks = result.propositions.map(() => []);
+    // The parallel column is view state for the passage it was fetched for.
+    DA_STATE.parallelVerses = {};
+    DA_STATE.parallelLabel = '';
     DA_STATE.passageRef = result.passageRef;
     
     if (copyrightLabel) copyrightLabel.textContent = result.copyright;
@@ -337,6 +340,8 @@ if (importBtn) importBtn.addEventListener('click', () => {
     DA_STATE.verseRefs = [startVerse];
   }
   DA_STATE.verseBreaks = DA_STATE.propositions.map(() => []);
+  DA_STATE.parallelVerses = {};
+  DA_STATE.parallelLabel = '';
   DA_STATE.passageRef = passageRefInput?.value?.trim() || 'Imported text';
   if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
   const copyrightLabel = document.getElementById('copyrightLabel');
@@ -372,6 +377,10 @@ DA_MOUSE.initSidebarMouseHandlers(commentsPreview);
 
 if (arrowModeBtn) {
   arrowModeBtn.addEventListener('click', DA_MODES.toggleArrowMode);
+}
+
+if (alternateViewsBtn) {
+  alternateViewsBtn.addEventListener('click', DA_UI.showAlternateViewsMenu);
 }
 
 // (Word arrow interaction logic moved to DA_MOUSE.initWorkspaceMouseHandlers)

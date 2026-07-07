@@ -636,3 +636,71 @@ test('Escape cancels an in-progress bracket selection', async ({ page }) => {
 
   expect(errors).toEqual([]);
 });
+
+test('parallel column: fetch → view-only cells by verse → split keeps text on first row → hide clears', async ({ page }) => {
+  const errors = collectErrors(page);
+
+  // The suite's beforeEach aborts all non-localhost requests; this route is
+  // registered later so it wins for Bolls, serving a fake chapter instead.
+  await page.route(/bolls\.life\/get-text\//, (route) => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify([
+      { verse: 1, text: '起初，上帝創造天地。' },
+      { verse: 2, text: '地是空虛混沌，淵面黑暗。' },
+      { verse: 3, text: 'should never appear (not on screen)' },
+    ]),
+  }));
+
+  await importPassage(page); // Genesis 1:1-2, refs 1 and 2
+
+  // Alternate Views → Show Parallel Column… → pick CUV (first option) → Show.
+  await page.locator('#alternateViewsBtn').click();
+  await page.locator('#alternateViewsMenu .menu-item', { hasText: 'Show Parallel Column' }).click();
+  await page.locator('#parallelTranslationSelect').selectOption('CUV');
+  await page.locator('#parallelShowBtn').click();
+
+  // Cells render per verse; the container widens; the badge names the translation.
+  await expect(page.locator('.parallel-text')).toHaveCount(2);
+  await expect(page.locator('.parallel-text').nth(0)).toHaveText('起初，上帝創造天地。');
+  await expect(page.locator('.parallel-text').nth(1)).toHaveText('地是空虛混沌，淵面黑暗。');
+  await expect(page.locator('#propositions')).toHaveClass(/has-parallel/);
+  await expect(page.locator('#parallelBadge')).toHaveText('+ CUV');
+
+  // View-only: the cell is not contenteditable and typing at it changes nothing.
+  await expect(page.locator('.parallel-text').nth(0)).not.toHaveAttribute('contenteditable', /true/);
+  await page.locator('.parallel-text').nth(0).click();
+  await page.keyboard.type('XXX');
+  await expect(page.locator('.parallel-text').nth(0)).toHaveText('起初，上帝創造天地。');
+
+  // Splitting verse 1 into 1a/1b keeps the parallel text on the verse's FIRST
+  // row; the new 1b row gets an empty cell (verse-keyed, not row-keyed).
+  await setCaret(page, 0, 'In the beginning God'.length);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.proposition-block')).toHaveCount(3);
+  await expect(page.locator('.parallel-text')).toHaveCount(3);
+  await expect(page.locator('.parallel-text').nth(0)).toHaveText('起初，上帝創造天地。');
+  await expect(page.locator('.parallel-text').nth(1)).toHaveText('');
+  await expect(page.locator('.parallel-text').nth(2)).toHaveText('地是空虛混沌，淵面黑暗。');
+
+  // A saved project contains no parallel fields (transient view state).
+  const saved = await page.evaluate(() => window.DA_EXPORT.buildBracketData());
+  expect('parallelVerses' in saved).toBe(false);
+  expect('parallelLabel' in saved).toBe(false);
+
+  // Block Diagram still toggles from the same dropdown, and flips back.
+  await page.locator('#alternateViewsBtn').click();
+  await page.locator('#alternateViewsMenu .menu-item', { hasText: 'Block Diagram' }).click();
+  await expect(page.locator('.bracket-canvas-wrapper')).toHaveClass(/block-diagram-active/);
+  await page.locator('#alternateViewsBtn').click();
+  await page.locator('#alternateViewsMenu .menu-item', { hasText: 'Bracket View' }).click();
+  await expect(page.locator('.bracket-canvas-wrapper')).not.toHaveClass(/block-diagram-active/);
+
+  // Hide Parallel Column clears the cells, the class, and the badge.
+  await page.locator('#alternateViewsBtn').click();
+  await page.locator('#alternateViewsMenu .menu-item', { hasText: 'Hide Parallel Column' }).click();
+  await expect(page.locator('.parallel-text')).toHaveCount(0);
+  await expect(page.locator('#propositions')).not.toHaveClass(/has-parallel/);
+  await expect(page.locator('#parallelBadge')).toBeHidden();
+
+  expect(errors).toEqual([]);
+});

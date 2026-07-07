@@ -36,6 +36,13 @@ window.DA_STATE = {
   // never saved into bracket files. Default here; DA_UI.initZoom() overwrites
   // it from localStorage at startup, same shape as isRTL below.
   zoomLevel: 100,
+  // Parallel column (Alternate Views): a second translation shown VIEW-ONLY
+  // beside the text, keyed by VERSE number (so proposition splits/merges never
+  // touch it). Transient view state like showCommentsEnabled — deliberately
+  // NOT undo-snapshotted, NOT serialized into saves/exports/cloud docs, and
+  // cleared whenever the document is replaced.
+  parallelVerses: {},
+  parallelLabel: '',
   indentation: [],
   activeCommentTarget: null,
   bracketHighlights: {},

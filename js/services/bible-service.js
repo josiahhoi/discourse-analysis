@@ -1,5 +1,18 @@
 const PASSAGE_REF_REGEX = /^(\d?\s*[a-zA-Z\s]+?)\s*(\d+)(?::(\d+)(?:-(\d+))?)?$/;
 
+/**
+ * References can arrive with typographic characters the regex above doesn't
+ * know: the ESV API's canonical form uses an en dash ("Romans 3:21–26"),
+ * and pasted refs may carry non-breaking spaces. Normalize to plain ASCII
+ * before every parse.
+ */
+function normalizeRefQuery(query) {
+  return String(query || '')
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, '-') // hyphens, en/em dashes, minus
+    .replace(/\u00A0/g, ' ') // non-breaking space
+    .trim();
+}
+
 // ── SBLGNT Source (NT Greek) ──────────────────────────────────────────────────
 
 async function fetchSBLGNTPassage(query, ref) {
@@ -51,10 +64,38 @@ async function fetchSBLGNTPassage(query, ref) {
   };
 }
 
+/**
+ * SBLGNT counterpart of fetchParallelVerses: the whole chapter as a
+ * { verseNum: greekText } map for the parallel column. Repeated verse lines
+ * in the source file (paragraph breaks) are joined, matching
+ * fetchSBLGNTPassage above.
+ */
+async function fetchSBLGNTChapterMap(query) {
+  const ref = parsePassageReference(query);
+  if (!ref || !ref.file) throw new Error('SBLGNT covers the New Testament only.');
+
+  const res = await fetch(`${DA_CONSTANTS.SBLGNT_BASE}${ref.file}`);
+  if (!res.ok) throw new Error(`SBLGNT fetch error: ${res.status}`);
+
+  const map = {};
+  for (const line of (await res.text()).split('\n')) {
+    const parts = line.split('\t');
+    if (parts.length < 2) continue;
+    const m = parts[0].trim().match(/(\d+):(\d+)$/);
+    if (!m || parseInt(m[1]) !== ref.chapter) continue;
+    const v = String(parseInt(m[2]));
+    const greek = parts[1].trim();
+    map[v] = map[v] ? `${map[v]} ${greek}` : greek;
+  }
+
+  if (!Object.keys(map).length) throw new Error('No verses found in SBLGNT for this chapter.');
+  return map;
+}
+
 // ── Bolls Source ──────────────────────────────────────────────────────────────
 
 async function fetchFromBolls(translation, query) {
-  const match = query.match(PASSAGE_REF_REGEX);
+  const match = normalizeRefQuery(query).match(PASSAGE_REF_REGEX);
   if (!match) throw new Error('Could not parse reference. Use format like "John 1:1-5"');
 
   const bookName = match[1].trim().toLowerCase().replace(/\s+/g, '');
@@ -85,10 +126,45 @@ async function fetchFromBolls(translation, query) {
   return { text, passageRef: ref, copyright: `(${translation})` };
 }
 
+/**
+ * Fetch a chapter as a per-verse map for the parallel column (Alternate
+ * Views): { "97": "我何等愛慕你的律法…", … }. Unlike fetchFromBolls (which
+ * joins verses into one text for the primary import path), the parallel
+ * column is keyed by verse so proposition splits/merges never disturb it.
+ * Returns the WHOLE chapter; the caller keeps only the verses on screen.
+ */
+async function fetchParallelVerses(translation, query) {
+  const match = normalizeRefQuery(query).match(PASSAGE_REF_REGEX);
+  if (!match) throw new Error('Could not read this passage reference. Parallel needs a reference like "John 1:1-5".');
+
+  // The Greek NT is not on Bolls - route to the app's SBLGNT source instead.
+  if (translation === 'SBLGNT') return fetchSBLGNTChapterMap(query);
+
+  const bookName = match[1].trim().toLowerCase().replace(/\s+/g, '');
+  const chapter = match[2];
+  const bollsId = DA_CONSTANTS.BOLLS_BOOKS[bookName];
+  if (!bollsId) throw new Error(`Book "${match[1]}" not recognized.`);
+
+  const res = await fetch(`https://bolls.life/get-text/${translation}/${bollsId}/${chapter}/`);
+  if (!res.ok) throw new Error(`Bolls API error: ${res.status}`);
+  const verses = await res.json();
+  if (!Array.isArray(verses) || verses.length === 0) throw new Error('No verses found.');
+
+  const map = {};
+  verses.forEach((v) => {
+    // Display-only text: strip any markup and zero-width characters.
+    map[String(v.verse)] = String(v.text)
+      .replace(/<[^>]*>/g, '')
+      .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
+      .trim();
+  });
+  return map;
+}
+
 // ── Parse helpers ─────────────────────────────────────────────────────────────
 
 function parsePassageReference(query) {
-  const match = query.match(PASSAGE_REF_REGEX);
+  const match = normalizeRefQuery(query).match(PASSAGE_REF_REGEX);
   if (!match) return null;
 
   const bookNameKey = match[1].trim().toLowerCase().replace(/\s+/g, '');
@@ -216,5 +292,6 @@ async function fetchPassageData(version, query) {
 }
 
 window.DA_BIBLE = {
-  fetchPassageData
+  fetchPassageData,
+  fetchParallelVerses
 };

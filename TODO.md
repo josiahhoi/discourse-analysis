@@ -98,3 +98,8 @@ From the full code review (July 2026). Organized by effort. Check items off as t
 - [x] Block diagram now uses profile colors.
 - [x] Salted the cloud-profile password hash (with legacy migration) + reuse warning.
 - [x] Tightened the CSP (no `unsafe-inline`/`unsafe-eval` for scripts).
+- [x] Parallel column (Alternate Views dropdown): a second translation (CUV, KRV,
+  RV1960, …) shown view-only beside the text, keyed by verse so splits/merges never
+  disturb it. Transient view state — never saved into projects/cloud docs. Possible
+  follow-ups: more translations in the picker, per-proposition alignment (hard),
+  showing the column in the block diagram view.

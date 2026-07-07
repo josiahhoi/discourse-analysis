@@ -156,3 +156,49 @@ test('fetchPassageData never attempts the ESV API for NASB (unsupported translat
   assert.equal(esvCalled, false);
   assert.equal(result.source, 'bolls');
 });
+
+// ── normalizeRefQuery: typographic refs (ESV API canonical uses an en dash) ──
+
+test('parsePassageReference handles an en-dash range like the ESV API canonical form', () => {
+  const sb = setup();
+  const ref = sb.parsePassageReference('Romans 3:21–26'); // en dash
+  assert.equal(ref.bookName, 'Romans');
+  assert.equal(ref.chapter, 3);
+  assert.equal(ref.startVerse, 21);
+  assert.equal(ref.endVerse, 26);
+});
+
+test('fetchParallelVerses parses an en-dash reference and maps the chapter by verse', async () => {
+  const sb = setup();
+  const urls = [];
+  sb.fetch = async (url) => {
+    urls.push(url);
+    return { ok: true, json: async () => [{ verse: 21, text: 'v21 <b>tagged</b>' }, { verse: 22, text: 'v22' }] };
+  };
+  const map = await sb.window.DA_BIBLE.fetchParallelVerses('CUV', 'Romans 3:21–26'); // en dash
+  assert.ok(urls[0].includes('/CUV/'), 'fetched from Bolls with the chosen translation');
+  assert.deepEqual(map, { 21: 'v21 tagged', 22: 'v22' });
+});
+
+test('fetchParallelVerses routes SBLGNT to the GitHub source and keys the chapter by verse', async () => {
+  const sb = setup();
+  const urls = [];
+  sb.fetch = async (url) => {
+    urls.push(url);
+    return {
+      ok: true,
+      text: async () => 'Ro 3:20\tκείμενο κ\nRo 3:21\tΝυνὶ δὲ\nRo 3:21\tχωρὶς νόμου\nRo 4:1\tἄλλο κεφάλαιο\n',
+    };
+  };
+  const map = await sb.window.DA_BIBLE.fetchParallelVerses('SBLGNT', 'Rom 3:21-26');
+  assert.ok(urls[0].includes('Rom.txt'), 'fetched the SBLGNT book file, not Bolls');
+  assert.equal(map['21'], 'Νυνὶ δὲ χωρὶς νόμου', 'repeated verse lines are joined');
+  assert.equal(map['20'], 'κείμενο κ', 'whole chapter returned (caller filters)');
+  assert.equal(map['1'], undefined, 'other chapters excluded');
+});
+
+test('fetchParallelVerses (SBLGNT) rejects Old Testament books with a clear message', async () => {
+  const sb = setup();
+  sb.fetch = async () => { throw new Error('should not fetch'); };
+  await assert.rejects(() => sb.window.DA_BIBLE.fetchParallelVerses('SBLGNT', 'Psalm 117'), /New Testament only/);
+});

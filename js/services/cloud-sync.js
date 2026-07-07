@@ -188,6 +188,15 @@ function handleCloudData(data) {
     data = DA_PERSISTENCE.normalizeBracketData(data);
   }
 
+  // A cloud snapshot can swap the passage entirely; the local parallel column
+  // (transient view state) belongs to the old passage in that case. Keep it
+  // across same-passage snapshots (routine sync echoes) so a viewer's column
+  // doesn't vanish mid-session.
+  if ((data.passageRef || '') !== DA_STATE.passageRef) {
+    DA_STATE.parallelVerses = {};
+    DA_STATE.parallelLabel = '';
+  }
+
   DA_STATE.propositions = data.propositions || [];
   DA_STATE.verseRefs = data.verseRefs || [];
   DA_STATE.verseBreaks = data.verseBreaks || []; // renderer pads to length
