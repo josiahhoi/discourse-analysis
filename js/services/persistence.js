@@ -44,6 +44,17 @@ function normalizeBracketData(data) {
     data = { ...data, verseRefs: data.verseRefs.map(normalizeVerseRef) };
   }
 
+  // Parallel column: align parallelTexts to propositions.length (same guard
+  // pattern as verseBreaks below) and coerce entries to strings. Old files
+  // simply lack the field -> all-empty cells with an empty label = column off.
+  data = {
+    ...data,
+    parallelTexts: data.propositions.map((_, i) =>
+      (Array.isArray(data.parallelTexts) && typeof data.parallelTexts[i] === 'string') ? data.parallelTexts[i] : ''),
+    parallelLabel: typeof data.parallelLabel === 'string' ? data.parallelLabel : '',
+    parallelHidden: !!data.parallelHidden
+  };
+
   // ── Verse boundaries: legacy invisible markers → structured verseBreaks ────
   // Old files hid a zero-width \u200B character in the text wherever a merge
   // crossed a verse boundary. Strip those out of the text, record each position
@@ -286,6 +297,10 @@ function importBracket(data) {
     verseBreaks: Array.isArray(data.verseBreaks)
       ? data.verseBreaks.map((a) => (Array.isArray(a) ? a.slice() : []))
       : [],
+    // Parallel column travels with the file (normalizeBracketData aligned it).
+    parallelTexts: data.parallelTexts.slice(),
+    parallelLabel: data.parallelLabel,
+    parallelHidden: data.parallelHidden,
     brackets: (Array.isArray(data.brackets) ? data.brackets : (Array.isArray(data.arcs) ? data.arcs : [])).map((a) => ({ ...a })),
     formatTags: Array.isArray(data.formatTags) ? data.formatTags.map((t) => ({ ...t })) : [],
     wordArrows: Array.isArray(data.wordArrows) ? data.wordArrows.map((w) => ({ ...w })) : [],

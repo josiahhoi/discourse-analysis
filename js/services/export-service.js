@@ -21,6 +21,10 @@ const DA_EXPORT = {
       propositions: DA_STATE.propositions,
       verseRefs: DA_STATE.verseRefs,
       verseBreaks: DA_STATE.verseBreaks.map((a) => (a || []).slice()),
+      // Parallel column (second text column): per-row, aligned to propositions.
+      parallelTexts: (DA_STATE.parallelTexts || []).slice(),
+      parallelLabel: DA_STATE.parallelLabel || '',
+      parallelHidden: !!DA_STATE.parallelHidden,
       brackets: DA_STATE.brackets.map((a) => ({ ...a })),
       formatTags: DA_STATE.formatTags.map((t) => ({ ...t })),
       wordArrows: DA_STATE.wordArrows.map((w) => ({ ...w })),

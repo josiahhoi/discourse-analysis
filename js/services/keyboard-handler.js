@@ -14,10 +14,14 @@ window.DA_KEYBOARD = {
           // there's nothing to undo natively — run the same document-level undo as
           // the Undo button, so structural actions are undoable from the keyboard.
           const i = parseInt(block.dataset.index, 10);
-          const span = block.querySelector('.proposition-text');
+          // Check the span focus is actually in — a parallel cell commits to
+          // parallelTexts, the primary span to propositions.
+          const inCell = el.closest('.parallel-text');
+          const span = inCell || block.querySelector('.proposition-text');
           let hasUncommitted = false;
           if (span && !isNaN(i) && window.DA_EDITOR && DA_EDITOR.extractFormatTags) {
-            hasUncommitted = DA_EDITOR.extractFormatTags(span, i).text !== DA_STATE.propositions[i];
+            const stored = inCell ? (DA_STATE.parallelTexts[i] || '') : DA_STATE.propositions[i];
+            hasUncommitted = DA_EDITOR.extractFormatTags(span, i).text !== stored;
           }
           if (hasUncommitted) return; // native undo for the live edit
           e.preventDefault();
@@ -45,10 +49,12 @@ window.DA_KEYBOARD = {
           // Mirrors the undo guard above: don't hijack native field-level redo
           // while there's an uncommitted edit sitting in this field.
           const i = parseInt(block.dataset.index, 10);
-          const span = block.querySelector('.proposition-text');
+          const inCell = el.closest('.parallel-text');
+          const span = inCell || block.querySelector('.proposition-text');
           let hasUncommitted = false;
           if (span && !isNaN(i) && window.DA_EDITOR && DA_EDITOR.extractFormatTags) {
-            hasUncommitted = DA_EDITOR.extractFormatTags(span, i).text !== DA_STATE.propositions[i];
+            const stored = inCell ? (DA_STATE.parallelTexts[i] || '') : DA_STATE.propositions[i];
+            hasUncommitted = DA_EDITOR.extractFormatTags(span, i).text !== stored;
           }
           if (hasUncommitted) return;
           e.preventDefault();
@@ -177,7 +183,9 @@ window.DA_KEYBOARD = {
           // text. In Text Edit mode typing wins, so this is skipped there.
           if (k === 'c' && !DA_STATE.textEditMode && window.DA_UI && DA_UI.getPropositionSelection) {
             const target = DA_UI.getPropositionSelection();
-            if (target) {
+            // Comments are primary-text-only; a parallel-cell selection falls
+            // through to the panel toggle below.
+            if (target && !target.pcol) {
               e.preventDefault();
               DA_UI.showCommentPopoverForText(target.propIndex, target.start, target.end);
               return;
@@ -232,7 +240,16 @@ window.DA_KEYBOARD = {
       const block = e.target.closest('.proposition-block');
       if (!block) return;
       const i = parseInt(block.dataset.index, 10);
-      const textSpan = block.querySelector('.proposition-text') || block;
+      // The handler serves both columns: when the event comes from inside a
+      // parallel cell, "textSpan" IS that cell and split/merge/format act on
+      // parallelTexts instead of propositions.
+      const parallelSpan = e.target.closest('.parallel-text');
+      const inParallel = !!parallelSpan;
+      const textSpan = parallelSpan || block.querySelector('.proposition-text') || block;
+
+      // IME safety: during CJK composition Enter/Backspace belong to the IME
+      // (picking or cancelling candidates), never to split/merge.
+      if ((e.key === 'Enter' || e.key === 'Backspace') && (e.isComposing || e.keyCode === 229)) return;
 
       // --- KEYBOARD BRACKET CREATION (focused dot) ---
       // Dots are focusable buttons (tabindex/role set in the renderer).
@@ -265,16 +282,19 @@ window.DA_KEYBOARD = {
         e.preventDefault();
         const command = e.key === 'b' ? 'bold' : 'underline';
         document.execCommand(command, false, null);
-        
+
         if (textSpan) {
-          const result = DA_EDITOR.extractFormatTags(textSpan, i);
-          DA_STATE.formatTags = DA_STATE.formatTags.filter(f => f.propIndex !== i).concat(result.tags);
+          const result = DA_EDITOR.extractFormatTags(textSpan, i, inParallel);
+          // Rebuild only the focused column's tags for this row.
+          DA_STATE.formatTags = DA_STATE.formatTags
+            .filter(f => !(f.propIndex === i && !!f.pcol === inParallel))
+            .concat(result.tags);
         }
         return;
       }
-      
-      // --- TEXT SHIFTING ---
-      if (hasSelection && isArrowKey && !e.shiftKey) {
+
+      // --- TEXT SHIFTING (primary text only) ---
+      if (hasSelection && isArrowKey && !e.shiftKey && !inParallel) {
         const range = sel.getRangeAt(0);
         if (textSpan.contains(range.commonAncestorContainer) || textSpan === range.commonAncestorContainer) {
             e.preventDefault();
@@ -417,26 +437,33 @@ window.DA_KEYBOARD = {
                 return;
               }
 
-              // Commit this block's current text before merging — edits otherwise
+              // Commit the focused cell/text before merging — edits otherwise
               // only commit on focusout, so a merge would run on stale text.
-              // Remap offset anchors (arrows/comments/verse boundaries) onto the
-              // new text first, exactly as the focusout commit does.
-              const _c = DA_EDITOR.extractFormatTags(textSpan, i);
-              if (_c.text !== DA_STATE.propositions[i]) {
-                remapPropositionAnchors(i, DA_STATE.propositions[i], _c.text);
+              const _c = DA_EDITOR.extractFormatTags(textSpan, i, inParallel);
+              if (inParallel) {
+                DA_STATE.parallelTexts[i] = _c.text;
+                DA_STATE.formatTags = DA_STATE.formatTags
+                  .filter(f => !(f.propIndex === i && f.pcol)).concat(_c.tags);
+              } else {
+                // Remap offset anchors (arrows/comments/verse boundaries) onto
+                // the new text first, exactly as the focusout commit does.
+                if (_c.text !== DA_STATE.propositions[i]) {
+                  remapPropositionAnchors(i, DA_STATE.propositions[i], _c.text);
+                }
+                DA_STATE.propositions[i] = _c.text;
+                DA_STATE.formatTags = DA_STATE.formatTags
+                  .filter(f => !(f.propIndex === i && !f.pcol)).concat(_c.tags);
               }
-              DA_STATE.propositions[i] = _c.text;
-              DA_STATE.formatTags = DA_STATE.formatTags.filter(f => f.propIndex !== i).concat(_c.tags);
 
-              const prevLen = DA_STATE.propositions[i - 1].length;
-              DA_EDITOR.mergePropositions(i);
+              const res = DA_EDITOR.mergeCellIntoPrevious(inParallel ? 'parallel' : 'primary', i);
+              if (!res) return;
               if (window.renderAll) window.renderAll();
               requestAnimationFrame(() => {
                 const prevBlock = container.querySelector(`.proposition-block[data-index="${i - 1}"]`);
-                const prevTextSpan = prevBlock?.querySelector('.proposition-text');
-                if (prevTextSpan) {
-                  prevTextSpan.focus();
-                  DA_EDITOR.setSelectionByGlobalOffset(prevTextSpan, prevLen, prevLen);
+                const prevSpan = prevBlock?.querySelector(inParallel ? '.parallel-text' : '.proposition-text');
+                if (prevSpan) {
+                  prevSpan.focus();
+                  DA_EDITOR.setSelectionByGlobalOffset(prevSpan, res.seam, res.seam);
                 }
               });
               return;
@@ -510,27 +537,37 @@ window.DA_KEYBOARD = {
           preRange.setStart(textSpan, 0);
           preRange.setEnd(range.startContainer, range.startOffset);
           const offset = preRange.toString().length;
-          // Commit this block's current text before splitting — edits otherwise
-          // only commit on focusout, so the split would run on stale text (and the
-          // length guard could even make Enter silently do nothing).
-          const _c = DA_EDITOR.extractFormatTags(textSpan, i);
-          if (_c.text !== DA_STATE.propositions[i]) {
-            // Remap offset anchors (arrows/comments/verse boundaries) onto the
-            // uncommitted text before splitting against it.
-            remapPropositionAnchors(i, DA_STATE.propositions[i], _c.text);
+          // Commit the focused cell/text before splitting — edits otherwise
+          // only commit on focusout, so the split would run on stale text (and
+          // the length guard could even make Enter silently do nothing).
+          const _c = DA_EDITOR.extractFormatTags(textSpan, i, inParallel);
+          if (inParallel) {
+            DA_STATE.parallelTexts[i] = _c.text;
+            DA_STATE.formatTags = DA_STATE.formatTags
+              .filter(f => !(f.propIndex === i && f.pcol)).concat(_c.tags);
+            DA_EDITOR.splitParallelAtOffset(i, offset);
+          } else {
+            if (_c.text !== DA_STATE.propositions[i]) {
+              // Remap offset anchors (arrows/comments/verse boundaries) onto the
+              // uncommitted text before splitting against it.
+              remapPropositionAnchors(i, DA_STATE.propositions[i], _c.text);
+            }
+            DA_STATE.propositions[i] = _c.text;
+            DA_STATE.formatTags = DA_STATE.formatTags
+              .filter(f => !(f.propIndex === i && !f.pcol)).concat(_c.tags);
+            DA_EDITOR.splitPropositionAtOffset(i, offset);
           }
-          DA_STATE.propositions[i] = _c.text;
-          DA_STATE.formatTags = DA_STATE.formatTags.filter(f => f.propIndex !== i).concat(_c.tags);
-          DA_EDITOR.splitPropositionAtOffset(i, offset);
 
           if (window.renderAll) window.renderAll();
-          
+
+          // Both the flow and insert cases put the second half on row i+1 —
+          // land the caret at its start, in the same column the user split.
           requestAnimationFrame(() => {
             const newBlock = container.querySelector(`.proposition-block[data-index="${i + 1}"]`);
-            const newTextSpan = newBlock?.querySelector('.proposition-text');
-            if (newTextSpan) {
-              newTextSpan.focus();
-              DA_EDITOR.setSelectionByGlobalOffset(newTextSpan, 0, 0);
+            const newSpan = newBlock?.querySelector(inParallel ? '.parallel-text' : '.proposition-text');
+            if (newSpan) {
+              newSpan.focus();
+              DA_EDITOR.setSelectionByGlobalOffset(newSpan, 0, 0);
             }
           });
         }

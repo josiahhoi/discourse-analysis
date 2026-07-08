@@ -61,7 +61,7 @@
             <div class="shortcut-item"><kbd>T</kbd> <span>Text Edit mode</span></div>
             <div class="shortcut-item"><kbd>A</kbd> <span>Arrow mode</span></div>
             <div class="shortcut-item"><kbd>B</kbd> <span>Block Diagram</span></div>
-            <div class="shortcut-item"><span>Alternate Views</span> <span>Block Diagram / Parallel Column (view-only)</span></div>
+            <div class="shortcut-item"><span>Alternate Views</span> <span>Block Diagram / Parallel Column (editable, saved with project)</span></div>
             <div class="shortcut-item"><kbd>C</kbd> <span>Comments (panel, or comment on selected text)</span></div>
             <div class="shortcut-item"><kbd>Esc</kbd> <span>Exit mode / close dialog</span></div>
             <div class="shortcut-item"><kbd>Tab</kbd>/<kbd>↑↓</kbd>+<kbd>Enter</kbd> <span>Brackets by keyboard (via the dots)</span></div>
@@ -133,7 +133,7 @@
             </button>
             <span id="passageRef" contenteditable="true" role="textbox" title="Click to edit passage reference">—</span>
             <span class="copyright" id="copyrightLabel">(ESV)</span>
-            <span class="copyright parallel-badge" id="parallelBadge" style="display: none;" title="Parallel translation shown (view-only)"></span>
+            <span class="copyright parallel-badge" id="parallelBadge" style="display: none;" title="Parallel column shown (editable; saved with the project)"></span>
             <div id="cloudHeaderStatus" class="cloud-status-badge" style="display: none;">
               <span class="cloud-sync-dot" title="Sync status"></span>
               <span class="cloud-icon">🌐</span>
@@ -145,7 +145,7 @@
           <div class="workspace-toolbar" id="workspaceToolbar">
             <button id="textEditModeBtn" type="button" class="toolbar-btn" aria-keyshortcuts="t" title="Toggle text edit mode: edit text freely with newlines and indentation. (T)">Text Edit (T)</button>
             <button id="arrowModeBtn" type="button" class="toolbar-btn" aria-keyshortcuts="a" title="Toggle arrow mode: draw word-to-word arrows. (A)">Add Arrows (A)</button>
-            <button id="alternateViewsBtn" type="button" class="toolbar-btn" aria-haspopup="menu" title="Alternate views: block diagram (B) or a parallel translation column.">Alternate Views ▾</button>
+            <button id="alternateViewsBtn" type="button" class="toolbar-btn" aria-haspopup="menu" title="Alternate views: block diagram (B) or an editable parallel translation column.">Alternate Views ▾</button>
             <div class="toolbar-divider"></div>
             <button id="undoDivideBtn" type="button" class="toolbar-btn undo-action-btn" aria-keyshortcuts="Control+Z" title="Undo last action (Ctrl/Cmd+Z)">Undo</button>
             <button id="redoBtn" type="button" class="toolbar-btn undo-action-btn" aria-keyshortcuts="Control+Y" title="Redo last undone action (Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z)">Redo</button>

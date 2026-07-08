@@ -113,7 +113,7 @@ function showBracketActions(bracketIdx, centerY, centerX) {
   setupClickOutside(popover, () => popover.remove());
 }
 
-function showTextContextMenu(propIndex, start, end, centerY, centerX) {
+function showTextContextMenu(propIndex, start, end, centerY, centerX, pcol) {
   const existing = document.getElementById('textContextMenu');
   if (existing) existing.remove();
 
@@ -128,9 +128,10 @@ function showTextContextMenu(propIndex, start, end, centerY, centerX) {
   const menu = document.createElement('div');
   menu.id = 'textContextMenu';
   menu.className = 'context-menu';
+  // Comments are primary-text-only; a parallel-cell selection gets colors only.
   menu.innerHTML = `
-    <div class="menu-item" data-action="add-comment">Add Comment</div>
-    <div class="menu-divider"></div>
+    ${pcol ? '' : `<div class="menu-item" data-action="add-comment">Add Comment</div>
+    <div class="menu-divider"></div>`}
     <div class="color-palette-title">Color Code</div>
     <div class="color-palette">
       ${colors.map(c => `<button class="color-swatch" data-color="${c.val}" title="${c.name}" style="background-color: ${c.val}"></button>`).join('')}
@@ -143,7 +144,7 @@ function showTextContextMenu(propIndex, start, end, centerY, centerX) {
   document.body.appendChild(menu);
   clampToViewport(menu);
 
-  menu.querySelector('[data-action="add-comment"]').addEventListener('click', (e) => {
+  menu.querySelector('[data-action="add-comment"]')?.addEventListener('click', (e) => {
     e.stopPropagation();
     menu.remove();
     showCommentPopoverForText(propIndex, start, end);
@@ -156,16 +157,19 @@ function showTextContextMenu(propIndex, start, end, centerY, centerX) {
       
       DA_STATE.pushUndo('color text');
 
-      // Replace, don't layer: drop any existing color tag on this line whose
-      // range overlaps the selection (half-open [start, end) overlap test), then
-      // add the new one. This also drives "clear" — selecting a range and
-      // clearing removes every color touching it, instead of only an exact match.
+      // Replace, don't layer: drop any existing color tag on this line's SAME
+      // COLUMN whose range overlaps the selection (half-open [start, end)
+      // overlap test), then add the new one. This also drives "clear" —
+      // selecting a range and clearing removes every color touching it,
+      // instead of only an exact match.
       DA_STATE.formatTags = DA_STATE.formatTags.filter(t =>
-        !(t.type === 'color' && t.propIndex === propIndex && t.start < end && start < t.end)
+        !(t.type === 'color' && t.propIndex === propIndex && !!t.pcol === !!pcol && t.start < end && start < t.end)
       );
 
       if (color !== 'clear') {
-        DA_STATE.formatTags.push({ propIndex, start, end, type: 'color', color });
+        const tag = { propIndex, start, end, type: 'color', color };
+        if (pcol) tag.pcol = true;
+        DA_STATE.formatTags.push(tag);
       }
       
       menu.remove();
@@ -589,27 +593,34 @@ function showExportMenu(e) {
 
 /**
  * "Alternate Views" toolbar dropdown: Block Diagram (existing view toggle) and
- * the view-only Parallel Column (second translation, keyed by verse, never
- * saved into the project — see DA_STATE.parallelVerses).
+ * the Parallel Column — a second, fully editable text column stored per-row in
+ * DA_STATE.parallelTexts and saved with the project.
  */
 function showAlternateViewsMenu(e) {
   const existing = document.getElementById('alternateViewsMenu');
   if (existing) { existing.remove(); return; }
 
   const blockActive = !!(window.DA_BLOCK && DA_BLOCK.isActive());
-  const parallelActive = !!(DA_STATE.parallelLabel && Object.keys(DA_STATE.parallelVerses).length);
+  const hasColumn = !!DA_STATE.parallelLabel;
+  const columnVisible = hasColumn && !DA_STATE.parallelHidden;
 
+  // Three column states: none yet (fetch via dialog), visible (hide = conceal,
+  // data kept), hidden (unhide restores the previous work without refetching).
+  // Only "Change translation" replaces the cells.
   const menu = document.createElement('div');
   menu.id = 'alternateViewsMenu';
   menu.className = 'context-menu';
   menu.innerHTML = `
     <div class="menu-item${blockActive ? ' active' : ''}" data-action="block-diagram">${blockActive ? 'Bracket View (B)' : 'Block Diagram (B)'}</div>
     <hr>
-    ${parallelActive ? `
-      <div class="menu-item" data-action="parallel-change">Change Parallel Translation… (${DA_UI.escapeHtml(DA_STATE.parallelLabel)})</div>
+    ${!hasColumn ? `
+      <div class="menu-item" data-action="parallel-fetch">Show Parallel Column…</div>
+    ` : columnVisible ? `
       <div class="menu-item" data-action="parallel-hide">Hide Parallel Column</div>
+      <div class="menu-item" data-action="parallel-change">Change Parallel Translation… (${DA_UI.escapeHtml(DA_STATE.parallelLabel)})</div>
     ` : `
-      <div class="menu-item" data-action="parallel-show">Show Parallel Column…</div>
+      <div class="menu-item" data-action="parallel-unhide">Show Parallel Column (${DA_UI.escapeHtml(DA_STATE.parallelLabel)})</div>
+      <div class="menu-item" data-action="parallel-change">Change Parallel Translation… (${DA_UI.escapeHtml(DA_STATE.parallelLabel)})</div>
     `}
   `;
 
@@ -628,12 +639,19 @@ function showAlternateViewsMenu(e) {
       const action = item.dataset.action;
       menu.remove();
       if (action === 'block-diagram') DA_BLOCK.toggle();
-      if (action === 'parallel-show' || action === 'parallel-change') showParallelDialog();
+      if (action === 'parallel-fetch' || action === 'parallel-change') showParallelDialog();
       if (action === 'parallel-hide') {
-        DA_STATE.parallelVerses = {};
-        DA_STATE.parallelLabel = '';
+        // Non-destructive: conceal the cells, keep the text/formatting. The
+        // column keeps following splits/merges while hidden.
+        DA_STATE.parallelHidden = true;
         if (window.renderAll) window.renderAll();
-        showStatus('Parallel column hidden.', 'info');
+        showStatus('Parallel column hidden — its text is kept with the project.', 'info');
+      }
+      if (action === 'parallel-unhide') {
+        DA_STATE.parallelHidden = false;
+        if (window.DA_BLOCK && DA_BLOCK.isActive()) DA_BLOCK.setActive(false);
+        if (window.renderAll) window.renderAll();
+        showStatus(`Parallel column: ${DA_STATE.parallelLabel}.`, 'success');
       }
     });
   });
@@ -671,7 +689,7 @@ function showParallelDialog() {
       <select id="parallelTranslationSelect" aria-label="Parallel translation" style="width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); box-sizing: border-box;">
         ${PARALLEL_TRANSLATIONS.map((t) => `<option value="${t.code}"${t.code === DA_STATE.parallelLabel ? ' selected' : ''}>${DA_UI.escapeHtml(t.name)}</option>`).join('')}
       </select>
-      <div class="hint-small" style="margin: 6px 0 8px; font-size: 0.7rem;">View-only, shown beside the text by verse. Not saved with the project.</div>
+      <div class="hint-small" style="margin: 6px 0 8px; font-size: 0.7rem;">Editable beside the text (splits with Enter in Text Edit mode) and saved with the project.</div>
       <button id="parallelShowBtn" class="series" style="width: 100%; padding: 6px;">Show</button>
     </div>
   `;
@@ -685,25 +703,29 @@ function showParallelDialog() {
     const code = dialog.querySelector('#parallelTranslationSelect').value;
     dialog.remove();
 
+    // Replacing an existing column overwrites its (possibly edited) cells —
+    // confirm first. The pushUndo below makes it recoverable either way.
+    if (DA_STATE.parallelLabel
+      && !confirm(`Replace the current ${DA_STATE.parallelLabel} column (including any edits) with ${code}? Ctrl+Z undoes this.`)) return;
+
     // The parallel column belongs to the bracket view.
     if (window.DA_BLOCK && DA_BLOCK.isActive()) DA_BLOCK.setActive(false);
 
     showStatus(`Fetching ${code}…`, 'info');
     try {
       const chapterMap = await DA_BIBLE.fetchParallelVerses(code, DA_STATE.passageRef || '');
-      // Keep only the verses actually on screen. versesInRef is the SAME
-      // expansion computeParallelCells renders with, so the fetch filter and
-      // the cell mapper can never disagree about which verses exist.
-      const wanted = new Set();
-      DA_STATE.verseRefs.forEach((ref) => {
-        DA_RENDERER.versesInRef(ref).forEach((v) => wanted.add(v));
-      });
-      const kept = {};
-      wanted.forEach((v) => { if (chapterMap[v]) kept[v] = chapterMap[v]; });
-      if (!Object.keys(kept).length) throw new Error('No matching verses found for this passage.');
+      // Distribute the chapter onto the current rows ONCE (each verse's text
+      // lands on its first row); from here on the cells are ordinary per-row
+      // editable text in DA_STATE.parallelTexts.
+      const cells = DA_RENDERER.distributeVersesToRows(chapterMap);
+      if (!cells.some(t => t)) throw new Error('No matching verses found for this passage.');
 
-      DA_STATE.parallelVerses = kept;
+      DA_STATE.pushUndo('show parallel column');
+      DA_STATE.parallelTexts = cells;
       DA_STATE.parallelLabel = code;
+      DA_STATE.parallelHidden = false;
+      // Cell formatting belonged to the previous column's text, if any.
+      DA_STATE.formatTags = DA_STATE.formatTags.filter(f => !f.pcol);
       if (window.renderAll) window.renderAll();
       showStatus(`Parallel column: ${code}.`, 'success');
     } catch (err) {

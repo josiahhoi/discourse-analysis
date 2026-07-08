@@ -117,7 +117,10 @@ From the full code review (July 2026). Organized by effort. Check items off as t
 - [x] Salted the cloud-profile password hash (with legacy migration) + reuse warning.
 - [x] Tightened the CSP (no `unsafe-inline`/`unsafe-eval` for scripts).
 - [x] Parallel column (Alternate Views dropdown): a second translation (CUV, KRV,
-  RV1960, …) shown view-only beside the text, keyed by verse so splits/merges never
-  disturb it. Transient view state — never saved into projects/cloud docs. Possible
-  follow-ups: more translations in the picker, per-proposition alignment (hard),
-  showing the column in the block diagram view.
+  RV1960, Greek, Hebrew, …) beside the text. Now a real second text column
+  (Andley's request): editable, splittable with Enter (splits flow into the next
+  row's empty cell to re-align the columns, or insert a new row), bold/underline/
+  color supported (`pcol` format tags), undo/redoable, and saved with the project
+  (`parallelTexts` + `parallelLabel`, additive — old files unaffected). Possible
+  follow-ups: comments/word arrows inside cells, showing the column in the block
+  diagram view, DA-Tool export of the parallel layer.

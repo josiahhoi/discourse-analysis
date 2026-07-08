@@ -205,9 +205,10 @@ function renderPropositions() {
   // id lookup + recursive extent walk).
   const _hlForPass = computeHighlightEntries();
 
-  // Parallel column (Alternate Views): view-only second translation, keyed by
-  // verse. null when the column is off; otherwise a per-row cell-text array.
-  const _parallelCells = computeParallelCells();
+  // Parallel column (Alternate Views): a second, editable text column stored
+  // per-row in DA_STATE.parallelTexts. null when the column is off or hidden
+  // (hiding conceals the cells but keeps the data).
+  const _parallelCells = (DA_STATE.parallelLabel && !DA_STATE.parallelHidden) ? DA_STATE.parallelTexts : null;
   container.classList.toggle('has-parallel', _parallelCells !== null);
   const _parallelBadge = document.getElementById('parallelBadge');
   if (_parallelBadge) {
@@ -350,7 +351,8 @@ function attachPropositionDelegatedListeners(container) {
     const block = e.target.closest('.proposition-block');
     if (!block) return;
     const i = parseInt(block.dataset.index, 10);
-    block._textBeforeEdit = DA_STATE.propositions[i];
+    if (e.target.closest('.parallel-text')) block._parallelBeforeEdit = DA_STATE.parallelTexts[i];
+    else block._textBeforeEdit = DA_STATE.propositions[i];
   });
 
   // Gate text editing to Text Edit mode. Outside it, propositions stay
@@ -376,6 +378,39 @@ function attachPropositionDelegatedListeners(container) {
     if (!block || isRenderingPropositions || !block.isConnected || !container.contains(block)) return;
     const i = parseInt(block.dataset.index, 10);
     if (isNaN(i)) return;
+
+    // Parallel-cell commit: same shape as the primary commit below, minus the
+    // arrow/comment anchor remapping (annotations are primary-text-only) and
+    // the '(empty)' placeholder (an empty cell is meaningful).
+    const pSpanEl = e.target.closest('.parallel-text');
+    if (pSpanEl) {
+      if (!DA_STATE.parallelLabel) return;
+      const result = DA_EDITOR.extractFormatTags(pSpanEl, i, true);
+      let cellText = result.text;
+      const newCellTags = result.tags;
+      if (DA_STATE.textEditMode) {
+        cellText = cellText.replace(/\n$/, '');
+      } else {
+        const trimmedLead = cellText.trimStart();
+        const diff = cellText.length - trimmedLead.length;
+        cellText = trimmedLead.trimEnd();
+        if (diff > 0) {
+          newCellTags.forEach(f => {
+            f.start = Math.max(0, f.start - diff);
+            f.end = Math.max(0, f.end - diff);
+          });
+        }
+      }
+      const cellChanged = cellText !== (DA_STATE.parallelTexts[i] || '');
+      if (cellChanged && block._parallelBeforeEdit !== undefined && block._parallelBeforeEdit !== null && cellText !== block._parallelBeforeEdit) {
+        DA_STATE.pushUndo('text edit parallel', String(i));
+      }
+      DA_STATE.parallelTexts[i] = cellText;
+      DA_STATE.formatTags = DA_STATE.formatTags
+        .filter(f => !(f.propIndex === i && f.pcol))
+        .concat(newCellTags);
+      return;
+    }
 
     const textSpanEl = block.querySelector('.proposition-text');
     let currentText = '';
@@ -417,7 +452,11 @@ function attachPropositionDelegatedListeners(container) {
       didFreeformEdit = true;
     }
     DA_STATE.propositions[i] = currentText;
-    DA_STATE.formatTags = DA_STATE.formatTags.filter(f => f.propIndex !== i).concat(newFormatTags);
+    // Rebuild only this row's PRIMARY tags — its parallel-cell tags (pcol)
+    // belong to the other span and must survive a primary commit.
+    DA_STATE.formatTags = DA_STATE.formatTags
+      .filter(f => !(f.propIndex === i && !f.pcol))
+      .concat(newFormatTags);
 
     // If this line carries arrow/comment anchors, their on-screen spans are stale
     // after the edit (built from the old offsets/positions). Rebuild from the
@@ -528,16 +567,21 @@ function versesInRef(ref) {
   return out;
 }
 
-function computeParallelCells() {
-  if (!DA_STATE.parallelLabel || !Object.keys(DA_STATE.parallelVerses || {}).length) return null;
-
+/**
+ * One-time distribution when the parallel column is (re)fetched: map a
+ * chapter's { verseNum: text } onto the current rows. Each verse's text lands
+ * on the first row of that verse (later split rows get ''); a merged '3-5'
+ * row joins its verses. From then on the cells live in
+ * DA_STATE.parallelTexts as ordinary per-row editable text.
+ */
+function distributeVersesToRows(chapterMap) {
   const seen = new Set();
   return DA_STATE.verseRefs.map((ref) => {
     const texts = [];
     versesInRef(ref).forEach((key) => {
       if (seen.has(key)) return;
       seen.add(key);
-      if (DA_STATE.parallelVerses[key]) texts.push(DA_STATE.parallelVerses[key]);
+      if (chapterMap[key]) texts.push(chapterMap[key]);
     });
     return texts.join(' ');
   });
@@ -660,9 +704,11 @@ function updatePropositionBlock(block, text, i, verseDisplay, highlightEntries, 
     }
   }
 
-  // Parallel column cell (view-only; the differential renderer reuses blocks,
+  // Parallel column cell (editable; the differential renderer reuses blocks,
   // so the span must be added/removed when the column toggles mid-session).
-  const cells = parallelCells !== undefined ? parallelCells : computeParallelCells();
+  const cells = parallelCells !== undefined
+    ? parallelCells
+    : ((DA_STATE.parallelLabel && !DA_STATE.parallelHidden) ? DA_STATE.parallelTexts : null);
   let pSpan = block.querySelector('.parallel-text');
   if (cells === null) {
     if (pSpan) pSpan.remove();
@@ -670,14 +716,55 @@ function updatePropositionBlock(block, text, i, verseDisplay, highlightEntries, 
     if (!pSpan) {
       pSpan = document.createElement('span');
       pSpan.className = 'parallel-text';
+      // Editable exactly like .proposition-text: always contentEditable so the
+      // caret can be placed for Enter-splits; character input is gated to Text
+      // Edit mode by the shared beforeinput handler.
+      pSpan.contentEditable = 'true';
+      pSpan.spellcheck = false;
       // dir=auto: e.g. Chinese must render LTR inside its cell even when the
       // primary passage is Hebrew and the whole row is direction: rtl.
       pSpan.setAttribute('dir', 'auto');
       block.appendChild(pSpan);
     }
     const cellText = cells[i] || '';
-    if (pSpan.textContent !== cellText) pSpan.textContent = cellText;
+    // Mirror the primary span's guard: never rewrite the DOM under an active
+    // caret unless state and DOM genuinely disagree (structural change).
+    const pFocused = pSpan.contains(document.activeElement) || document.activeElement === pSpan;
+    const pForce = DA_STATE._forceNextRender || pSpan.innerText.trim() !== cellText.trim();
+    if (!pFocused || pForce) renderParallelCellContent(pSpan, cellText, i);
   }
+}
+
+/**
+ * Render a parallel cell: plain text plus this row's parallel-column format
+ * tags (bold / underline / color). A slim sibling of renderInlineContent —
+ * comments, arrows and shift ghosts don't exist in the second column.
+ */
+function renderParallelCellContent(pSpan, text, i) {
+  const cellTags = DA_STATE.formatTags.filter(f => f.propIndex === i && f.pcol);
+  pSpan.innerHTML = '';
+  if (cellTags.length === 0) {
+    pSpan.textContent = text;
+    return;
+  }
+  const allTags = cellTags.map(f => ({ ...f, tag: f }));
+  const events = [];
+  allTags.forEach((t, tid) => {
+    events.push({ pos: Math.max(0, t.start), type: 'start', tid });
+    events.push({ pos: Math.min(text.length, t.end), type: 'end', tid });
+  });
+  events.sort((a, b) => a.pos === b.pos ? (a.type === b.type ? 0 : (a.type === 'start' ? 1 : -1)) : a.pos - b.pos);
+  let pos = 0;
+  const activeTags = new Set();
+  events.forEach(e => {
+    if (e.pos > pos) {
+      appendChunk(pSpan, text.slice(pos, e.pos), pos, i, activeTags, allTags);
+      pos = e.pos;
+    }
+    if (e.type === 'start') activeTags.add(e.tid);
+    else activeTags.delete(e.tid);
+  });
+  if (pos < text.length) appendChunk(pSpan, text.slice(pos), pos, i, new Set(), allTags);
 }
 
 function precomputeVerseSuffixes(verseRefs) {
@@ -714,7 +801,7 @@ function renderInlineContent(textSpan, text, i) {
   const textComments = DA_STATE.showCommentsEnabled
     ? DA_STATE.comments.filter((c) => c.type === 'text' && c.target && c.target.propIndex === i)
     : [];
-  const textFormats = DA_STATE.formatTags.filter((f) => f.propIndex === i);
+  const textFormats = DA_STATE.formatTags.filter((f) => f.propIndex === i && !f.pcol);
   const textArrows = [];
   DA_STATE.wordArrows.forEach((wa, idx) => {
     // Clamp each anchor to a single word so a corrupted/stretched offset range can
@@ -1489,6 +1576,6 @@ window.DA_RENDERER = Object.assign(window.DA_RENDERER || {}, {
     renderAll, renderPropositions, renderBrackets,
     computeSlotAssignments, getBracketX, getConnectionPoints,
     getPointExtent, getBracketExtent, getRepresentativeRange, getCollapseInfo, updateBracketPositions,
-    scheduleVisualUpdate, computeVerseDisplay, clampToWordAnchor, computeParallelCells, versesInRef,
+    scheduleVisualUpdate, computeVerseDisplay, clampToWordAnchor, distributeVersesToRows, versesInRef,
     getBracketSlots: () => ({ ..._slotForIdx })
 });

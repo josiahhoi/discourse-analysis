@@ -36,13 +36,17 @@ window.DA_STATE = {
   // never saved into bracket files. Default here; DA_UI.initZoom() overwrites
   // it from localStorage at startup, same shape as isRTL below.
   zoomLevel: 100,
-  // Parallel column (Alternate Views): a second translation shown VIEW-ONLY
-  // beside the text, keyed by VERSE number (so proposition splits/merges never
-  // touch it). Transient view state like showCommentsEnabled — deliberately
-  // NOT undo-snapshotted, NOT serialized into saves/exports/cloud docs, and
-  // cleared whenever the document is replaced.
-  parallelVerses: {},
+  // Parallel column (Alternate Views): a second, fully editable text column.
+  // parallelTexts is per-ROW, aligned to propositions[] (like verseBreaks and
+  // indentation) — splits/merges in either column keep it in step (see
+  // editor-logic.js). Real document content: undo-snapshotted, saved into
+  // projects/exports/cloud docs, replaced with the document. Column is "on"
+  // when parallelLabel is non-empty. parallelHidden conceals the column
+  // without touching its data (Hide/Show in the Alternate Views menu); only
+  // "Change translation" replaces the cells.
+  parallelTexts: [],
   parallelLabel: '',
+  parallelHidden: false,
   indentation: [],
   activeCommentTarget: null,
   bracketHighlights: {},
@@ -127,6 +131,8 @@ window.DA_STATE = {
         replies: c.replies ? c.replies.map(r => ({ ...r })) : []
       })),
       indentation: s.indentation.slice(),
+      parallelTexts: s.parallelTexts.slice(),
+      parallelLabel: s.parallelLabel,
       bracketHighlights: Object.assign({}, s.bracketHighlights),
       customLabels: s.customLabels.map(cl => ({ ...cl })),
       bracketSelectStep: s.bracketSelectStep,
@@ -145,6 +151,8 @@ window.DA_STATE = {
     s.wordArrows = snapshot.wordArrows;
     s.comments = snapshot.comments;
     s.indentation = snapshot.indentation || [];
+    s.parallelTexts = snapshot.parallelTexts || [];
+    s.parallelLabel = snapshot.parallelLabel || '';
     s.bracketHighlights = snapshot.bracketHighlights || {};
     s.customLabels = snapshot.customLabels || [];
     s.bracketSelectStep = snapshot.bracketSelectStep ?? 0;
@@ -189,13 +197,18 @@ window.DA_STATE = {
       selectedArrowIdx: null,
       pendingArrowStart: null,
       activeCommentTarget: null,
-      parallelVerses: {},
-      parallelLabel: ''
+      parallelTexts: [],
+      parallelLabel: '',
+      parallelHidden: false
     }, overrides || {});
     // verseBreaks is parallel to propositions — keep the invariant even when a
     // caller only supplies propositions.
     if (s.verseBreaks.length !== s.propositions.length) {
       s.verseBreaks = s.propositions.map((_, i) => (Array.isArray(s.verseBreaks[i]) ? s.verseBreaks[i] : []));
+    }
+    // parallelTexts shares the same per-row invariant.
+    if (s.parallelTexts.length !== s.propositions.length) {
+      s.parallelTexts = s.propositions.map((_, i) => (typeof s.parallelTexts[i] === 'string' ? s.parallelTexts[i] : ''));
     }
     // Leaving connect mode: the canvas may still carry the visual affordance.
     if (typeof document !== 'undefined') {

@@ -93,6 +93,10 @@ window.DA_MOUSE = {
 
       propositionsContainer.addEventListener('mousedown', (e) => {
         if (!DA_STATE.arrowMode) return;
+        if (e.target.closest('.parallel-text')) {
+          DA_UI.showStatus('Word arrows are not supported in the parallel column.', 'warning');
+          return;
+        }
         const word = window.DA_MOUSE.getWordAtPoint(e);
         if (!word) return;
 
@@ -116,7 +120,7 @@ window.DA_MOUSE = {
         const target = DA_UI.getPropositionSelection();
         if (!target) return;
         e.preventDefault();
-        DA_UI.showTextContextMenu(target.propIndex, target.start, target.end, e.clientY, e.clientX);
+        DA_UI.showTextContextMenu(target.propIndex, target.start, target.end, e.clientY, e.clientX, target.pcol);
       });
     }
 
@@ -295,6 +299,12 @@ window.DA_MOUSE = {
       range = document.caretRangeFromPoint(e.clientX, e.clientY);
     }
     if (!range || range.startContainer.nodeType !== Node.TEXT_NODE) return null;
+
+    // Word arrows anchor the PRIMARY text only. A point inside a parallel cell
+    // must not resolve to a word: the offsets below are measured from the
+    // primary span's start, so a cell hit would store garbage anchors (the
+    // arrow "exists" but never draws anywhere sensible).
+    if (range.startContainer.parentElement?.closest('.parallel-text')) return null;
 
     const node = range.startContainer;
     const text = node.textContent;

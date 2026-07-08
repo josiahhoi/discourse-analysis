@@ -15,7 +15,7 @@ A Bible study tool for diagramming the logical structure of Scripture using **br
 ### 2. The Bracketing Engine
 - **20+ logical relationships** organized in the standard discourse-analysis hierarchy (Coordinate, Support by Distinct Statement / Restatement / Contrary Statement).
 - **Split & merge with exact renumbering** — press **Enter** to split a proposition at the cursor, **Backspace** at the start of a line to merge; verse suffixes (1a, 1b) renumber automatically. Verse boundaries are tracked as structured data, so retyping text can never corrupt them.
-- **Dominance marking** — the asterisk (`*`) marks the dominant proposition; swap labels or switch stars per bracket from the label picker.
+- **Logical main point marking** — the asterisk (`*`) marks the main point; swap labels or switch stars per bracket from the label picker.
 - **Jump-over brackets** — connect non-adjacent propositions as a flat **Series**, **Bilateral**, or **Double Ground** unit; intermediate lines become implicit members.
 - **Structural folding** — collapse a sub-structure to its dominant line to simplify large diagrams; a fold gap shows how many rows are hidden and expands on click.
 - **Cascade deletion** — deleting a bracket that others are built on removes the dependent brackets too (with confirmation), so the diagram can never be left in a nonsense state. Undo restores everything.
@@ -26,7 +26,7 @@ A Bible study tool for diagramming the logical structure of Scripture using **br
 - **Full undo/redo** — Ctrl/Cmd+Z and Ctrl/Cmd+Y (or Ctrl/Cmd+Shift+Z), with toolbar buttons.
 
 ### 3. Notation Profiles
-- **Five scholar presets** — Josiah (default), BibleArc, Gurtner, Beale, and Schreiner — each with its own abbreviations, renames (e.g. Cause-Effect vs Action-Result), and dominance conventions.
+- **Five presets** — Josiah (default), BibleArc, Gurtner, Beale, and Schreiner — each with its own abbreviations, renames (e.g. Cause-Effect vs Action-Result), and dominance conventions.
 - **Fully editable** — rename any relationship, change its label or color, and toggle dominance stars per relationship or globally (Settings → Notation). Edits fork into a personal Custom profile; built-ins are never modified.
 - **Cloud sharing for classrooms** — a professor publishes a profile under a name (password-protected); students load it by typing that name. Brackets created under one system display correctly under another (e.g. General-Specific ↔ Idea-Explanation aliasing).
 - **Import/export** — profiles also travel as small `.daprofile.json` files.

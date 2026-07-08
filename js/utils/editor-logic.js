@@ -4,8 +4,13 @@
  * to sync DOM formatting back to state. Color must be captured here too:
  * focusout rebuilds a line's formatTags entirely from this result, so any type
  * not extracted is silently dropped on the next focus change.
+ *
+ * `pcol` marks the extracted tags as belonging to the row's PARALLEL cell
+ * (the second text column) instead of the primary text — the same formatTags
+ * array holds both, discriminated by the tag's `pcol` flag (absent = primary,
+ * so every pre-existing file/tag stays valid).
  */
-function extractFormatTags(textSpan, propIndex) {
+function extractFormatTags(textSpan, propIndex, pcol) {
   let text = '';
   const tags = [];
   function traverse(node) {
@@ -21,15 +26,21 @@ function extractFormatTags(textSpan, propIndex) {
       node.childNodes.forEach(traverse);
       const end = text.length;
       if (start < end) {
+        /** @type {{type: string, propIndex: number, start: number, end: number, color?: string, pcol?: boolean} | null} */
+        let tag = null;
         if (node.tagName === 'B' || node.tagName === 'STRONG') {
-          tags.push({ type: 'bold', propIndex, start, end });
+          tag = { type: 'bold', propIndex, start, end };
         } else if (node.tagName === 'U') {
-          tags.push({ type: 'underline', propIndex, start, end });
+          tag = { type: 'underline', propIndex, start, end };
         } else if (node.classList && node.classList.contains('color-text')) {
           // Prefer the verbatim value stashed in data-color; fall back to the
           // computed style for spans rendered before data-color existed.
           const color = node.dataset.color || node.style.color;
-          if (color) tags.push({ type: 'color', color, propIndex, start, end });
+          if (color) tag = { type: 'color', color, propIndex, start, end };
+        }
+        if (tag) {
+          if (pcol) tag.pcol = true;
+          tags.push(tag);
         }
       }
     }
@@ -38,9 +49,137 @@ function extractFormatTags(textSpan, propIndex) {
   return { text, tags };
 }
 
+/** Shift a 'pN' bracket endpoint up by one for rows below an inserted row.
+ *  (Stable 'br…' ids pass through untouched.) */
+function shiftPropRef(ref, splitIdx) {
+  if (typeof ref === 'string' && ref.startsWith('p')) {
+    const idx = parseInt(ref.slice(1), 10);
+    if (idx > splitIdx) return 'p' + (idx + 1);
+  }
+  return ref;
+}
+
+/**
+ * True when rows a and b are the same "split family": identical single-verse
+ * refs (1a/1b/1c rows all carry ref '1'). Flow-splits and cell-merges only
+ * operate inside a family; ranged refs ('3-5') route through the insert /
+ * row-merge paths, whose verse-renumbering machinery handles them.
+ */
+function sameRefFamily(a, b) {
+  const ra = DA_STATE.verseRefs[a] || '';
+  const rb = DA_STATE.verseRefs[b] || '';
+  return !!ra && ra === rb && !ra.includes('-');
+}
+
+/**
+ * Redistribute row i's `col`-column format tags across a split at `splitAt`:
+ * tags in the second half move to row `target` (offsets shifted by
+ * `secondCut`), boundary-spanning tags split in two, the rest clamp to the
+ * trimmed first half. The OTHER column's tags are untouched — its text
+ * didn't move.
+ */
+function redistributeColumnTags(col, i, target, splitAt, secondCut, firstLen) {
+  const wantPcol = col !== 'primary';
+  const newTags = [];
+  DA_STATE.formatTags.forEach(f => {
+    if (f.propIndex !== i || !!f.pcol !== wantPcol) return;
+    if (f.start >= splitAt) {
+      f.propIndex = target;
+      f.start = Math.max(0, f.start - secondCut);
+      f.end = Math.max(0, f.end - secondCut);
+    } else if (f.end > splitAt) {
+      const t = { type: f.type, propIndex: target, start: 0, end: Math.max(0, f.end - secondCut) };
+      if (f.color) t.color = f.color;
+      if (wantPcol) t.pcol = true;
+      newTags.push(t);
+      f.end = firstLen;
+    } else {
+      f.end = Math.min(f.end, firstLen);
+    }
+  });
+  if (newTags.length > 0) DA_STATE.formatTags.push(...newTags);
+}
+
+/**
+ * Flow-split (owner-specified): when the next row is the same verse family
+ * and its same-column cell is EMPTY, a split's second half flows into it
+ * instead of inserting a row — this is how the two columns re-align after
+ * being split independently (English 1a/1b + Chinese split in 1a → the
+ * Chinese second half lands in 1b). Row structure, verse refs and brackets
+ * are untouched; only the split column's anchors move.
+ */
+function flowSplit(col, i, offset) {
+  const isPrimary = col === 'primary';
+  const store = isPrimary ? DA_STATE.propositions : DA_STATE.parallelTexts;
+  const text = store[i];
+
+  DA_STATE.pushUndo(isPrimary ? 'split' : 'split parallel', String(i));
+
+  const rawSecond = text.slice(offset);
+  const secondCut = offset + (rawSecond.length - rawSecond.trimStart().length);
+  store[i] = text.slice(0, offset).trimEnd();
+  store[i + 1] = rawSecond.trimStart();
+  const firstLen = store[i].length;
+
+  if (isPrimary) {
+    // verseBreaks, arrows and comments anchor the primary text: second-half
+    // anchors move into row i+1's coordinate space (same math as the insert
+    // split, minus the index shifting — the row already exists).
+    const breaks = (DA_STATE.verseBreaks[i] || []).slice().sort((a, b) => a - b);
+    const secondLen = store[i + 1].length;
+    DA_STATE.verseBreaks[i] = breaks.filter(b => b < offset && b > 0 && b < firstLen);
+    DA_STATE.verseBreaks[i + 1] = breaks
+      .filter(b => b >= offset)
+      .map(b => b - secondCut)
+      .filter(b => b > 0 && b < secondLen);
+
+    DA_STATE.wordArrows.forEach(wa => {
+      if (wa.fromProp === i) {
+        if (wa.fromStart >= offset) {
+          wa.fromProp = i + 1;
+          wa.fromStart = Math.max(0, wa.fromStart - secondCut);
+          wa.fromEnd = Math.max(0, wa.fromEnd - secondCut);
+        } else {
+          wa.fromEnd = Math.min(wa.fromEnd, firstLen);
+        }
+      }
+      if (wa.toProp === i) {
+        if (wa.toStart >= offset) {
+          wa.toProp = i + 1;
+          wa.toStart = Math.max(0, wa.toStart - secondCut);
+          wa.toEnd = Math.max(0, wa.toEnd - secondCut);
+        } else {
+          wa.toEnd = Math.min(wa.toEnd, firstLen);
+        }
+      }
+    });
+    DA_STATE.comments.forEach(c => {
+      if (c.type === 'text' && c.target && c.target.propIndex === i) {
+        if (c.target.start >= offset) {
+          c.target.propIndex = i + 1;
+          c.target.start = Math.max(0, c.target.start - secondCut);
+          c.target.end = Math.max(0, c.target.end - secondCut);
+        } else {
+          c.target.end = Math.min(c.target.end, firstLen);
+        }
+      }
+    });
+  }
+
+  redistributeColumnTags(col, i, i + 1, offset, secondCut, firstLen);
+}
+
 function splitPropositionAtOffset(i, offset) {
   const text = DA_STATE.propositions[i];
   if (!text || offset <= 0 || offset >= text.length || text.slice(offset).trim().length === 0) return;
+
+  // Flow case: the next row is this verse's continuation with an empty
+  // primary cell (created by a parallel-column split) — fill it instead of
+  // inserting a row. Can't trigger without a parallel column, so classic
+  // documents keep the exact historical split behavior.
+  if (sameRefFamily(i, i + 1) && !(DA_STATE.propositions[i + 1] || '').trim()) {
+    return flowSplit('primary', i, offset);
+  }
 
   DA_STATE.pushUndo('split', String(i));
   const partsRef = (DA_STATE.verseRefs[i] || '').split('-');
@@ -93,16 +232,10 @@ function splitPropositionAtOffset(i, offset) {
   DA_STATE.verseRefs[i] = firstPartRef;
   DA_STATE.verseRefs.splice(i + 1, 0, secondPartRef);
   DA_STATE.indentation.splice(i + 1, 0, DA_STATE.indentation[i] || 0);
+  // The parallel cell (if any) stays whole on the first row; the new row
+  // starts with an empty cell (owner-specified split semantics).
+  DA_STATE.parallelTexts.splice(i + 1, 0, '');
 
-  // Adjust brackets — references are strings like "p0", "b2"
-  const shiftRef = (ref, splitIdx) => {
-    if (typeof ref === 'string' && ref.startsWith('p')) {
-      const idx = parseInt(ref.slice(1), 10);
-      if (idx > splitIdx) return 'p' + (idx + 1);
-    }
-    return ref;
-  };
-  
   const targetPropId = 'p' + i;
   // Capture which brackets reference this proposition BY INDEX before shiftRef mutates them
   const referencingIndices = [];
@@ -113,8 +246,8 @@ function splitPropositionAtOffset(i, offset) {
   });
 
   DA_STATE.brackets.forEach(b => {
-    b.from = shiftRef(b.from, i);
-    b.to = shiftRef(b.to, i);
+    b.from = shiftPropRef(b.from, i);
+    b.to = shiftPropRef(b.to, i);
   });
 
   if (referencingIndices.length > 0) {
@@ -200,31 +333,61 @@ function splitPropositionAtOffset(i, offset) {
     }
   });
 
-  // Adjust format tags
-  const newTags = [];
+  // Adjust format tags: rows below shift down one (both columns' tags — the
+  // whole row moved); row i's PRIMARY tags redistribute across the split,
+  // while its parallel-cell tags stay put with the unmoved cell text.
   DA_STATE.formatTags.forEach(f => {
-    if (f.propIndex > i) {
-      f.propIndex++;
-    } else if (f.propIndex === i) {
-      if (f.start >= secondStart) {
-        f.propIndex++;
-        f.start = Math.max(0, f.start - secondCut);
-        f.end = Math.max(0, f.end - secondCut);
-      } else if (f.end > secondStart) {
-        // Spans the boundary — keep the first-half portion, copy the rest over.
-        newTags.push({
-          type: f.type,
-          propIndex: i + 1,
-          start: 0,
-          end: Math.max(0, f.end - secondCut)
-        });
-        f.end = firstLen;
-      } else {
-        f.end = Math.min(f.end, firstLen);
-      }
-    }
+    if (f.propIndex > i) f.propIndex++;
   });
-  if (newTags.length > 0) DA_STATE.formatTags.push(...newTags);
+  redistributeColumnTags('primary', i, i + 1, secondStart, secondCut, firstLen);
+}
+
+/**
+ * Split the PARALLEL cell of row i at `offset` (owner-specified semantics).
+ * Flow into the next row's empty cell when it's the same verse family;
+ * otherwise insert a new row carrying the second half with an EMPTY primary
+ * cell and a duplicated verse ref (the a/b/c display suffixes come from
+ * repeated refs). The primary text never moves, and brackets/arrows/comments
+ * anchor primary text — so an insert only shifts their row indices; no
+ * auto-bracket is created (documented simplification).
+ */
+function splitParallelAtOffset(i, offset) {
+  const text = DA_STATE.parallelTexts[i] || '';
+  if (!text || offset <= 0 || offset >= text.length || text.slice(offset).trim().length === 0) return;
+
+  if (sameRefFamily(i, i + 1) && !(DA_STATE.parallelTexts[i + 1] || '').trim()) {
+    return flowSplit('parallel', i, offset);
+  }
+
+  DA_STATE.pushUndo('split parallel', String(i));
+
+  const rawSecond = text.slice(offset);
+  const secondCut = offset + (rawSecond.length - rawSecond.trimStart().length);
+  DA_STATE.parallelTexts[i] = text.slice(0, offset).trimEnd();
+  const firstLen = DA_STATE.parallelTexts[i].length;
+
+  DA_STATE.propositions.splice(i + 1, 0, '');
+  DA_STATE.parallelTexts.splice(i + 1, 0, rawSecond.trimStart());
+  DA_STATE.verseRefs.splice(i + 1, 0, DA_STATE.verseRefs[i]);
+  DA_STATE.verseBreaks.splice(i + 1, 0, []); // breaks anchor primary text, which stayed put
+  DA_STATE.indentation.splice(i + 1, 0, DA_STATE.indentation[i] || 0);
+
+  // A row was inserted: shift every row-indexed reference below it.
+  DA_STATE.brackets.forEach(b => {
+    b.from = shiftPropRef(b.from, i);
+    b.to = shiftPropRef(b.to, i);
+  });
+  DA_STATE.wordArrows.forEach(wa => {
+    if (wa.fromProp > i) wa.fromProp++;
+    if (wa.toProp > i) wa.toProp++;
+  });
+  DA_STATE.comments.forEach(c => {
+    if (c.type === 'text' && c.target && c.target.propIndex > i) c.target.propIndex++;
+  });
+  DA_STATE.formatTags.forEach(f => {
+    if (f.propIndex > i) f.propIndex++;
+  });
+  redistributeColumnTags('parallel', i, i + 1, offset, secondCut, firstLen);
 }
 
 function mergePropositions(i) {
@@ -279,9 +442,23 @@ function mergePropositions(i) {
     DA_STATE.verseRefs[i - 1] = refA || refB;
   }
   
+  // Join the parallel cells the same way (keep the upper cell intact, trim
+  // the lower one's leading whitespace, single-space joiner). pPrevLen is
+  // where row i's cell text lands in the joined cell — the shift for its
+  // parallel-column tags (which live in their own coordinate space).
+  const pPrev = DA_STATE.parallelTexts[i - 1] || '';
+  const pCurr = DA_STATE.parallelTexts[i] || '';
+  const pCurrTrimmed = pCurr.replace(/^\s+/, '');
+  const pLeadWS = pCurr.length - pCurrTrimmed.length;
+  DA_STATE.parallelTexts[i - 1] = (pPrev && pCurrTrimmed
+    ? pPrev + ' ' + pCurrTrimmed
+    : pPrev || pCurrTrimmed).replace(/\s+$/, '');
+  const pPrevLen = (pPrev ? pPrev.length + 1 : 0) - pLeadWS;
+
   DA_STATE.propositions.splice(i, 1);
   DA_STATE.verseRefs.splice(i, 1);
   DA_STATE.indentation.splice(i, 1);
+  DA_STATE.parallelTexts.splice(i, 1);
 
   // Adjust brackets — shift pN references down for indices >= i
   const unshiftRef = (ref, mergeIdx) => {
@@ -353,16 +530,92 @@ function mergePropositions(i) {
     }
   });
 
-  // Adjust format tags
+  // Adjust format tags. A row's primary tags shift by where its primary text
+  // landed (prevLen); its parallel-cell tags by where its CELL text landed
+  // (pPrevLen) — the two columns join independently.
   DA_STATE.formatTags.forEach(f => {
     if (f.propIndex > i) {
       f.propIndex--;
     } else if (f.propIndex === i) {
       f.propIndex = i - 1;
+      const shift = f.pcol ? pPrevLen : prevLen;
+      f.start += shift;
+      f.end += shift;
+    }
+  });
+}
+
+/**
+ * Backspace-at-start of a cell — the merge mirror of the split rules. The
+ * cell's text joins the same column's cell above. The row itself is removed
+ * only when that leaves it empty on BOTH sides (with no parallel column
+ * that's every time, i.e. exactly the historical row merge) or when the rows
+ * are different verses (cross-verse merges always row-merge so verse-ref
+ * recombination stays in mergePropositions).
+ * Returns { removed, seam } for caret restoration, or null if nothing to do.
+ */
+function mergeCellIntoPrevious(col, i) {
+  if (i <= 0) return null;
+  const isPrimary = col === 'primary';
+  const store = isPrimary ? DA_STATE.propositions : DA_STATE.parallelTexts;
+  const other = isPrimary ? DA_STATE.parallelTexts : DA_STATE.propositions;
+
+  const prev = store[i - 1] || '';
+  const curr = store[i] || '';
+  const currTrimmed = curr.replace(/^\s+/, '');
+  const leadWS = curr.length - currTrimmed.length;
+
+  const otherEmpty = !(other[i] || '').trim();
+  if (otherEmpty || !sameRefFamily(i - 1, i)) {
+    // Full row merge (both columns join). Seam mirrors mergePropositions'
+    // internal math: primary always gets the ' ' joiner; the parallel join
+    // skips it when the upper cell is empty.
+    const seam = isPrimary
+      ? prev.length + 1 - leadWS
+      : (prev ? prev.length + 1 : 0) - leadWS;
+    mergePropositions(i);
+    return { removed: true, seam: Math.max(0, seam) };
+  }
+
+  if (!currTrimmed) return null; // empty cell; the row is still carrying the other column
+
+  // Cell-level merge: the row stays (its other column has content).
+  DA_STATE.pushUndo(isPrimary ? 'merge' : 'merge parallel', String(i));
+  const joined = (prev && currTrimmed ? prev + ' ' + currTrimmed : prev || currTrimmed).replace(/\s+$/, '');
+  const prevLen = (prev ? prev.length + 1 : 0) - leadWS;
+  store[i - 1] = joined;
+  store[i] = '';
+
+  if (isPrimary) {
+    // verseBreaks / arrows / comments anchor the primary text — follow it up.
+    // (Same verse family, so no verse-transition break at the seam.)
+    const mergedBreaks = (DA_STATE.verseBreaks[i - 1] || []).slice();
+    (DA_STATE.verseBreaks[i] || []).forEach(b => mergedBreaks.push(b + prevLen));
+    DA_STATE.verseBreaks[i - 1] = [...new Set(mergedBreaks)]
+      .filter(b => b > 0 && b < joined.length)
+      .sort((a, b) => a - b);
+    DA_STATE.verseBreaks[i] = [];
+    DA_STATE.wordArrows.forEach(wa => {
+      if (wa.fromProp === i) { wa.fromProp = i - 1; wa.fromStart += prevLen; wa.fromEnd += prevLen; }
+      if (wa.toProp === i) { wa.toProp = i - 1; wa.toStart += prevLen; wa.toEnd += prevLen; }
+    });
+    DA_STATE.comments.forEach(c => {
+      if (c.type === 'text' && c.target && c.target.propIndex === i) {
+        c.target.propIndex = i - 1;
+        c.target.start += prevLen;
+        c.target.end += prevLen;
+      }
+    });
+  }
+  const wantPcol = !isPrimary;
+  DA_STATE.formatTags.forEach(f => {
+    if (f.propIndex === i && !!f.pcol === wantPcol) {
+      f.propIndex = i - 1;
       f.start += prevLen;
       f.end += prevLen;
     }
   });
+  return { removed: false, seam: Math.max(0, prevLen) };
 }
 
 function changeIndentation(i, delta) {
@@ -674,6 +927,7 @@ function toggleBracketCollapse(bracketIdx) {
 }
 
 window.DA_EDITOR = {
-    splitPropositionAtOffset, mergePropositions, changeIndentation, setSelectionByGlobalOffset,
+    splitPropositionAtOffset, splitParallelAtOffset, mergePropositions, mergeCellIntoPrevious,
+    changeIndentation, setSelectionByGlobalOffset,
     deleteBracket, findBestAttachment, handleDotClick, toggleBracketCollapse, extractFormatTags
 };

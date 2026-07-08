@@ -637,7 +637,19 @@ test('Escape cancels an in-progress bracket selection', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('parallel column: fetch → view-only cells by verse → split keeps text on first row → hide clears', async ({ page }) => {
+/** Place the caret at `offset` inside the PARALLEL cell of row `index`.
+ *  Waits two frames first: a just-performed split focuses its new row in a
+ *  requestAnimationFrame, which would otherwise race this caret and steal it. */
+async function setParallelCaret(page, index, offset) {
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await page.evaluate(({ index, offset }) => {
+    const span = document.querySelectorAll('.proposition-block .parallel-text')[index];
+    span.focus();
+    window.DA_EDITOR.setSelectionByGlobalOffset(span, offset, offset);
+  }, { index, offset });
+}
+
+test('parallel column: editable cells — flow/insert splits (1a/1b/1c), edits, colors, undo, save round-trip, hide', async ({ page }) => {
   const errors = collectErrors(page);
 
   // The suite's beforeEach aborts all non-localhost requests; this route is
@@ -646,46 +658,128 @@ test('parallel column: fetch → view-only cells by verse → split keeps text o
     contentType: 'application/json',
     body: JSON.stringify([
       { verse: 1, text: '起初，上帝創造天地。' },
-      { verse: 2, text: '地是空虛混沌，淵面黑暗。' },
+      { verse: 2, text: '地是空虛混沌。' },
       { verse: 3, text: 'should never appear (not on screen)' },
     ]),
   }));
 
   await importPassage(page); // Genesis 1:1-2, refs 1 and 2
 
-  // Alternate Views → Show Parallel Column… → pick CUV (first option) → Show.
+  // Alternate Views → Show Parallel Column… → CUV → Show.
   await page.locator('#alternateViewsBtn').click();
   await page.locator('#alternateViewsMenu .menu-item', { hasText: 'Show Parallel Column' }).click();
   await page.locator('#parallelTranslationSelect').selectOption('CUV');
   await page.locator('#parallelShowBtn').click();
 
-  // Cells render per verse; the container widens; the badge names the translation.
   await expect(page.locator('.parallel-text')).toHaveCount(2);
   await expect(page.locator('.parallel-text').nth(0)).toHaveText('起初，上帝創造天地。');
-  await expect(page.locator('.parallel-text').nth(1)).toHaveText('地是空虛混沌，淵面黑暗。');
   await expect(page.locator('#propositions')).toHaveClass(/has-parallel/);
   await expect(page.locator('#parallelBadge')).toHaveText('+ CUV');
 
-  // View-only: the cell is not contenteditable and typing at it changes nothing.
-  await expect(page.locator('.parallel-text').nth(0)).not.toHaveAttribute('contenteditable', /true/);
+  // Cells are editable spans, but typing is gated to Text Edit mode exactly
+  // like the primary text (beforeinput blocks it elsewhere).
+  await expect(page.locator('.parallel-text').nth(0)).toHaveAttribute('contenteditable', 'true');
   await page.locator('.parallel-text').nth(0).click();
   await page.keyboard.type('XXX');
   await expect(page.locator('.parallel-text').nth(0)).toHaveText('起初，上帝創造天地。');
 
-  // Splitting verse 1 into 1a/1b keeps the parallel text on the verse's FIRST
-  // row; the new 1b row gets an empty cell (verse-keyed, not row-keyed).
+  // Arrow mode refuses parallel-cell words with a clear message — and stores
+  // nothing (clicks used to record arrows with garbage primary-text offsets).
+  await page.locator('#arrowModeBtn').click();
+  await page.locator('.parallel-text').nth(0).click();
+  await expect(page.locator('.status.warning')).toContainText('not supported in the parallel column');
+  expect(await page.evaluate(() => window.DA_STATE.wordArrows.length)).toBe(0);
+  await page.locator('#arrowModeBtn').click(); // leave arrow mode
+
+  // 1. Split English v1 → 1a/1b. The Chinese stays whole on 1a (insert case).
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await setCaret(page, 0, 'In the beginning God'.length);
   await page.keyboard.press('Enter');
   await expect(page.locator('.proposition-block')).toHaveCount(3);
-  await expect(page.locator('.parallel-text')).toHaveCount(3);
   await expect(page.locator('.parallel-text').nth(0)).toHaveText('起初，上帝創造天地。');
   await expect(page.locator('.parallel-text').nth(1)).toHaveText('');
-  await expect(page.locator('.parallel-text').nth(2)).toHaveText('地是空虛混沌，淵面黑暗。');
 
-  // A saved project contains no parallel fields (transient view state).
+  // 2. Split the Chinese in 1a → FLOWS into 1b's empty cell; no new row.
+  await setParallelCaret(page, 0, 2);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.proposition-block')).toHaveCount(3);
+  await expect(page.locator('.parallel-text').nth(0)).toHaveText('起初');
+  await expect(page.locator('.parallel-text').nth(1)).toHaveText('，上帝創造天地。');
+
+  // 3. Split the Chinese again in 1b → next row is verse 2 → INSERT 1c with an
+  //    empty English cell.
+  await setParallelCaret(page, 1, 4);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.proposition-block')).toHaveCount(4);
+  await expect(page.locator('.proposition-block').nth(2).locator('.verse-ref')).toHaveText('1c ');
+  await expect(page.locator('.parallel-text').nth(1)).toHaveText('，上帝創');
+  await expect(page.locator('.parallel-text').nth(2)).toHaveText('造天地。');
+  await expect(page.locator('.proposition-block').nth(2).locator('.proposition-text')).toHaveText('');
+
+  // Undo/redo walk the split back and forward (blur to a neutral spot first).
+  await page.locator('h1').first().click();
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('.proposition-block')).toHaveCount(3);
+  await page.keyboard.press('Control+y');
+  await expect(page.locator('.proposition-block')).toHaveCount(4);
+  await expect(page.locator('.parallel-text').nth(2)).toHaveText('造天地。');
+
+  // 4. Text Edit mode: typing in a cell commits on blur; Ctrl+Z reverts it.
+  await page.locator('#textEditModeBtn').click();
+  await page.locator('.parallel-text').nth(0).click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' AMEN');
+  await page.locator('h1').first().click(); // blur → commit
+  await expect(page.locator('.parallel-text').nth(0)).toHaveText('起初 AMEN');
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('.parallel-text').nth(0)).toHaveText('起初');
+  await page.locator('#textEditModeBtn').click(); // leave Text Edit mode
+
+  // 5. Colors work in cells via the same right-click menu — but Add Comment is
+  //    absent there (comments stay primary-only).
+  await page.evaluate(() => {
+    const span = document.querySelectorAll('.proposition-block .parallel-text')[0];
+    span.focus();
+    window.DA_EDITOR.setSelectionByGlobalOffset(span, 0, 2);
+    const rect = window.getSelection().getRangeAt(0).getBoundingClientRect();
+    span.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true,
+      clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2,
+    }));
+  });
+  await expect(page.locator('#textContextMenu')).toBeVisible();
+  await expect(page.locator('#textContextMenu .menu-item', { hasText: 'Add Comment' })).toHaveCount(0);
+  await page.locator('#textContextMenu .color-swatch[data-color="#1E88E5"]').click();
+  await expect(page.locator('.parallel-text .color-text')).toHaveText(['起初']);
+
+  // 6. The saved project carries the column: texts, label, and the pcol tag.
   const saved = await page.evaluate(() => window.DA_EXPORT.buildBracketData());
-  expect('parallelVerses' in saved).toBe(false);
-  expect('parallelLabel' in saved).toBe(false);
+  expect(saved.parallelLabel).toBe('CUV');
+  expect(saved.parallelTexts).toEqual(['起初', '，上帝創', '造天地。', '地是空虛混沌。']);
+  expect(saved.formatTags.some((f) => f.pcol && f.type === 'color')).toBe(true);
+
+  // 7. Hide conceals the column but KEEPS its data (a hidden column still
+  //    saves with the project); the menu's "Show Parallel Column (CUV)"
+  //    restores the previous work without refetching.
+  await page.locator('#alternateViewsBtn').click();
+  await page.locator('#alternateViewsMenu .menu-item', { hasText: 'Hide Parallel Column' }).click();
+  await expect(page.locator('.parallel-text')).toHaveCount(0);
+  await expect(page.locator('#parallelBadge')).toBeHidden();
+  const hiddenSave = await page.evaluate(() => window.DA_EXPORT.buildBracketData());
+  expect(hiddenSave.parallelTexts).toEqual(['起初', '，上帝創', '造天地。', '地是空虛混沌。']);
+  expect(hiddenSave.parallelLabel).toBe('CUV');
+  expect(hiddenSave.parallelHidden).toBe(true);
+  await page.locator('#alternateViewsBtn').click();
+  await page.locator('#alternateViewsMenu .menu-item', { hasText: 'Show Parallel Column (CUV)' }).click();
+  await expect(page.locator('.parallel-text')).toHaveCount(4);
+  await expect(page.locator('#parallelBadge')).toHaveText('+ CUV');
+  await expect(page.locator('.parallel-text .color-text')).toHaveText(['起初']);
+
+  // 8. A real import round-trip restores the column (and its formatting).
+  await page.evaluate((data) => window.DA_PERSISTENCE.importBracket(data), saved);
+  await expect(page.locator('.parallel-text')).toHaveCount(4);
+  await expect(page.locator('.parallel-text').nth(0)).toHaveText('起初');
+  await expect(page.locator('.parallel-text .color-text')).toHaveText(['起初']);
 
   // Block Diagram still toggles from the same dropdown, and flips back.
   await page.locator('#alternateViewsBtn').click();
@@ -694,13 +788,6 @@ test('parallel column: fetch → view-only cells by verse → split keeps text o
   await page.locator('#alternateViewsBtn').click();
   await page.locator('#alternateViewsMenu .menu-item', { hasText: 'Bracket View' }).click();
   await expect(page.locator('.bracket-canvas-wrapper')).not.toHaveClass(/block-diagram-active/);
-
-  // Hide Parallel Column clears the cells, the class, and the badge.
-  await page.locator('#alternateViewsBtn').click();
-  await page.locator('#alternateViewsMenu .menu-item', { hasText: 'Hide Parallel Column' }).click();
-  await expect(page.locator('.parallel-text')).toHaveCount(0);
-  await expect(page.locator('#propositions')).not.toHaveClass(/has-parallel/);
-  await expect(page.locator('#parallelBadge')).toBeHidden();
 
   expect(errors).toEqual([]);
 });

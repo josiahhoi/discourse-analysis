@@ -1954,7 +1954,7 @@ mark.comment-highlight.comment-highlight-card-hover {
 }
 
 /* Parallel column (Alternate Views): widen the content area to make room for
-   the view-only translation cell appended to each row. */
+   the editable second-text cell appended to each row. */
 .propositions.has-parallel {
   width: 1280px; /* base 900 + 380 for the parallel column */
 }
@@ -1978,8 +1978,10 @@ mark.comment-highlight.comment-highlight-card-hover {
   color: var(--text-muted);
   font-size: calc(0.95rem * var(--da-zoom));
   line-height: 1.6;
-  user-select: text;    /* copyable, but view-only (no contenteditable) */
-  white-space: normal;
+  outline: none;         /* editable span: same quiet chrome as .proposition-text */
+  white-space: pre-wrap; /* keep manual newlines from Text Edit mode, wrap long lines */
+  overflow-wrap: break-word;
+  min-height: 1.2em;     /* an empty cell stays clickable for the caret */
 }
 
 /* In RTL (Hebrew) the flex row is reversed, putting the cell on the left; the
@@ -2137,9 +2139,10 @@ body.rtl-mode .propositions {
   text-align: right;
 }
 
-body.rtl-mode .proposition-block {
-  flex-direction: row-reverse;
-}
+/* No flex-direction override here: the container's direction:rtl already
+   reverses the row (verse ref rightmost, parallel cell mirrored to the far
+   left). An explicit row-reverse would cancel that out and park the parallel
+   cell between the text and the bracket dots. */
 
 body.rtl-mode .prop-dot {
   left: auto;

@@ -110,8 +110,12 @@ function getPropositionSelection() {
   let startNode = range.startContainer;
   if (startNode.nodeType === Node.TEXT_NODE) startNode = startNode.parentElement;
 
-  const textSpan = startNode.closest?.('.proposition-text');
+  // A selection can live in either column: the primary text or the parallel
+  // cell. `pcol` tells callers which one (colors apply to either; comments
+  // stay primary-only).
+  const textSpan = startNode.closest?.('.proposition-text') || startNode.closest?.('.parallel-text');
   if (!textSpan) return null;
+  const pcol = textSpan.classList.contains('parallel-text');
 
   const block = textSpan.closest('.proposition-block');
   const propIndex = parseInt(block.dataset.index, 10);
@@ -128,7 +132,7 @@ function getPropositionSelection() {
   const end = Math.min(preEnd.toString().length, fullText.length);
 
   if (start >= end) return null;
-  return { propIndex, start, end };
+  return { propIndex, start, end, pcol };
 }
 
 function getCommentForBracket(bracketIdx) {
