@@ -6,7 +6,7 @@
   <!-- script-src deliberately has no 'unsafe-inline'/'unsafe-eval': all scripts are
        external files and none of the vendored libs (html2canvas, jspdf, lz-string)
        or the Firebase compat SDK use eval. Keep new scripts in .js files. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://*.firebaseapp.com https://apis.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://api.esv.org https://bolls.life https://raw.githubusercontent.com http://localhost:*;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://*.firebaseapp.com https://apis.google.com https://www.gstatic.com https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://api.esv.org https://bolls.life https://raw.githubusercontent.com https://josiah-hoi.goatcounter.com http://localhost:*;">
   <title>Discourse Analysis</title>
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -397,5 +397,8 @@
   <script src="js/services/mouse-handler.js?v=3.1.0"></script>
   <!-- Main App -->
   <script src="app.js?v=3.1.0"></script>
+  <!-- GoatCounter: cookieless page-view analytics, no personal data collected. -->
+  <script data-goatcounter="https://josiah-hoi.goatcounter.com/count"
+          async src="https://gc.zgo.at/count.js"></script>
 </body>
 </html>
