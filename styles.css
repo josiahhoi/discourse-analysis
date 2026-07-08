@@ -1948,15 +1948,19 @@ mark.comment-highlight.comment-highlight-card-hover {
   position: relative;
   z-index: 1;
   padding: 0.25rem 1.5rem 1.5rem 1.5rem;
-  width: 900px; /* FIXED WIDTH for the content area */
-  box-sizing: content-box; /* Ensures the 900px is added to the dynamic bracket padding */
+  /* Text column width scales with zoom so wrap points never move: font-size
+     and box width grow by the same factor, and .workspace overflow-x supplies
+     the horizontal scroll. Export forces --da-zoom back to 1, so captures
+     always use the 900px baseline. */
+  width: calc(900px * var(--da-zoom));
+  box-sizing: content-box; /* Ensures the width is added to the dynamic bracket padding */
   /* Removed height: 100% to prevent vertical stretching */
 }
 
 /* Parallel column (Alternate Views): widen the content area to make room for
    the editable second-text cell appended to each row. */
 .propositions.has-parallel {
-  width: 1280px; /* base 900 + 380 for the parallel column */
+  width: calc(1280px * var(--da-zoom)); /* base 900 + 380 for the parallel column */
 }
 
 /* When the column is shown, the primary text must fill the whole primary area
@@ -1971,7 +1975,7 @@ mark.comment-highlight.comment-highlight-card-hover {
 
 .parallel-text {
   flex: none;
-  width: 360px;
+  width: calc(360px * var(--da-zoom)); /* scales with its zoomed font so cells never re-wrap */
   margin-left: 1rem;
   padding-left: 1rem;
   border-left: 1px solid var(--border);

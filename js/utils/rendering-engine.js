@@ -134,13 +134,15 @@ function renderPropositions() {
   isRenderingPropositions = true;
 
   const dynamicPaddingLeft = getGutterPadding();
+  // The gutter-to-text gap scales with zoom like the gutter itself does.
+  const _gutterGap = 20 * _zoom();
   // In RTL the bracket gutter mirrors to the right side, so pad on the right
   // instead of the left (and clear the opposite side when switching modes).
   if (DA_STATE.isRTL) {
-    container.style.paddingRight = `${dynamicPaddingLeft + 20}px`;
+    container.style.paddingRight = `${dynamicPaddingLeft + _gutterGap}px`;
     container.style.paddingLeft = '';
   } else {
-    container.style.paddingLeft = `${dynamicPaddingLeft + 20}px`;
+    container.style.paddingLeft = `${dynamicPaddingLeft + _gutterGap}px`;
     container.style.paddingRight = '';
   }
 

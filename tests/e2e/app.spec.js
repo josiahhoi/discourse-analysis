@@ -516,8 +516,22 @@ test('zoom: scales text and bracket diagram together, clamps, persists, and expo
     (el) => parseFloat(getComputedStyle(el).fontSize)
   );
   const gutterX = () => page.locator('.bracket-line').first().evaluate((el) => parseFloat(el.getAttribute('x1')));
+  const propositionsWidth = () => page.locator('#propositions').evaluate(
+    (el) => parseFloat(getComputedStyle(el).width)
+  );
+  // Rendered line boxes of the first proposition (unique line tops), so we can
+  // assert zoom never moves wrap points — the column width scales with the font.
+  const lineCount = () => page.locator('.proposition-text').first().evaluate((el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const tops = new Set();
+    for (const r of range.getClientRects()) {
+      if (r.width > 0) tops.add(Math.round(r.top));
+    }
+    return tops.size;
+  });
 
-  const base = { text: await textFontSize(), label: await labelFontSize() };
+  const base = { text: await textFontSize(), label: await labelFontSize(), width: await propositionsWidth(), lines: await lineCount() };
   await expect(page.locator('#zoomLevelBtn')).toHaveText('100%');
 
   // Zoom in: text, SVG label CSS, and gutter geometry all grow proportionally.
@@ -531,6 +545,11 @@ test('zoom: scales text and bracket diagram together, clamps, persists, and expo
   await expect(page.locator('#zoomLevelBtn')).toHaveText('150%');
   expect(await textFontSize()).toBeCloseTo(base.text * 1.5, 0);
   const gutterAt150 = await gutterX();
+
+  // The text column widens with the font, so wrap points never move: same
+  // number of rendered lines at 150% as at 100%, and the column is 1.5× wide.
+  expect(await propositionsWidth()).toBeCloseTo(base.width * 1.5, 0);
+  expect(await lineCount()).toBe(base.lines);
 
   // Clamped at the top: the + button disables itself rather than wrapping or
   // erroring. (Not clicked again here — Playwright refuses to click a
