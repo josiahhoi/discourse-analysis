@@ -285,7 +285,7 @@ test('deleteBracket: undo restores the whole cascaded set', () => {
 function setupForDotClick(stateOverrides = {}) {
   const sb = createSandbox({ DA_UI: { showStatus: () => {} } });
   load(sb, 'js/services/state.js');
-  load(sb, 'js/utils/rendering-engine.js'); // real getPointExtent/getBracketExtent
+  load(sb, 'js/utils/render-model.js'); // real getPointExtent/getBracketExtent
   load(sb, 'js/utils/editor-logic.js');
   // renderAll() pulls in render-arrows.js/render-comments.js (DOM-only, not
   // loaded here) via bare globals — stub it out, this test only cares about

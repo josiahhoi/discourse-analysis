@@ -14,7 +14,7 @@ function setup(brackets, propCount = 5) {
   const sb = createSandbox();
   load(sb, 'js/utils/constants.js');
   load(sb, 'js/services/state.js');
-  load(sb, 'js/utils/rendering-engine.js');
+  load(sb, 'js/utils/render-model.js');
   load(sb, 'js/utils/render-labels.js'); // getBracketLabels
   sb.DA_STATE.propositions = Array.from({ length: propCount }, (_, i) => `line ${i}`);
   sb.DA_STATE.brackets = brackets;

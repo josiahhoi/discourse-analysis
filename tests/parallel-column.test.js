@@ -15,7 +15,7 @@ function setupRenderer() {
   const sb = createSandbox();
   load(sb, 'js/utils/constants.js');
   load(sb, 'js/services/state.js');
-  load(sb, 'js/utils/rendering-engine.js');
+  load(sb, 'js/utils/render-model.js');
   return sb;
 }
 
@@ -23,7 +23,7 @@ function setupEditor() {
   const sb = createSandbox();
   load(sb, 'js/utils/constants.js');
   load(sb, 'js/services/state.js');
-  load(sb, 'js/utils/rendering-engine.js'); // distributeVersesToRows helpers
+  load(sb, 'js/utils/render-model.js'); // distributeVersesToRows helpers
   load(sb, 'js/utils/editor-logic.js');
   return sb;
 }

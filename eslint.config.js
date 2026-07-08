@@ -54,7 +54,8 @@ const APP_GLOBALS = {
   handleNewBracket: 'readonly', startNewBracket: 'readonly',
   parsePastedText: 'readonly', formatBracketType: 'readonly',
   populateReferenceGuide: 'readonly',
-  // rendering-engine.js
+  // rendering-engine.js + its split-out siblings
+  // (render-model.js / render-propositions.js / render-brackets.js)
   createSVG: 'readonly', createLabelText: 'readonly', renderPropositions: 'readonly',
   renderBrackets: 'readonly', computeSlotAssignments: 'readonly',
   getBracketX: 'readonly', getGutterPadding: 'readonly',
@@ -63,6 +64,7 @@ const APP_GLOBALS = {
   getRepresentativeRange: 'readonly', computeVerseDisplay: 'readonly',
   precomputeVerseSuffixes: 'readonly', clampToWordAnchor: 'readonly',
   remapPropositionAnchors: 'readonly',
+  getCollapseInfo: 'readonly', _isJumpOverType: 'readonly', _zoom: 'readonly',
   // render-labels.js / render-arrows.js / render-comments.js
   getBracketLabels: 'readonly', renderWordArrows: 'readonly',
   renderCommentPreviews: 'readonly',
