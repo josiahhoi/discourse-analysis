@@ -756,6 +756,101 @@ function resetBracketSelection() {
   if (window.DA_RENDERER) DA_RENDERER.renderAll();
 }
 
+// ── Bracket-creation simulation ─────────────────────────────────────────────
+// Extent math over an ARBITRARY bracket list (not DA_STATE), so a creation can
+// be simulated on a clone before being committed. Mirrors render-model's
+// getExtent semantics exactly (numbers, null, 'pN', cycle guard, missing id).
+function _extentIn(byId, ref, _seen) {
+  if (typeof ref === 'number') return { from: ref, to: ref };
+  if (ref === null || ref === undefined) return { from: 0, to: 0 };
+  if (DA_STATE.isPropRef(ref)) {
+    const idx = parseInt(ref.slice(1), 10);
+    return { from: idx, to: idx };
+  }
+  if (!_seen) _seen = new Set();
+  if (_seen.has(ref)) return { from: 0, to: 0 };
+  _seen.add(ref);
+  const b = byId.get(ref);
+  if (!b) return { from: 0, to: 0 };
+  const eFrom = _extentIn(byId, b.from, _seen);
+  const eTo = _extentIn(byId, b.to, _seen);
+  return { from: Math.min(eFrom.from, eTo.from), to: Math.max(eFrom.to, eTo.to) };
+}
+
+/** First-match id map, mirroring DA_STATE.bracketById's find() semantics. */
+function _bracketMap(list) {
+  const byId = new Map();
+  list.forEach((b) => { if (!byId.has(b.id)) byId.set(b.id, b); });
+  return byId;
+}
+
+/**
+ * Add a bracket to `list` and reparent existing endpoints onto it: any bracket
+ * (not itself inside the new range) whose from/to endpoint's extent falls
+ * fully inside the new range now points at the new bracket AS A UNIT. This is
+ * the single creation rule — handleDotClick commits with it, and the crossing
+ * check below runs it on a clone first, so the check can never disagree with
+ * what creation would actually produce.
+ */
+function _applyNewBracket(list, newBracket) {
+  list.push(newBracket);
+  const byId = _bracketMap(list);
+  const newRange = _extentIn(byId, newBracket.id);
+  list.forEach((oldB) => {
+    if (oldB === newBracket) return;
+    const oldRange = _extentIn(byId, oldB.id);
+    if (newRange.from <= oldRange.from && newRange.to >= oldRange.to) return;
+
+    const fromRange = _extentIn(byId, oldB.from);
+    if (fromRange.from >= newRange.from && fromRange.to <= newRange.to) oldB.from = newBracket.id;
+
+    const toRange = _extentIn(byId, oldB.to);
+    if (toRange.from >= newRange.from && toRange.to <= newRange.to) oldB.to = newBracket.id;
+  });
+}
+
+/**
+ * Would creating from→to produce crossing brackets? Judged on the tree as it
+ * will exist AFTER the reparent pass, not before: absorbing an endpoint into
+ * the new bracket stretches every enclosing ancestor over the new range too,
+ * so e.g. binding an innermost unit to the adjacent verse is legal no matter
+ * how many brackets enclose it (each one's extent grows transitively). The old
+ * pre-check compared current extents one level deep, which both rejected those
+ * legal chains and accepted creations that absorb the facing endpoints of two
+ * sibling sub-brackets — real crossings. Simulating answers both exactly.
+ *
+ * Only pairs whose extent changed (or the new bracket) are validated, so a
+ * pre-existing overlap in an imported document never blocks unrelated work.
+ * Brackets merely touching at one shared row keep the old tolerance.
+ */
+function _creationWouldCross(fromRef, toRef) {
+  const liveById = _bracketMap(DA_STATE.brackets);
+  const before = new Map();
+  DA_STATE.brackets.forEach((b) => before.set(b, _extentIn(liveById, b.id)));
+
+  const sim = DA_STATE.brackets.map((b) => ({ ...b, _orig: b }));
+  _applyNewBracket(sim, { id: '__proposed__', from: fromRef, to: toRef });
+
+  const byId = _bracketMap(sim);
+  const after = sim.map((b) => ({
+    ext: _extentIn(byId, b.id),
+    prev: b._orig ? before.get(b._orig) : null // null = the new bracket
+  }));
+  const changed = (e) => !e.prev || e.prev.from !== e.ext.from || e.prev.to !== e.ext.to;
+
+  for (let i = 0; i < after.length; i++) {
+    for (let j = i + 1; j < after.length; j++) {
+      if (!changed(after[i]) && !changed(after[j])) continue;
+      const a = after[i].ext, c = after[j].ext;
+      if (Math.max(a.from, c.from) >= Math.min(a.to, c.to)) continue; // ≤1 shared row
+      const aInC = a.from >= c.from && a.to <= c.to;
+      const cInA = c.from >= a.from && c.to <= a.to;
+      if (!aInC && !cInA) return true;
+    }
+  }
+  return false;
+}
+
 function handleDotClick(pointId, x, y) {
   const bracketCanvas = document.getElementById('bracketCanvas');
   if (DA_STATE.bracketSelectStep === 0) {
@@ -816,30 +911,9 @@ function handleDotClick(pointId, x, y) {
       return;
     }
 
-    // CONSTRAINT: Brackets cannot cross each other.
-    const crosses = DA_STATE.brackets.some((b, i) => {
-        const otherRange = DA_RENDERER.getBracketExtent(i);
-        const startOverlap = Math.max(proposedMin, otherRange.from);
-        const endOverlap = Math.min(proposedMax, otherRange.to);
-        
-        if (startOverlap < endOverlap) {
-            const newContainsOld = (proposedMin <= otherRange.from && proposedMax >= otherRange.to);
-            const oldContainsNew = (otherRange.from <= proposedMin && otherRange.to >= proposedMax);
-            
-            if (!newContainsOld && !oldContainsNew) {
-                const e1 = DA_RENDERER.getPointExtent(b.from);
-                const e2 = DA_RENDERER.getPointExtent(b.to);
-                const e1Inside = (e1.from >= proposedMin && e1.to <= proposedMax);
-                const e2Inside = (e2.from >= proposedMin && e2.to <= proposedMax);
-                
-                if (e1Inside || e2Inside) return false;
-                return true;
-            }
-        }
-        return false;
-    });
-
-    if (crosses) {
+    // CONSTRAINT: Brackets cannot cross each other — judged on the tree as it
+    // will exist after creation's reparent pass (see _creationWouldCross).
+    if (_creationWouldCross(finalP1, finalP2)) {
         DA_UI.showStatus('Brackets cannot cross each other', 'error');
         resetBracketSelection();
         return;
@@ -891,21 +965,7 @@ function handleDotClick(pointId, x, y) {
       ...(isSeriesJumpOver && { isJumpOver: true })
     };
 
-    DA_STATE.brackets.push(newBracket);
-    const newIdx = DA_STATE.brackets.length - 1;
-    const newRange = DA_RENDERER.getBracketExtent(newIdx);
-
-    DA_STATE.brackets.forEach((oldB, i) => {
-        if (i === newIdx) return;
-        const oldRange = DA_RENDERER.getBracketExtent(i);
-        if (newRange.from <= oldRange.from && newRange.to >= oldRange.to) return;
-
-        const fromRange = DA_RENDERER.getPointExtent(oldB.from);
-        if (fromRange.from >= newRange.from && fromRange.to <= newRange.to) oldB.from = newBracket.id;
-
-        const toRange = DA_RENDERER.getPointExtent(oldB.to);
-        if (toRange.from >= newRange.from && toRange.to <= newRange.to) oldB.to = newBracket.id;
-    });
+    _applyNewBracket(DA_STATE.brackets, newBracket);
 
     resetBracketSelection();
 

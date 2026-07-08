@@ -330,3 +330,99 @@ test('handleDotClick: reversed click order also normalizes when attaching to a n
   assert.equal(outer.from, 'p0', 'earlier proposition stays on from/top');
   assert.equal(outer.to, 'brInner', 'the later nested unit stays on to/bottom');
 });
+
+// ── handleDotClick: crossing judged AFTER the reparent pass, not before ──────
+// Creating a bracket reparents any endpoint whose extent falls inside the new
+// range, which stretches every enclosing ancestor transitively. The check must
+// simulate that, or legal creations deep under a chain of brackets are refused
+// (and one illegal shape — absorbing the facing endpoints of two sibling
+// sub-brackets — was wrongly accepted and produced a genuinely crossed tree).
+
+function setupForCrossing(brackets, propCount = 10) {
+  const statuses = [];
+  const sb = createSandbox({ DA_UI: { showStatus: (msg, kind) => statuses.push({ msg, kind }) } });
+  load(sb, 'js/services/state.js');
+  load(sb, 'js/utils/render-model.js');
+  load(sb, 'js/utils/editor-logic.js');
+  sb.DA_RENDERER.renderAll = () => {};
+  Object.assign(sb.DA_STATE, {
+    propositions: Array.from({ length: propCount }, (_, i) => `line ${i}`),
+    verseRefs: Array.from({ length: propCount }, (_, i) => String(i + 1)),
+    indentation: new Array(propCount).fill(0),
+    brackets,
+  });
+  return { sb, statuses };
+}
+
+test('crossing: binding an innermost unit to the next verse reparents the whole enclosing chain (Rom 3:21-26 repro)', () => {
+  // Exact structure from the user's Romans 3:21-26 project: an alternative →
+  // inference → alternative → series chain encloses the -/+* bracket over
+  // p6-p7. Connecting that bracket's node to p8 must succeed: the series' to
+  // endpoint is absorbed by the new bracket and every ancestor stretches.
+  const { sb, statuses } = setupForCrossing([
+    { id: 'bAltOuter', from: 'p0', to: 'bInf', type: 'alternative' },
+    { id: 'bNegPos1', from: 'p1', to: 'bActPur', type: 'negative-positive' },
+    { id: 'bActPur', from: 'p2', to: 'p3', type: 'action-purpose' },
+    { id: 'bInf', from: 'bNegPos1', to: 'bAltInner', type: 'inference' },
+    { id: 'bAltInner', from: 'p4', to: 'bSeries', type: 'alternative' },
+    { id: 'bSeries', from: 'p5', to: 'bNegPos2', type: 'series' },
+    { id: 'bNegPos2', from: 'p6', to: 'p7', type: 'negative-positive' },
+  ]);
+
+  sb.DA_EDITOR.handleDotClick('bNegPos2'); // the -/+* node (24a-24b)
+  sb.DA_EDITOR.handleDotClick('p8');       // verse 25's dot
+
+  assert.equal(statuses.filter(s => s.kind === 'error').length, 0,
+    `no error expected, got: ${JSON.stringify(statuses)}`);
+  assert.equal(sb.DA_STATE.brackets.length, 8);
+
+  const created = sb.DA_STATE.brackets[sb.DA_STATE.brackets.length - 1];
+  assert.equal(created.from, 'bNegPos2');
+  assert.equal(created.to, 'p8');
+
+  // The series that ended at the -/+* unit now ends at the new (bigger) unit…
+  const series = sb.DA_STATE.brackets.find(b => b.id === 'bSeries');
+  assert.equal(series.to, created.id);
+  // …and every ancestor's extent stretched over the new range, properly nested.
+  const extentOf = (id) => sb.DA_RENDERER.getBracketExtent(
+    sb.DA_STATE.brackets.findIndex(b => b.id === id));
+  assert.deepEqual(extentOf(created.id), { from: 6, to: 8 });
+  assert.deepEqual(extentOf('bSeries'), { from: 5, to: 8 });
+  assert.deepEqual(extentOf('bAltInner'), { from: 4, to: 8 });
+  assert.deepEqual(extentOf('bInf'), { from: 1, to: 8 });
+  assert.deepEqual(extentOf('bAltOuter'), { from: 0, to: 8 });
+});
+
+test('crossing: absorbing the facing endpoints of two sibling sub-brackets is refused', () => {
+  // M = s(p1-p2) + t(p3-p4). A bracket p2→p3 would absorb s.to AND t.from,
+  // leaving s=[1,3] and t=[2,4] genuinely crossed. The old one-level check
+  // accepted this and corrupted the tree; the simulation refuses it.
+  const { sb, statuses } = setupForCrossing([
+    { id: 's', from: 'p1', to: 'p2', type: 'series' },
+    { id: 't', from: 'p3', to: 'p4', type: 'series' },
+    { id: 'M', from: 's', to: 't', type: 'inference' },
+  ], 6);
+
+  sb.DA_EDITOR.handleDotClick('p2');
+  sb.DA_EDITOR.handleDotClick('p3');
+
+  assert.ok(statuses.some(s => s.msg === 'Brackets cannot cross each other'),
+    `expected the crossing error, got: ${JSON.stringify(statuses)}`);
+  assert.equal(sb.DA_STATE.brackets.length, 3, 'nothing was created');
+  assert.equal(sb.DA_STATE.brackets.find(b => b.id === 's').to, 'p2', 's untouched');
+  assert.equal(sb.DA_STATE.brackets.find(b => b.id === 't').from, 'p3', 't untouched');
+});
+
+test('crossing: single-endpoint absorption one level deep still works (old behavior kept)', () => {
+  // A = p0-p1; creating p1→p2 absorbs A.to and A stretches over the new range.
+  const { sb, statuses } = setupForCrossing([
+    { id: 'A', from: 'p0', to: 'p1', type: 'series' },
+  ], 4);
+
+  sb.DA_EDITOR.handleDotClick('p1');
+  sb.DA_EDITOR.handleDotClick('p2');
+
+  assert.equal(statuses.filter(s => s.kind === 'error').length, 0);
+  const created = sb.DA_STATE.brackets[sb.DA_STATE.brackets.length - 1];
+  assert.equal(sb.DA_STATE.brackets.find(b => b.id === 'A').to, created.id);
+});
