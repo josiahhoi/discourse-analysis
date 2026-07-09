@@ -1422,9 +1422,11 @@ body {
 /* ========================================= */
 .passage-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
+  row-gap: 0.5rem;
   margin-bottom: 0.75rem;
   font-family: var(--font-serif);
   font-size: 1.1rem;
@@ -1537,6 +1539,34 @@ body {
   font-size: 0.9rem;
   font-style: normal;
   color: var(--text-muted);
+}
+
+.profile-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-style: normal;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.profile-indicator:hover, .profile-indicator:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.profile-indicator-label {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.profile-indicator-name {
+  font-weight: 600;
 }
 
 .passage-header [contenteditable="true"] {

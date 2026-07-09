@@ -246,6 +246,10 @@
       try { localStorage.setItem(ACTIVE_KEY, JSON.stringify(_active)); } catch (_) { }
     }
     if (window.renderAll) window.renderAll();
+    // Every profile-mutating path (builtin switch, grid edit, import, cloud
+    // load) funnels through here, so this single call keeps the header's
+    // active-profile indicator in sync everywhere without a call at each site.
+    if (window.DA_UI && DA_UI.syncProfileIndicatorDisplay) DA_UI.syncProfileIndicatorDisplay();
     return _active;
   }
 

@@ -76,6 +76,12 @@ if (zoomOutBtn) zoomOutBtn.addEventListener('click', DA_UI.zoomOut);
 if (zoomInBtn) zoomInBtn.addEventListener('click', DA_UI.zoomIn);
 if (zoomLevelBtn) zoomLevelBtn.addEventListener('click', DA_UI.resetZoom);
 
+// Active notation profile indicator (header). setActive() re-paints it on
+// every later profile change; this is just the first paint before any change
+// has ever fired.
+DA_UI.syncProfileIndicatorDisplay();
+document.getElementById('profileIndicator')?.addEventListener('click', () => DA_UI.openSettings());
+
 // Project Owner / Author Logic
 const pageAuthorInput = document.getElementById('pageAuthor');
 if (pageAuthorInput) {

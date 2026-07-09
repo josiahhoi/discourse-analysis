@@ -341,6 +341,18 @@ function syncPassageAuthorDisplay() {
     }
 }
 
+/**
+ * Paint the header's active-profile indicator (#profileIndicator). Called
+ * once on load and from DA_PROFILES.setActive() — the single choke point
+ * every profile-mutating path (built-in switch, grid edit, import, cloud
+ * load) already funnels through — so this stays correct everywhere without
+ * a call at each individual site.
+ */
+function syncProfileIndicatorDisplay() {
+    const el = document.getElementById('profileIndicatorName');
+    if (el && window.DA_PROFILES) el.textContent = DA_PROFILES.getActive().name;
+}
+
 function handleNewBracket() {
   const hasContent = DA_STATE.propositions.length > 0 && DA_STATE.propositions.some((p) => p && p.trim() && p !== '(empty)');
   
@@ -463,6 +475,6 @@ function formatBracketType(type) {
 }
 
 window.DA_UI = Object.assign(window.DA_UI || {}, {
-  saveState, restoreState, showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings, openReferenceGuide, closeReferenceGuide, maybeShowWelcome, updateFontByAuthor, syncPassageAuthorDisplay, handleNewBracket, startNewBracket, parsePastedText, formatBracketType,
+  saveState, restoreState, showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings, openReferenceGuide, closeReferenceGuide, maybeShowWelcome, updateFontByAuthor, syncPassageAuthorDisplay, syncProfileIndicatorDisplay, handleNewBracket, startNewBracket, parsePastedText, formatBracketType,
   initZoom, applyZoom, setZoomLevel, zoomIn, zoomOut, resetZoom, getZoomFactor
 });
