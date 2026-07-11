@@ -98,6 +98,7 @@ const DA_EXPORT = {
         .workspace-toolbar,
         .sidebar-toggle-btn,
         .cloud-sync-btn,
+        .profile-indicator,
         .connection-node,
         .bracket-hitbox
       `).forEach(el => {
