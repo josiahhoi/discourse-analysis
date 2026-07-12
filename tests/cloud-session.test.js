@@ -35,7 +35,7 @@ function fakeDb() {
   };
 }
 
-function setup({ confirmAnswer = true } = {}) {
+function setup({ confirmAnswer = true, bracketData } = {}) {
   const db = fakeDb();
   const toasts = [];
   const sb = createSandbox({
@@ -49,7 +49,7 @@ function setup({ confirmAnswer = true } = {}) {
       showStatus: (msg, type) => toasts.push(`${type}:${msg}`),
       updateCloudUI: () => {},
     },
-    DA_EXPORT: { buildBracketData: () => ({ propositions: ['x'], verseRefs: ['1'] }) },
+    DA_EXPORT: { buildBracketData: () => (bracketData || { propositions: ['x'], verseRefs: ['1'] }) },
   });
   load(sb, 'js/utils/constants.js');
   load(sb, 'js/services/state.js');
@@ -130,6 +130,35 @@ test('joinCloudSync of a missing project stays inactive and reports the error', 
   await sb.DA_CLOUD.joinCloudSync('NOPE42');
   assert.equal(sb.DA_CLOUD.sessionState(), 'inactive');
   assert.ok(toasts.some((t) => t.startsWith('error:Failed to join')), 'error toast shown');
+});
+
+test('verseBreaks are encoded for Firestore (no nested arrays) and decoded on the way back', async () => {
+  // verseBreaks is number[][] locally, but Firestore rejects arrays nested
+  // directly inside arrays ("Nested arrays are not supported") — the doc write
+  // must carry a map instead, and snapshots must rebuild the local shape.
+  const { sb, db } = setup({
+    bracketData: {
+      propositions: ['alpha beta', 'gamma', 'delta'],
+      verseRefs: ['1-2', '3', '3'],
+      verseBreaks: [[6], [], []],
+    },
+  });
+  await sb.DA_CLOUD.startCloudSync();
+  const id = sb.DA_CLOUD.getProjectId();
+
+  const hasNestedArray = (v) => Array.isArray(v)
+    ? v.some((e) => Array.isArray(e) || hasNestedArray(e))
+    : (v && typeof v === 'object') ? Object.values(v).some(hasNestedArray) : false;
+  assert.equal(hasNestedArray(db._docs[id]), false, 'stored doc has no nested arrays');
+  assert.deepEqual(db._docs[id].verseBreaks, { 0: [6] }, 'empty rows omitted from the map');
+
+  db._fire(id); // a snapshot of that doc restores the aligned array-of-arrays shape
+  assert.deepEqual(sb.DA_STATE.verseBreaks, [[6], [], []]);
+
+  // The push path (update) must encode the same way as the initial set.
+  sb.DA_CLOUD.markDirty();
+  assert.equal(await sb.DA_CLOUD.syncToCloud(), true);
+  assert.deepEqual(db._docs[id].verseBreaks, { 0: [6] });
 });
 
 test('an incoming cloud snapshot lands the session back at live (clean)', async () => {

@@ -121,6 +121,33 @@ function adoptRememberedProject(projectId) {
   DA_STATE.cloudDirty = false;
 }
 
+// ── Firestore encoding ────────────────────────────────────────────────────────
+// Firestore rejects arrays nested directly inside arrays, and verseBreaks is
+// exactly that (verseBreaks[i] is a list of character offsets — number[][]).
+// On the way out it becomes a map keyed by row index with empty rows omitted
+// ({ "3": [17] }); on the way in it is rebuilt into the array-of-arrays shape,
+// aligned to propositions. Decoding must happen BEFORE normalizeBracketData,
+// which treats a non-array verseBreaks as absent and would drop every verse
+// boundary. Every other document field is already Firestore-safe (arrays of
+// scalars or of plain objects).
+
+function encodeProjectDataForFirestore(data) {
+  const vb = {};
+  (Array.isArray(data.verseBreaks) ? data.verseBreaks : []).forEach((breaks, i) => {
+    if (Array.isArray(breaks) && breaks.length) vb[i] = breaks.slice();
+  });
+  return { ...data, verseBreaks: vb };
+}
+
+function decodeProjectDataFromFirestore(data) {
+  if (!data || !data.verseBreaks || Array.isArray(data.verseBreaks) || typeof data.verseBreaks !== 'object') {
+    return data; // already array-shaped (or absent) — leave for normalizeBracketData
+  }
+  const verseBreaks = (Array.isArray(data.propositions) ? data.propositions : [])
+    .map((_, i) => (Array.isArray(data.verseBreaks[i]) ? data.verseBreaks[i].slice() : []));
+  return { ...data, verseBreaks };
+}
+
 // ── Live session I/O ──────────────────────────────────────────────────────────
 
 async function startCloudSync() {
@@ -138,11 +165,11 @@ async function startCloudSync() {
   }
   const currentAuthor = (document.getElementById('pageAuthor')?.value || '').trim() || localStorage.getItem(DA_CONSTANTS.PAGE_AUTHOR_KEY) || 'Anonymous';
   const bracketData = DA_EXPORT.buildBracketData();
-  const projectData = {
+  const projectData = encodeProjectDataForFirestore({
     ...bracketData,
     author: currentAuthor,
     lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-  };
+  });
 
   try {
     await db.collection('projects').doc(projectId).set(projectData);
@@ -183,6 +210,8 @@ function initCloudSync(projectId) {
 
 function handleCloudData(data) {
   DA_STATE.isUpdatingFromCloud = true;
+
+  data = decodeProjectDataFromFirestore(data);
 
   if (window.DA_PERSISTENCE && DA_PERSISTENCE.normalizeBracketData) {
     data = DA_PERSISTENCE.normalizeBracketData(data);
@@ -238,11 +267,11 @@ async function syncToCloud() {
   const currentAuthor = (pageAuthorInput?.value || '').trim() || 'Anonymous';
 
   const bracketData = DA_EXPORT.buildBracketData();
-  const projectData = {
+  const projectData = encodeProjectDataForFirestore({
     ...bracketData,
     author: currentAuthor,
     lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-  };
+  });
 
   // Let real Firestore failures (e.g. the doc was deleted, so update() rejects)
   // propagate to the caller so the UI can report them instead of claiming success.
