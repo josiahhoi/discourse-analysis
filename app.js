@@ -396,6 +396,41 @@ if (toggleLeftSidebarBtn && leftSidebar) {
   });
 }
 
+// Collapsible top bar: fold the fetch header to a slim strip so long passages
+// get the vertical space. The chevron toggles it manually; scrolling down in
+// the workspace folds it automatically and returning to the very top unfolds
+// it. Only threshold CROSSINGS act, so a manual choice mid-passage isn't
+// fought by every subsequent scroll event.
+const appHeader = document.getElementById('appHeader');
+const headerCollapseBtn = document.getElementById('headerCollapseBtn');
+
+function setHeaderCollapsed(collapsed) {
+  appHeader.classList.toggle('header-collapsed', collapsed);
+  headerCollapseBtn.classList.toggle('flipped', collapsed);
+  headerCollapseBtn.setAttribute('aria-expanded', String(!collapsed));
+  headerCollapseBtn.title = collapsed
+    ? 'Expand the top bar'
+    : 'Collapse the top bar (it also folds away when you scroll down)';
+}
+
+if (appHeader && headerCollapseBtn) {
+  headerCollapseBtn.addEventListener('click', () => {
+    setHeaderCollapsed(!appHeader.classList.contains('header-collapsed'));
+  });
+
+  const workspaceScroller = document.getElementById('workspace');
+  if (workspaceScroller) {
+    const FOLD_AT = 120; // px of scroll before the header folds away
+    let lastTop = workspaceScroller.scrollTop;
+    workspaceScroller.addEventListener('scroll', () => {
+      const top = workspaceScroller.scrollTop;
+      if (lastTop < FOLD_AT && top >= FOLD_AT) setHeaderCollapsed(true);
+      else if (top <= 4 && lastTop > 4) setHeaderCollapsed(false);
+      lastTop = top;
+    }, { passive: true });
+  }
+}
+
 // Resize observer for bracket redraw
 if (propositionsContainer?.parentElement) {
   const resizeObserver = new ResizeObserver(() => DA_RENDERER.updateBracketPositions());

@@ -810,3 +810,39 @@ test('parallel column: editable cells — flow/insert splits (1a/1b/1c), edits, 
 
   expect(errors).toEqual([]);
 });
+
+test('top bar folds on real scroll down, unfolds at the top, chevron toggles it', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/');
+  await page.getByText('Or paste text to bracket or import').click();
+  // A passage tall enough that the workspace actually scrolls.
+  const verses = Array.from({ length: 25 }, (_, i) => `[${i + 1}] Line ${i + 1} of a long passage`).join(' ');
+  await page.locator('#pasteText').fill(verses);
+  await page.locator('#importPassageRef').fill('Psalm 119:1-25');
+  await page.locator('#importBtn').click();
+  await expect(page.locator('.proposition-block')).toHaveCount(25);
+
+  const header = page.locator('#appHeader');
+  await expect(header).not.toHaveClass(/header-collapsed/);
+  await expect(page.locator('#passageInput')).toBeVisible();
+
+  // A real wheel scroll down in the workspace folds the header away…
+  await page.locator('.proposition-block').first().hover();
+  await page.mouse.wheel(0, 600);
+  await expect(header).toHaveClass(/header-collapsed/);
+  await expect(page.locator('#passageInput')).toBeHidden(); // folded controls leave view and tab order
+
+  // …and returning to the very top unfolds it.
+  await page.mouse.wheel(0, -3000);
+  await expect(header).not.toHaveClass(/header-collapsed/);
+  await expect(page.locator('#passageInput')).toBeVisible();
+
+  // The chevron toggles it manually in both directions.
+  await page.locator('#headerCollapseBtn').click();
+  await expect(header).toHaveClass(/header-collapsed/);
+  await expect(page.locator('#headerCollapseBtn')).toHaveAttribute('aria-expanded', 'false');
+  await page.locator('#headerCollapseBtn').click();
+  await expect(header).not.toHaveClass(/header-collapsed/);
+
+  expect(errors).toEqual([]);
+});

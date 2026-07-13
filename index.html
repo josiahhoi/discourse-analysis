@@ -19,8 +19,17 @@
 </head>
 <body>
   <div class="app">
-    <header class="header">
-      <h1>Discourse Analysis</h1>
+    <header class="header" id="appHeader">
+      <div class="header-title-row">
+        <h1>Discourse Analysis</h1>
+        <button id="headerCollapseBtn" class="sidebar-toggle-btn header-collapse-btn" type="button" aria-expanded="true" aria-controls="headerDetails" title="Collapse the top bar (it also folds away when you scroll down)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 15 12 9 18 15"></polyline>
+          </svg>
+        </button>
+      </div>
+      <div class="header-details" id="headerDetails">
+      <div class="header-details-inner">
       <p class="subtitle">Diagram the logical structure of Scripture</p>
       <div class="fetch-controls">
         <select id="versionSelect" title="Bible version to fetch">
@@ -42,6 +51,8 @@
           </div>
           <button id="importBtn" type="button">Import</button>
         </details>
+      </div>
+      </div>
       </div>
     </header>
 

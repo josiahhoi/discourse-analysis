@@ -146,6 +146,7 @@ body {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  transition: padding 0.25s ease;
 }
 
 .header h1 {
@@ -154,6 +155,43 @@ body {
   font-size: 1.75rem;
   font-weight: 600;
   color: var(--accent);
+  transition: font-size 0.25s ease;
+}
+
+/* Collapsible header: the title row stays; subtitle + fetch controls fold away.
+   grid-template-rows 1fr→0fr animates the fold without measuring content
+   (max-height needs a magic number). Folding is manual (the chevron) or
+   automatic on workspace scroll — wiring in app.js. */
+.header-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.header-details {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.25s ease, opacity 0.2s ease, visibility 0.25s;
+}
+
+.header-details-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.header.header-collapsed {
+  padding: 0.4rem 2rem;
+}
+
+.header.header-collapsed h1 {
+  font-size: 1.05rem;
+}
+
+.header.header-collapsed .header-details {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden; /* keeps the folded controls out of the tab order */
 }
 
 .subtitle {
