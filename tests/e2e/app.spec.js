@@ -846,3 +846,26 @@ test('top bar folds on real scroll down, unfolds at the top, chevron toggles it'
 
   expect(errors).toEqual([]);
 });
+
+test('paste auto-detect: Logos-style flowing text with citation imports as verses', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/');
+  await page.getByText('Or paste text to bracket or import').click();
+  // Logos/Accordance-style paste: bare verse numbers in flowing text plus a
+  // trailing citation — no [n] markers and no manual passage ref.
+  await page.locator('#pasteText').fill(
+    '21 But now the righteousness of God has been manifested apart from the law, ' +
+    '22 even the righteousness of God through faith in Jesus Christ for all who believe. ' +
+    '23 for all have sinned and fall short of the glory of God (Rom 3:21-23)'
+  );
+  await page.locator('#importBtn').click();
+
+  await expect(page.locator('.proposition-block')).toHaveCount(3);
+  await expect(page.locator('.verse-ref').nth(0)).toHaveText(/21/);
+  await expect(page.locator('.verse-ref').nth(2)).toHaveText(/23/);
+  // The citation was consumed and auto-filled the passage ref.
+  await expect(page.locator('#passageRef')).toHaveText('Romans 3:21-23');
+  await expect(page.locator('.proposition-block').nth(2)).not.toContainText('(Rom');
+
+  expect(errors).toEqual([]);
+});

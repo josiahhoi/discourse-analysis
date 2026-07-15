@@ -34,7 +34,7 @@
         <button id="fetchBtn" type="button">Fetch Passage</button>
         <details class="import-section">
           <summary>Or paste text to bracket or import</summary>
-          <textarea id="pasteText" placeholder="Paste passage text here. Use [1], [2], [3:14] for verse breaks."></textarea>
+          <textarea id="pasteText" placeholder="Paste from Logos, Accordance, or any Bible text — verse numbers are detected automatically. You can also mark breaks with [1], [2], [3:14]."></textarea>
           <div class="import-options">
             <label for="importPassageRef">Passage ref:</label>
             <input type="text" id="importPassageRef" placeholder="e.g. Phil 3:2-8" title="Label for the passage">
@@ -387,6 +387,7 @@
   <script src="js/utils/constants.js?v=3.1.0"></script>
   <script src="js/services/state.js?v=3.1.0"></script>
   <script src="js/services/profiles.js?v=3.1.0"></script>
+  <script src="js/utils/paste-parser.js?v=3.1.0"></script>
   <script src="js/utils/ui.js?v=3.1.0"></script>
   <script src="js/utils/ui-comments.js?v=3.1.0"></script>
   <script src="js/utils/ui-menus.js?v=3.1.0"></script>

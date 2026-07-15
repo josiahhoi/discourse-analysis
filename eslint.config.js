@@ -17,7 +17,7 @@ const APP_GLOBALS = {
   firebase: 'readonly', db: 'readonly',
   // namespaces (window.DA_* assignments)
   DA_STATE: 'readonly', DA_CONSTANTS: 'readonly', DA_PROFILES: 'readonly',
-  DA_UI: 'readonly', DA_NOTATION: 'readonly', DA_PERSISTENCE: 'readonly',
+  DA_UI: 'readonly', DA_NOTATION: 'readonly', DA_PERSISTENCE: 'readonly', DA_PASTE: 'readonly',
   DA_MODES: 'readonly', DA_BIBLE: 'readonly', DA_CLOUD: 'readonly',
   DA_EDITOR: 'readonly', DA_RENDERER: 'readonly', DA_EXPORT: 'readonly',
   DA_KEYBOARD: 'readonly', DA_MOUSE: 'readonly', DA_BLOCK: 'readonly',

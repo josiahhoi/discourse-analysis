@@ -325,8 +325,14 @@ if (importBtn) importBtn.addEventListener('click', () => {
   const startVerseInput = document.getElementById('importStartVerse');
   const startVerse = (startVerseInput?.value?.trim() || '1').replace(/[^0-9a-z:]/gi, '') || '1';
 
-  const parsed = DA_UI.parsePastedText(raw, startVerse);
+  const parsed = DA_PASTE.parsePastedText(raw, startVerse);
   const usedParsed = parsed.propositions.length > 0;
+
+  // A reference detected in the paste (header line, trailing citation, or
+  // Accordance per-verse prefixes) fills the passage label unless the user
+  // typed one; reflect it into the input so the detection is visible.
+  const detectedRef = !passageRefInput?.value?.trim() && parsed.passageRef;
+  if (detectedRef && passageRefInput) passageRefInput.value = parsed.passageRef;
 
   // Pasted text replaces the document: one shared reset ends/forgets the cloud
   // session and clears every per-document field before the paste lands. (This
@@ -346,7 +352,10 @@ if (importBtn) importBtn.addEventListener('click', () => {
   if (propositionsContainer) propositionsContainer.classList.remove('greek-text');
 
   renderAll();
-  DA_UI.showStatus('Imported. Double-click to split a line, single-click to edit. Click the dots to create brackets.', 'success');
+  const detectedNote = (parsed.detection === 'lines' || parsed.detection === 'flow')
+    ? `Detected ${parsed.verseRefs.length} verse${parsed.verseRefs.length === 1 ? '' : 's'}. `
+    : '';
+  DA_UI.showStatus(`${detectedNote}Imported. Double-click to split a line, single-click to edit. Click the dots to create brackets.`, 'success');
 });
 
 

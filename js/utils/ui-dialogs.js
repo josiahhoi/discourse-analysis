@@ -444,37 +444,11 @@ function startNewBracket() {
   showStatus('New bracket started.', 'success');
 }
 
-function parsePastedText(raw, defaultStartVerse = '1') {
-  // Strip zero-width characters (legacy verse markers, BOM, joiners) — verse
-  // boundaries are structured data now, never in-band characters.
-  raw = String(raw).replace(/[\u200B\u200C\u200D\uFEFF]/g, '');
-  const verseParts = raw.split(/(?=\[\d+(?::\d+)?\])/);
-  const props = [];
-  const refs = [];
-  let hasMarkers = false;
-  for (const part of verseParts) {
-    const m = part.match(/^\[(\d+)(?::(\d+))?\]\s*(.*)$/s);
-    if (m) {
-      hasMarkers = true;
-      const num = m[2] ? `${m[1]}:${m[2]}` : m[1];
-      const content = m[3].trim();
-      if (content) {
-        props.push(content);
-        refs.push(num);
-      }
-    } else if (part.trim()) {
-      props.push(part.trim());
-      refs.push(hasMarkers || refs.length > 0 ? String(props.length) : defaultStartVerse);
-    }
-  }
-  return { propositions: props, verseRefs: refs };
-}
-
 function formatBracketType(type) {
   return DA_CONSTANTS.RELATIONSHIP_LABELS[type] || type.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-');
 }
 
 window.DA_UI = Object.assign(window.DA_UI || {}, {
-  saveState, restoreState, showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings, openReferenceGuide, closeReferenceGuide, maybeShowWelcome, updateFontByAuthor, syncPassageAuthorDisplay, syncProfileIndicatorDisplay, handleNewBracket, startNewBracket, parsePastedText, formatBracketType,
+  saveState, restoreState, showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings, openReferenceGuide, closeReferenceGuide, maybeShowWelcome, updateFontByAuthor, syncPassageAuthorDisplay, syncProfileIndicatorDisplay, handleNewBracket, startNewBracket, formatBracketType,
   initZoom, applyZoom, setZoomLevel, zoomIn, zoomOut, resetZoom, getZoomFactor
 });

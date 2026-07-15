@@ -20,6 +20,7 @@ declare var DA_STATE: any;
 declare var DA_CONSTANTS: any;
 declare var DA_PROFILES: any;
 declare var DA_UI: any;
+declare var DA_PASTE: any;
 declare var DA_NOTATION: any;
 declare var DA_PERSISTENCE: any;
 declare var DA_MODES: any;
@@ -35,7 +36,7 @@ declare var DA_BLOCK: any;
 
 // window.* extras set by app.js / state.js / mouse-handler.js / preload.js
 interface Window {
-  DA_STATE: any; DA_CONSTANTS: any; DA_PROFILES: any; DA_UI: any;
+  DA_STATE: any; DA_CONSTANTS: any; DA_PROFILES: any; DA_UI: any; DA_PASTE: any;
   DA_NOTATION: any; DA_PERSISTENCE: any; DA_MODES: any; DA_BIBLE: any;
   DA_CLOUD: any; DA_EDITOR: any; DA_RENDERER: any; DA_EXPORT: any;
   DA_KEYBOARD: any; DA_MOUSE: any; DA_BLOCK: any;
