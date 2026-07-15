@@ -20,17 +20,9 @@
 <body>
   <div class="app">
     <header class="header" id="appHeader">
-      <div class="header-title-row">
-        <h1>Discourse Analysis</h1>
-        <button id="headerCollapseBtn" class="sidebar-toggle-btn header-collapse-btn" type="button" aria-expanded="true" aria-controls="headerDetails" title="Collapse the top bar (it also folds away when you scroll down)">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="6 15 12 9 18 15"></polyline>
-          </svg>
-        </button>
-      </div>
+      <h1>Discourse Analysis</h1>
       <div class="header-details" id="headerDetails">
       <div class="header-details-inner">
-      <p class="subtitle">Diagram the logical structure of Scripture</p>
       <div class="fetch-controls">
         <select id="versionSelect" title="Bible version to fetch">
           <option value="esv">ESV</option>
@@ -54,6 +46,11 @@
       </div>
       </div>
       </div>
+      <button id="headerCollapseBtn" class="sidebar-toggle-btn header-collapse-btn" type="button" aria-expanded="true" aria-controls="headerDetails" title="Collapse the top bar (it also folds away when you scroll down)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 15 12 9 18 15"></polyline>
+        </svg>
+      </button>
     </header>
 
     <main class="main">
@@ -134,14 +131,15 @@
         </details>
       </aside>
 
+      <button id="toggleLeftSidebarBtn" class="sidebar-toggle-btn sidebar-collapse-btn" type="button" title="Toggle Sidebar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
+
       <section class="workspace" id="workspace">
         <div class="passage-header" id="workspaceHeader">
           <div class="passage-header-left">
-            <button id="toggleLeftSidebarBtn" class="sidebar-toggle-btn" title="Toggle Sidebar">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="15 18 9 12 15 6"></polyline>
-              </svg>
-            </button>
             <span id="passageRef" contenteditable="true" role="textbox" title="Click to edit passage reference">—</span>
             <span class="copyright" id="copyrightLabel">(ESV)</span>
             <span class="copyright parallel-badge" id="parallelBadge" style="display: none;" title="Parallel column shown (editable; saved with the project)"></span>

@@ -142,7 +142,8 @@ body {
 
 /* Header */
 .header {
-  padding: 1.5rem 2rem;
+  position: relative;
+  padding: 0.6rem 2rem 0.75rem;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -158,15 +159,30 @@ body {
   transition: font-size 0.25s ease;
 }
 
-/* Collapsible header: the title row stays; subtitle + fetch controls fold away.
+/* Collapsible header: the title stays; the fetch controls fold away.
    grid-template-rows 1fr→0fr animates the fold without measuring content
-   (max-height needs a magic number). Folding is manual (the chevron) or
-   automatic on workspace scroll — wiring in app.js. */
-.header-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+   (max-height needs a magic number). Folding is manual (the handle tab
+   hanging under the bottom border) or automatic on workspace scroll —
+   wiring in app.js. */
+.header .header-collapse-btn {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translate(-50%, 100%);
+  z-index: 30;
+  width: 44px;
+  height: 17px;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+}
+
+.header .header-collapse-btn:hover,
+[data-theme="light"] .header .header-collapse-btn:hover {
+  background: var(--bg);
+  color: var(--text);
 }
 
 .header-details {
@@ -194,17 +210,12 @@ body {
   visibility: hidden; /* keeps the folded controls out of the tab order */
 }
 
-.subtitle {
-  margin: 0.25rem 0 1rem;
-  font-size: 0.95rem;
-  color: var(--text-muted);
-}
-
 .fetch-controls {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
   align-items: center;
+  margin-top: 0.4rem;
 }
 
 #versionSelect {
@@ -349,11 +360,40 @@ body {
 
 /* Main layout */
 .main {
+  position: relative; /* anchors the sidebar handle tab */
   flex: 1;
   min-height: 0; /* let the workspace/sidebar scroll instead of stretching the shell */
   display: flex;
   overflow: hidden;
   /* Removed padding/gap here to let sidebar sit flush */
+}
+
+/* Sidebar handle: a tab on the sidebar's right edge, vertically centered.
+   Lives outside the sidebar so it survives .sidebar-hidden (display: none)
+   and snaps to the window edge to bring the sidebar back. */
+.main .sidebar-collapse-btn {
+  position: absolute;
+  left: 250px; /* .sidebar width */
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 30;
+  width: 17px;
+  height: 44px;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+}
+
+.sidebar.sidebar-hidden + .sidebar-collapse-btn {
+  left: 0;
+}
+
+.main .sidebar-collapse-btn:hover,
+[data-theme="light"] .main .sidebar-collapse-btn:hover {
+  background: var(--bg);
+  color: var(--text);
 }
 
 /* ========================================= */
