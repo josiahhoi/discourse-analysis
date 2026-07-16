@@ -511,6 +511,11 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
   const top = Math.max(5, Math.min(centerY - 150, window.innerHeight - ph - 5));
   picker.style.left = `${left}px`;
   picker.style.top = `${top}px`;
+  // The hover info panel adds height after this positioning; cap the picker
+  // at the viewport bottom so the footer (Delete Bracket) can never be pushed
+  // below the fold — the relationship list scrolls instead (styles.css caps
+  // overall height, but only relative to the picker's own top).
+  picker.style.maxHeight = `${window.innerHeight - top - 5}px`;
 
   makeFixedDraggable(picker, '.picker-title');
 

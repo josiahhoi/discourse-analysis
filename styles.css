@@ -701,6 +701,15 @@ body {
   min-height: 0;
 }
 
+/* When the height cap bites, only the relationship list may compress — the
+   title, search box, hover info panel, and footer keep their full height. */
+.relationship-picker-fixed .picker-title,
+.relationship-picker-fixed .picker-search-row,
+.relationship-picker-fixed .picker-info-panel,
+.relationship-picker-fixed .picker-footer {
+  flex-shrink: 0;
+}
+
 .label-picker button {
   padding: 0.25rem 0.5rem;
   font-size: 0.75rem;

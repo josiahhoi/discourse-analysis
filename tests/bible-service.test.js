@@ -161,13 +161,18 @@ test('fetchPassageData uses the ESV API result when available, tagging the sourc
   assert.deepEqual(result.propositions, ['hello from ESV API']);
 });
 
-test('fetchPassageData never attempts the ESV API for NASB (unsupported translation)', async () => {
+test('fetchPassageData (nasb) tries the NASB bridge — never ESV — then falls back to Bolls', async () => {
   const sb = setup();
   let esvCalled = false;
-  sb.window.electronAPI = { fetchESV: async () => { esvCalled = true; return { ok: true, text: '[1] x' }; } };
+  let nasbCalled = false;
+  sb.window.electronAPI = {
+    fetchESV: async () => { esvCalled = true; return { ok: true, text: '[1] x' }; },
+    fetchNASB: async () => { nasbCalled = true; return { ok: false, status: 500 }; }
+  };
   sb.fetchFromBolls = async () => ({ text: '[1] nasb text', passageRef: 'John 1:1', copyright: '(NASB)' });
   const result = await sb.fetchPassageData('nasb', 'John 1:1');
   assert.equal(esvCalled, false);
+  assert.equal(nasbCalled, true);
   assert.equal(result.source, 'bolls');
 });
 

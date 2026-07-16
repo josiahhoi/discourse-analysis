@@ -136,3 +136,107 @@ test('user-typed start verse beats a detected reference', () => {
   const r = parse('Romans 3:21\nBut now the righteousness', '7');
   assert.deepEqual(r.verseRefs, ['7']);
 });
+
+// ── Regressions from the 3.2.0 review: false positives ──────────────────────
+
+test('guard: numbered lists ("1." / "2.") are not verses', () => {
+  const r = parse('1. Pray for the team\n2. Read chapter 4\n3. Bring snacks');
+  assert.equal(r.detection, 'none');
+  assert.equal(r.propositions.length, 1);
+});
+
+test('guard: clock times in flowing prose do not split', () => {
+  const r = parse('We meet at 9:30 in the morning and 10:15 at the latest.');
+  assert.equal(r.detection, 'none');
+  assert.equal(r.propositions.length, 1);
+});
+
+test('guard: schedule lines with c:v-shaped times do not split', () => {
+  const r = parse('9:00 Standup\n10:30 Review standup notes');
+  assert.equal(r.detection, 'none');
+  assert.equal(r.propositions.length, 1);
+
+  const single = parse('12:30 Lunch with the team');
+  assert.equal(single.detection, 'none');
+  assert.deepEqual(single.verseRefs, ['1']);
+});
+
+test('guard: consecutive counts in prose do not split without an anchor at the start', () => {
+  const r = parse('Give me 4 loaves and 5 fish for the crowd.');
+  assert.equal(r.detection, 'none');
+  assert.equal(r.propositions.length, 1);
+});
+
+test('flow: a cross-reference ("see 16:25") does not hijack the verse chain', () => {
+  const r = parse('Romans 3:21-23\n21 But now the righteousness see 16:25 for the doxology, 22 even the righteousness, 23 for all have sinned');
+  assert.deepEqual(r.verseRefs, ['21', '22', '23']);
+  assert.ok(r.propositions[0].includes('see 16:25'));
+});
+
+// ── Regressions from the 3.2.0 review: text loss & wrong refs ────────────────
+
+test('KJV-style bracketed italics survive; single-letter [a] is still stripped', () => {
+  const r = parse('The LORD [is] my shepherd; I shall not want.');
+  assert.deepEqual(r.propositions, ['The LORD [is] my shepherd; I shall not want.']);
+});
+
+test('superscript footnote numbers attached to words are stripped, not split on', () => {
+  const r = parse('In the beginning¹ God created² the heavens and the earth.');
+  assert.equal(r.detection, 'none');
+  assert.deepEqual(r.propositions, ['In the beginning God created the heavens and the earth.']);
+});
+
+test('flow: chapter-crossing copies keep the chapter in every ref', () => {
+  const r = parse('Romans 11:36\n36 For from him and through him, 12:1 I appeal to you brothers, 2 Do not be conformed');
+  assert.equal(r.detection, 'flow');
+  assert.deepEqual(r.verseRefs, ['11:36', '12:1', '12:2']);
+});
+
+test('flow: leading text before a next-chapter restart is the reference verse', () => {
+  const r = parse('Romans 3:31\nDo we then overthrow the law? By no means! 4:1 What then shall we say');
+  assert.equal(r.detection, 'flow');
+  assert.deepEqual(r.verseRefs, ['3:31', '4:1']);
+  assert.ok(r.propositions[0].startsWith('Do we then'));
+});
+
+test('flow: an opening quote before a verse number stays with that verse', () => {
+  const r = parse('Romans 3:21-22\n21 But now God said, “22 even the righteousness through faith.');
+  assert.deepEqual(r.verseRefs, ['21', '22']);
+  assert.ok(!r.propositions[0].includes('“'), 'verse 21 has no stray opening quote');
+  assert.ok(r.propositions[1].startsWith('“even'), 'verse 22 keeps its opening quote');
+});
+
+// ── Regressions from the 3.2.0 review: reference extraction ──────────────────
+
+test('header: multi-word translation tags like (NASB 2020) are recognized', () => {
+  const r = parse('Romans 3:21-22 (NASB 2020)\n21 But now the righteousness of God, 22 even the righteousness through faith.');
+  assert.equal(r.passageRef, 'Romans 3:21-22');
+  assert.deepEqual(r.verseRefs, ['21', '22']);
+});
+
+test('own-line trailing citation is consumed and fills the passage ref', () => {
+  const r = parse('21 But now the righteousness of God,\n22 even the righteousness through faith.\nRomans 3:21–22 (ESV)');
+  assert.equal(r.passageRef, 'Romans 3:21-22');
+  assert.deepEqual(r.verseRefs, ['21', '22']);
+  assert.ok(!r.propositions.join(' ').includes('Romans 3:21'));
+});
+
+test('header plus parenthesized trailer: both are consumed, header wins', () => {
+  const r = parse('Romans 3:21-22\n21 But now the righteousness, 22 even the righteousness. (Rom 3:21-22)');
+  assert.equal(r.passageRef, 'Romans 3:21-22');
+  assert.ok(!r.propositions.join(' ').includes('(Rom'));
+});
+
+test('leading pericope heading line is dropped (lines mode)', () => {
+  const r = parse('The Righteousness of God\n21 But now the righteousness\n22 even the righteousness');
+  assert.equal(r.detection, 'lines');
+  assert.deepEqual(r.verseRefs, ['21', '22']);
+  assert.ok(!r.propositions.join(' ').includes('Righteousness of God'));
+});
+
+test('leading junk line under a header is dropped (flow mode)', () => {
+  const r = parse('Romans 3:21-22\nNew International Version\n21 But now the righteousness, 22 This righteousness is given');
+  assert.equal(r.detection, 'flow');
+  assert.deepEqual(r.verseRefs, ['21', '22']);
+  assert.ok(r.propositions[0].startsWith('But now'));
+});

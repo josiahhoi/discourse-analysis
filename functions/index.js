@@ -28,12 +28,15 @@ const API_BIBLE_KEY = defineSecret('API_BIBLE_KEY');
 // public proxy) — maxInstances below caps the blast radius.
 const ALLOWED_ORIGINS = [
   'https://josiahhoi.github.io',
-  /^http:\/\/localhost(:\d+)?$/,
+  /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/,
 ];
 
 async function handleEsv(req, res) {
-  const query = String(req.query.q || '').slice(0, 100);
+  const query = String(req.query.q || '');
   if (!query) return res.status(400).json({ ok: false, error: 'Missing q' });
+  // Reject rather than truncate: a silent slice can cut mid-reference (wrong
+  // passage reported as success) or split a surrogate pair.
+  if (query.length > 300) return res.status(400).json({ ok: false, error: 'Query too long' });
   // Same params as main.js's fetch-esv-passage handler: inline "[N]" verse
   // markers, no headings/footnotes, no appended copyright (the app shows its
   // own badge).
@@ -49,10 +52,13 @@ async function handleEsv(req, res) {
 
 // The bibleId for the NASB edition on this key is discovered once per warm
 // instance (the free plan only exposes the bibles picked at signup). The
-// NASB_BIBLE_ID env var (functions/.env, optional) skips discovery.
+// API_BIBLE_NASB_ID env var (functions/.env, optional — same name as the
+// desktop .env pin; NASB_BIBLE_ID is accepted as a legacy alias) skips
+// discovery.
 let cachedNasbBibleId = null;
 async function resolveNasbBibleId() {
-  if (process.env.NASB_BIBLE_ID) return process.env.NASB_BIBLE_ID;
+  const pinned = process.env.API_BIBLE_NASB_ID || process.env.NASB_BIBLE_ID;
+  if (pinned) return pinned;
   if (cachedNasbBibleId) return cachedNasbBibleId;
   const res = await fetch('https://rest.api.bible/v1/bibles', {
     headers: { 'api-key': API_BIBLE_KEY.value() }

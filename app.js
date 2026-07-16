@@ -329,12 +329,6 @@ if (importBtn) importBtn.addEventListener('click', () => {
   const parsed = DA_PASTE.parsePastedText(raw, startVerse);
   const usedParsed = parsed.propositions.length > 0;
 
-  // A reference detected in the paste (header line, trailing citation, or
-  // Accordance per-verse prefixes) fills the passage label unless the user
-  // typed one; reflect it into the input so the detection is visible.
-  const detectedRef = !passageRefInput?.value?.trim() && parsed.passageRef;
-  if (detectedRef && passageRefInput) passageRefInput.value = parsed.passageRef;
-
   // Pasted text replaces the document: one shared reset ends/forgets the cloud
   // session and clears every per-document field before the paste lands. (This
   // branch once skipped the session reset — with a live session attached, the
@@ -345,7 +339,10 @@ if (importBtn) importBtn.addEventListener('click', () => {
       ? parsed.propositions
       : [raw.replace(/\[\d+(?::\d+)?\]\s*/g, '').trim() || raw],
     verseRefs: usedParsed ? parsed.verseRefs : [startVerse],
-    passageRef: passageRefInput?.value?.trim() || 'Imported text'
+    // A reference detected in the paste (header line, trailing citation, or
+    // Accordance per-verse prefixes) labels the passage unless the user
+    // typed one.
+    passageRef: passageRefInput?.value?.trim() || parsed.passageRef || 'Imported text'
   });
   if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
   const copyrightLabel = document.getElementById('copyrightLabel');
@@ -353,8 +350,13 @@ if (importBtn) importBtn.addEventListener('click', () => {
   if (propositionsContainer) propositionsContainer.classList.remove('greek-text');
 
   renderAll();
+  // The import box is one-shot: clear it so a detected reference or typed
+  // start verse can't leak into the next import as if the user had typed it.
+  pasteText.value = '';
+  if (passageRefInput) passageRefInput.value = '';
+  if (startVerseInput) startVerseInput.value = '';
   const detectedNote = (parsed.detection === 'lines' || parsed.detection === 'flow')
-    ? `Detected ${parsed.verseRefs.length} verse${parsed.verseRefs.length === 1 ? '' : 's'}. `
+    ? `Detected ${parsed.passageRef ? `${parsed.passageRef} — ` : ''}${parsed.verseRefs.length} verse${parsed.verseRefs.length === 1 ? '' : 's'}. `
     : '';
   DA_UI.showStatus(`${detectedNote}Imported. Double-click to split a line, single-click to edit. Click the dots to create brackets.`, 'success');
 });
