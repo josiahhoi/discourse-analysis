@@ -869,3 +869,24 @@ test('paste auto-detect: Logos-style flowing text with citation imports as verse
 
   expect(errors).toEqual([]);
 });
+
+test('sidebar folds closed and back open via its edge handle', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/');
+  const sidebar = page.locator('#sidebar');
+  const handle = page.locator('#toggleLeftSidebarBtn');
+  await expect(sidebar).toBeVisible();
+
+  // Collapse: the sidebar folds away (visibility: hidden at the end of the
+  // shared fold animation) and the handle rides the edge to the window edge.
+  await handle.click();
+  await expect(sidebar).toBeHidden();
+  await expect(handle).toHaveCSS('left', '0px');
+
+  // Expand: everything comes back.
+  await handle.click();
+  await expect(sidebar).toBeVisible();
+  await expect(handle).toHaveCSS('left', '250px');
+
+  expect(errors).toEqual([]);
+});

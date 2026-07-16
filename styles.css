@@ -24,6 +24,10 @@
      like theme. The default here is only a fallback for the instant before
      JS runs — see js/utils/ui-dialogs.js initZoom(). */
   --da-zoom: 1;
+  /* Shared fold animation for every collapsible surface (top bar, left
+     sidebar, comments panel) — one place to tune so they can't drift apart. */
+  --fold-duration: 0.25s;
+  --fold-ease: ease;
   --bg: #1a1a1c;
   --surface: #242428;
   --surface-elevated: #2e2e32;
@@ -156,7 +160,7 @@ body {
   font-size: 1.75rem;
   font-weight: 600;
   color: var(--accent);
-  transition: font-size 0.25s ease;
+  transition: font-size var(--fold-duration) var(--fold-ease);
 }
 
 /* Collapsible header: the title stays; the fetch controls fold away.
@@ -188,7 +192,7 @@ body {
 .header-details {
   display: grid;
   grid-template-rows: 1fr;
-  transition: grid-template-rows 0.25s ease, opacity 0.2s ease, visibility 0.25s;
+  transition: grid-template-rows var(--fold-duration) var(--fold-ease), opacity 0.2s ease, visibility var(--fold-duration);
 }
 
 .header-details-inner {
@@ -369,11 +373,12 @@ body {
 }
 
 /* Sidebar handle: a tab on the sidebar's right edge, vertically centered.
-   Lives outside the sidebar so it survives .sidebar-hidden (display: none)
-   and snaps to the window edge to bring the sidebar back. */
+   Lives outside the sidebar so it survives .sidebar-collapsed and rides the
+   folding edge to the window edge (same curve as the fold, so it stays
+   visually glued to the sidebar). */
 .main .sidebar-collapse-btn {
   position: absolute;
-  left: 250px; /* .sidebar width */
+  left: 250px; /* .sidebar-inner width */
   top: 50%;
   transform: translateY(-50%);
   z-index: 30;
@@ -384,9 +389,10 @@ body {
   border: 1px solid var(--border);
   border-left: none;
   border-radius: 0 8px 8px 0;
+  transition: left var(--fold-duration) var(--fold-ease);
 }
 
-.sidebar.sidebar-hidden + .sidebar-collapse-btn {
+.sidebar.sidebar-collapsed + .sidebar-collapse-btn {
   left: 0;
 }
 
@@ -399,24 +405,42 @@ body {
 /* ========================================= */
 /* 3. Sidebar, Forms & Buttons               */
 /* ========================================= */
+/* The sidebar folds exactly like the top bar, rotated 90°: the shell's width
+   eases 250px→0 while the fixed-width inner clips instead of re-wrapping
+   mid-fold. (The header's grid 1fr→0fr trick doesn't work here — an fr track
+   inside an auto-width flex item resolves to the content's size, never 0.)
+   Same timing tokens as .header-details. */
 .sidebar {
   flex-shrink: 0;
   width: 250px;
+  min-width: 0; /* flex min-size floor would otherwise hold the shell at the inner's 250px */
+  overflow: hidden;
+  transition: width var(--fold-duration) var(--fold-ease), opacity 0.2s ease, visibility var(--fold-duration);
+}
+
+.sidebar-inner {
+  width: 250px;
+  height: 100%;
   background: var(--surface);
   border-right: 1px solid var(--border);
   padding: 1.5rem 1.25rem;
-  overflow-y: auto;
+  overflow: hidden auto;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
 }
 
+.sidebar.sidebar-collapsed {
+  width: 0;
+  opacity: 0;
+  visibility: hidden; /* keeps the folded controls out of the tab order */
+}
 
-.sidebar::-webkit-scrollbar {
+.sidebar-inner::-webkit-scrollbar {
   width: 4px;
 }
 
-.sidebar::-webkit-scrollbar-thumb {
+.sidebar-inner::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 4px;
 }
@@ -1119,10 +1143,20 @@ body {
 }
 
 /* Comments preview (right sidebar) */
+/* The comments panel folds exactly like the top bar, rotated 90° — the same
+   width-easing shell/inner pair as .sidebar / .sidebar-inner. */
 .comments-preview {
   flex-shrink: 0;
-  width: 260px;
   max-height: 85vh;
+  width: 260px;
+  min-width: 0; /* flex min-size floor would otherwise hold the shell at the inner's 260px */
+  overflow: hidden;
+  transition: width var(--fold-duration) var(--fold-ease), opacity 0.2s ease, visibility var(--fold-duration);
+}
+
+.comments-preview-inner {
+  width: 260px;
+  height: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1130,6 +1164,12 @@ body {
   background: var(--surface);
   border-radius: var(--radius);
   border: 1px solid var(--border);
+}
+
+.comments-preview.comments-collapsed {
+  width: 0;
+  opacity: 0;
+  visibility: hidden; /* keeps the folded panel out of the tab order */
 }
 
 .comments-preview h3 {
@@ -1617,9 +1657,6 @@ body {
   background: rgba(0, 0, 0, 0.05);
 }
 
-.sidebar-hidden {
-  display: none !important;
-}
 
 .passage-author {
   flex-shrink: 0;

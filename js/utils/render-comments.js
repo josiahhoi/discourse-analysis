@@ -12,11 +12,10 @@ function renderCommentPreviews() {
   const list = document.getElementById('commentsPreviewList');
   if (!sidebar || !list) return;
 
-  if (!DA_STATE.showCommentsEnabled) {
-    sidebar.style.display = 'none';
-    return;
-  }
-  sidebar.style.display = 'flex';
+  // Fold/unfold via the shared collapse animation (styles.css) rather than
+  // display, which would kill the transition.
+  sidebar.classList.toggle('comments-collapsed', !DA_STATE.showCommentsEnabled);
+  if (!DA_STATE.showCommentsEnabled) return;
   
   const existingCards = Array.from(list.children);
   const targetCount = DA_STATE.comments.length;

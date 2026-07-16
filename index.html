@@ -55,6 +55,7 @@
 
     <main class="main">
       <aside class="sidebar" id="sidebar">
+      <div class="sidebar-inner">
         <details class="sidebar-help">
           <summary>Help & Tips</summary>
           <div class="sidebar-help-content">
@@ -129,6 +130,7 @@
           <summary>Recent</summary>
           <ul id="recentList" class="recent-list"></ul>
         </details>
+      </div>
       </aside>
 
       <button id="toggleLeftSidebarBtn" class="sidebar-toggle-btn sidebar-collapse-btn" type="button" title="Toggle Sidebar">
@@ -183,9 +185,11 @@
         </div>
       </section>
 
-      <aside class="comments-preview" id="commentsPreview">
-        <h3>Comments</h3>
-        <div class="comments-preview-list" id="commentsPreviewList"></div>
+      <aside class="comments-preview comments-collapsed" id="commentsPreview">
+        <div class="comments-preview-inner">
+          <h3>Comments</h3>
+          <div class="comments-preview-list" id="commentsPreviewList"></div>
+        </div>
       </aside>
     </main>
 

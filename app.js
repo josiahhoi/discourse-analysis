@@ -403,7 +403,7 @@ const leftSidebar = document.querySelector('.sidebar');
 
 if (toggleLeftSidebarBtn && leftSidebar) {
   toggleLeftSidebarBtn.addEventListener('click', () => {
-    leftSidebar.classList.toggle('sidebar-hidden');
+    leftSidebar.classList.toggle('sidebar-collapsed');
     toggleLeftSidebarBtn.classList.toggle('flipped');
   });
 }
