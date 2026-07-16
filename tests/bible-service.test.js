@@ -91,13 +91,27 @@ test('parseBollsText: empty input yields empty arrays', () => {
   assert.deepEqual(out.verseRefs, []);
 });
 
-// ── fetchFromESVApi (desktop-only, via the electronAPI bridge) ─────────────
-// No network here — electronAPI.fetchESV is the IPC bridge to main.js, mocked
-// directly, matching how the app calls it from the renderer.
+// ── fetchFromESVApi / fetchFromNASBApi (desktop IPC bridge or web proxy) ────
+// No real network — electronAPI.* is the IPC bridge to main.js and sb.fetch
+// stands in for the Cloud Function proxy, matching how the renderer calls them.
 
-test('fetchFromESVApi throws when electronAPI is absent (web/browser build)', async () => {
+test('fetchFromESVApi throws when neither the bridge nor a proxy is configured', async () => {
   const sb = setup(); // no window.electronAPI in a plain sandbox
-  await assert.rejects(() => sb.fetchFromESVApi('John 1:1'), /not available/i);
+  sb.DA_CONSTANTS.WEB_PROXY_BASE = ''; // proxy disabled
+  await assert.rejects(() => sb.fetchFromESVApi('John 1:1'), /no API backend/i);
+});
+
+test('fetchFromESVApi uses the web proxy when electronAPI is absent', async () => {
+  const sb = setup();
+  const urls = [];
+  sb.fetch = async (url) => {
+    urls.push(url);
+    return { ok: true, json: async () => ({ ok: true, text: '[1] In the beginning', canonical: 'John 1:1' }) };
+  };
+  const out = await sb.fetchFromESVApi('John 1:1');
+  assert.ok(urls[0].includes('/esv?q=John'), 'hit the proxy /esv route');
+  assert.deepEqual(out.propositions, ['In the beginning']);
+  assert.equal(out.copyright, '(ESV)');
 });
 
 test('fetchFromESVApi throws when no key is configured', async () => {
@@ -201,4 +215,71 @@ test('fetchParallelVerses (SBLGNT) rejects Old Testament books with a clear mess
   const sb = setup();
   sb.fetch = async () => { throw new Error('should not fetch'); };
   await assert.rejects(() => sb.window.DA_BIBLE.fetchParallelVerses('SBLGNT', 'Psalm 117'), /New Testament only/);
+});
+
+// ── NASB via API.Bible: passage-id building, bridge/proxy routing, fallback ──
+
+test('parsePassageReference resolves USFM codes for API.Bible passage ids', () => {
+  const sb = setup();
+  assert.equal(sb.parsePassageReference('Rom 3:21-26').usfm, 'ROM');
+  assert.equal(sb.parsePassageReference('Genesis 1').usfm, 'GEN');
+  assert.equal(sb.parsePassageReference('1 John 2:3').usfm, '1JN');
+  assert.equal(sb.parsePassageReference('Foobar 1:1').usfm, undefined);
+});
+
+test('fetchFromNASBApi builds API.Bible passage ids (range, single verse, chapter)', async () => {
+  const sb = setup();
+  const ids = [];
+  sb.window.electronAPI = {
+    fetchNASB: async (passageId) => {
+      ids.push(passageId);
+      return { ok: true, text: '[21] But now apart from the Law', canonical: 'Romans 3:21' };
+    }
+  };
+  await sb.fetchFromNASBApi('Rom 3:21-26');
+  await sb.fetchFromNASBApi('John 3:16');
+  await sb.fetchFromNASBApi('Eph 1');
+  assert.deepEqual(ids, ['ROM.3.21-ROM.3.26', 'JHN.3.16', 'EPH.1']);
+});
+
+test('fetchFromNASBApi rejects unrecognized books without calling any backend', async () => {
+  const sb = setup();
+  let called = false;
+  sb.window.electronAPI = { fetchNASB: async () => { called = true; return { ok: true, text: '[1] x' }; } };
+  await assert.rejects(() => sb.fetchFromNASBApi('Foobar 1:1'), /not recognized/i);
+  assert.equal(called, false);
+});
+
+test('fetchPassageData (nasb) uses the API.Bible result and tags the source', async () => {
+  const sb = setup();
+  sb.window.electronAPI = {
+    fetchNASB: async () => ({ ok: true, text: '[21] But now apart from the Law', canonical: 'Romans 3:21' })
+  };
+  sb.fetchFromBolls = async () => { throw new Error('should not be called'); };
+  const result = await sb.fetchPassageData('nasb', 'Rom 3:21');
+  assert.equal(result.source, 'nasb-api');
+  assert.deepEqual(result.propositions, ['But now apart from the Law']);
+  assert.equal(result.copyright, '(NASB)');
+  assert.equal(result.passageRef, 'Romans 3:21');
+});
+
+test('fetchPassageData (nasb) falls back to Bolls when the NASB API fails', async () => {
+  const sb = setup();
+  sb.window.electronAPI = { fetchNASB: async () => ({ ok: false, status: 401 }) };
+  sb.fetchFromBolls = async () => ({ text: '[21] bolls nasb text', passageRef: 'Romans 3:21', copyright: '(NASB)' });
+  const result = await sb.fetchPassageData('nasb', 'Rom 3:21');
+  assert.equal(result.source, 'bolls');
+  assert.deepEqual(result.propositions, ['bolls nasb text']);
+});
+
+test('fetchPassageData (nasb) on web hits the proxy /nasb route', async () => {
+  const sb = setup(); // no electronAPI → proxy path
+  const urls = [];
+  sb.fetch = async (url) => {
+    urls.push(url);
+    return { ok: true, json: async () => ({ ok: true, text: '[21] But now', canonical: 'Romans 3:21' }) };
+  };
+  const result = await sb.fetchPassageData('nasb', 'Rom 3:21');
+  assert.equal(result.source, 'nasb-api');
+  assert.ok(urls[0].includes('/nasb?passage=ROM.3.21'), 'proxy URL carries the USFM passage id');
 });

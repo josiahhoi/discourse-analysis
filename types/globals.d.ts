@@ -50,6 +50,7 @@ interface Window {
   electronAPI?: {
     onOpenFile: (cb: (content: string) => void) => void;
     fetchESV: (query: string) => Promise<any>;
+    fetchNASB: (passageId: string) => Promise<any>;
   };
   arrowHighlight?: HTMLElement | null;
   pendingArrowStart?: any;

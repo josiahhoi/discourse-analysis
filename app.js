@@ -264,10 +264,11 @@ async function fetchPassage() {
     if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
 
     renderAll();
-    // Only ESV specifically has a primary/fallback split (api.esv.org → Bolls);
+    // ESV and NASB have a primary/fallback split (official API → Bolls);
     // other versions are always Bolls, so don't call that a "fallback".
-    const usedFallback = version === 'esv' && result.source === 'bolls';
-    DA_UI.showStatus(usedFallback ? 'Passage loaded (via Bolls — ESV API unavailable).' : 'Passage loaded.', 'success');
+    const usedFallback = (version === 'esv' || version === 'nasb') && result.source === 'bolls';
+    const apiName = version === 'esv' ? 'ESV' : 'NASB';
+    DA_UI.showStatus(usedFallback ? `Passage loaded (via Bolls — ${apiName} API unavailable).` : 'Passage loaded.', 'success');
   } catch (err) {
     DA_UI.showStatus(err.message || 'Failed to fetch passage', 'error');
   } finally {

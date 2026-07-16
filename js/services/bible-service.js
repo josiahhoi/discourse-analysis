@@ -158,6 +158,7 @@ function parsePassageReference(query) {
   const hasVerses = !!match[3];
   const startVerse = hasVerses ? parseInt(match[3]) : null;
   const endVerse = match[4] ? parseInt(match[4]) : startVerse;
+  const bollsId = DA_CONSTANTS.BOLLS_BOOKS[bookNameKey];
 
   return {
     file: DA_CONSTANTS.SBLGNT_BOOKS[bookNameKey],
@@ -165,7 +166,9 @@ function parsePassageReference(query) {
     startVerse,
     endVerse,
     hasVerses,
-    bookName: bookNameNormalized
+    bookName: bookNameNormalized,
+    bollsId,
+    usfm: DA_CONSTANTS.USFM_BY_BOLLS_ID[bollsId]
   };
 }
 
@@ -202,26 +205,59 @@ function parseBollsText(rawText) {
   return { propositions, verseRefs };
 }
 
-// ── ESV API (desktop only) ──────────────────────────────────────────────────
+// ── Official APIs: ESV (api.esv.org) and NASB (API.Bible) ───────────────────
 //
-// The real api.esv.org fetch + API key live in the Electron main process
-// (main.js), reached via the preload bridge (window.electronAPI.fetchESV).
-// That bridge only exists in the Electron desktop app — the static/GitHub
-// Pages web build has no server to hold the secret, so it always falls
-// through to the keyless Bolls source below. See .env.example.
+// Both keys stay server-side; the page never sees them. Two key-holding
+// backends return the same { ok, text, canonical } shape:
+//   - Desktop: the Electron main process reads keys from .env (main.js),
+//     reached via the preload bridge (window.electronAPI.fetchESV/fetchNASB).
+//   - Web: the Firebase Cloud Function proxy (functions/index.js) at
+//     DA_CONSTANTS.WEB_PROXY_BASE holds the same keys.
+// Any failure falls through to the keyless Bolls source (fetchPassageData).
 
-async function fetchFromESVApi(query) {
-  if (!window.electronAPI || typeof window.electronAPI.fetchESV !== 'function') {
-    throw new Error('ESV API not available in this build (web/browser).');
+async function callPassageBackend(route, param) {
+  if (window.electronAPI) {
+    const bridge = route === 'esv' ? window.electronAPI.fetchESV : window.electronAPI.fetchNASB;
+    if (typeof bridge === 'function') return bridge(param);
   }
-  const res = await window.electronAPI.fetchESV(query);
+  const base = DA_CONSTANTS.WEB_PROXY_BASE;
+  if (!base) throw new Error('No API backend available in this build.');
+  const paramName = route === 'esv' ? 'q' : 'passage';
+  const res = await fetch(`${base}/${route}?${paramName}=${encodeURIComponent(param)}`);
+  if (!res.ok) throw new Error(`API proxy error (${res.status})`);
+  return res.json();
+}
+
+function unwrapBackendResult(res, label) {
   if (!res || !res.ok) {
-    if (res && res.noKey) throw new Error('No ESV API key configured (.env).');
-    throw new Error(`ESV API error${res && res.status ? ` (${res.status})` : ''}`);
+    if (res && res.noKey) throw new Error(`No ${label} key configured.`);
+    throw new Error(`${label} error${res && res.status ? ` (${res.status})` : ''}`);
   }
   const parsed = parseBollsText(res.text);
-  if (parsed.propositions.length === 0) throw new Error('ESV API returned no verses.');
+  if (parsed.propositions.length === 0) throw new Error(`${label} returned no verses.`);
+  return parsed;
+}
+
+async function fetchFromESVApi(query) {
+  const res = await callPassageBackend('esv', query);
+  const parsed = unwrapBackendResult(res, 'ESV API');
   return { ...parsed, passageRef: res.canonical || query, copyright: '(ESV)' };
+}
+
+async function fetchFromNASBApi(query) {
+  const ref = parsePassageReference(query);
+  if (!ref || !ref.usfm) throw new Error('Reference not recognized for the NASB API.');
+  // API.Bible passage ids: ROM.3 (chapter) or ROM.3.21-ROM.3.26 (verse range).
+  let passageId = `${ref.usfm}.${ref.chapter}`;
+  if (ref.hasVerses) {
+    passageId += `.${ref.startVerse}`;
+    if (ref.endVerse && ref.endVerse !== ref.startVerse) {
+      passageId += `-${ref.usfm}.${ref.chapter}.${ref.endVerse}`;
+    }
+  }
+  const res = await callPassageBackend('nasb', passageId);
+  const parsed = unwrapBackendResult(res, 'NASB API');
+  return { ...parsed, passageRef: res.canonical || query, copyright: '(NASB)' };
 }
 
 // ── Main entry point ──────────────────────────────────────────────────────────
@@ -233,8 +269,8 @@ async function fetchFromESVApi(query) {
  *   Greek NT  — SBLGNT (GitHub raw)
  *   Greek OT  — Bolls LXX
  *   Hebrew OT — Bolls WLC
- *   ESV       — api.esv.org (desktop app with a key) → falls back to Bolls
- *   NASB      — Bolls (the ESV API only serves the ESV translation)
+ *   ESV       — api.esv.org (desktop .env key or web proxy) → falls back to Bolls
+ *   NASB      — API.Bible (desktop .env key or web proxy) → falls back to Bolls
  *
  * @param {string} version - 'esv' | 'nasb' | 'greek' | 'hebrew'
  * @param {string} query   - Passage reference e.g. "John 1:1-5"
@@ -265,8 +301,15 @@ async function fetchPassageData(version, query) {
       const result = await fetchFromESVApi(query);
       return { ...result, isGreek: false, source: 'esv-api' };
     } catch (_) {
-      // No key, not the desktop app, network error, bad reference, etc. —
-      // fall through to the keyless Bolls source below.
+      // No key/proxy, network error, bad reference, etc. — fall through to
+      // the keyless Bolls source below.
+    }
+  } else {
+    try {
+      const result = await fetchFromNASBApi(query);
+      return { ...result, isGreek: false, source: 'nasb-api' };
+    } catch (_) {
+      // Same fall-through as ESV above.
     }
   }
 

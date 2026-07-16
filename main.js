@@ -61,6 +61,49 @@ ipcMain.handle('fetch-esv-passage', async (_event, query) => {
   }
 });
 
+/**
+ * NASB via API.Bible (api.scripture.api.bible) — same pattern as the ESV
+ * handler above: the key stays in the main process. The web build's Firebase
+ * Cloud Function proxy (functions/index.js) mirrors this handler; keep the
+ * two in sync. The bibleId for the NASB edition on this key is discovered
+ * once and cached (the free plan only exposes the bibles picked at signup);
+ * API_BIBLE_NASB_ID in .env skips discovery.
+ */
+let cachedNasbBibleId = null;
+async function resolveNasbBibleId() {
+  if (ENV.API_BIBLE_NASB_ID) return ENV.API_BIBLE_NASB_ID;
+  if (cachedNasbBibleId) return cachedNasbBibleId;
+  const res = await fetch('https://rest.api.bible/v1/bibles', {
+    headers: { 'api-key': ENV.API_BIBLE_KEY }
+  });
+  if (!res.ok) throw new Error(`API.Bible bibles list error (${res.status})`);
+  const list = (await res.json()).data || [];
+  const label = (b) => `${b.abbreviation} ${b.abbreviationLocal} ${b.name}`;
+  const nasb = list.find(b => /nasb.*(19)?95/i.test(label(b))) || list.find(b => /nasb/i.test(label(b)));
+  if (!nasb) throw new Error('No NASB bible available on this API.Bible key.');
+  cachedNasbBibleId = nasb.id;
+  return cachedNasbBibleId;
+}
+
+ipcMain.handle('fetch-nasb-passage', async (_event, passageId) => {
+  if (!ENV.API_BIBLE_KEY) return { ok: false, noKey: true };
+  try {
+    const bibleId = await resolveNasbBibleId();
+    // content-type=text with include-verse-numbers gives inline "[N]" markers —
+    // the same shape as Bolls/ESV text, so parseBollsText works unchanged.
+    const url = `https://rest.api.bible/v1/bibles/${bibleId}/passages/${encodeURIComponent(passageId)}`
+      + '?content-type=text&include-verse-numbers=true&include-titles=false'
+      + '&include-notes=false&include-chapter-numbers=false';
+    const res = await fetch(url, { headers: { 'api-key': ENV.API_BIBLE_KEY } });
+    if (!res.ok) return { ok: false, status: res.status };
+    const data = await res.json();
+    if (!data.data || !data.data.content) return { ok: false, status: 404 };
+    return { ok: true, text: data.data.content, canonical: data.data.reference };
+  } catch (err) {
+    return { ok: false, error: String(err && err.message || err) };
+  }
+});
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,

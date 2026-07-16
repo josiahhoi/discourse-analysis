@@ -64,21 +64,35 @@ A Bible study tool for diagramming the logical structure of Scripture using **br
    - **macOS**: `Discourse Analysis-3.1.0-arm64-mac.zip`
 2. Run the application directly. (The macOS build is unsigned, so Gatekeeper may warn on first open — right-click → Open.)
 
-### ESV text source
-Selecting **ESV** tries the official Crossway API first and quietly falls back to
-the keyless [bolls.life](https://bolls.life) source when no key is available (the
-status toast says "via Bolls" when that happens). The official API is
-**desktop-and-developer only**: the key lives in a `.env` file next to the app
-source (copy `.env.example`, get a free key at
-[api.esv.org](https://api.esv.org/account/create-application/)) and is read by the
-Electron main process so it never reaches the browser page. There is no in-app
-key field, and the web build always uses the Bolls fallback — it has no server
-that could hold the secret.
+### ESV & NASB text sources
+Selecting **ESV** or **NASB** tries the official API first — ESV via
+[api.esv.org](https://api.esv.org), NASB via [API.Bible](https://api.bible) —
+and quietly falls back to the keyless [bolls.life](https://bolls.life) source when
+no key is reachable (the status toast says "via Bolls" when that happens).
+The keys never reach the browser page:
+
+- **Desktop**: keys live in a `.env` file next to the app source (copy
+  `.env.example`) and are read by the Electron main process only.
+- **Web**: a Firebase Cloud Function proxy (`functions/index.js`) holds the same
+  keys as deployed secrets and forwards passage requests; the static page calls
+  the proxy, never the keyed APIs. Deploy once with:
+  ```
+  npm --prefix functions install
+  npx firebase-tools login
+  npx firebase-tools functions:secrets:set ESV_API_KEY    # name only — paste the key at the prompt
+  npx firebase-tools functions:secrets:set API_BIBLE_KEY  # (a value on the command line errors)
+  npx firebase-tools deploy --only functions
+  ```
+  (Requires the Blaze plan on the Firebase project; effectively $0 at this
+  volume. The deployed URL must match `WEB_PROXY_BASE` in `js/utils/constants.js`
+  and the CSP in `index.html`.)
+
+There is no in-app key field. Without keys everything still works via Bolls.
 
 ### Web / Development
 1. Serve the folder statically (e.g. `node tests/e2e/serve.js`) or open `index.html` in a modern browser.
-2. ESV/NASB text comes from the Bolls fallback automatically — no key needed.
-3. Dev checks: `npm run check` (ESLint + type-check + 155 unit tests), `npm run test:e2e` (Playwright browser tests).
+2. ESV/NASB text comes through the key-holding proxy when deployed, otherwise from the Bolls fallback automatically — no key needed.
+3. Dev checks: `npm run check` (ESLint + type-check + unit tests), `npm run test:e2e` (Playwright browser tests).
 
 ## Usage
 

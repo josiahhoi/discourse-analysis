@@ -9,5 +9,5 @@
     "skipLibCheck": true
   },
   "include": ["app.js", "main.js", "preload.js", "js/**/*.js", "types/**/*.d.ts"],
-  "exclude": ["js/vendor", "node_modules", "dist", "scratch", "tests"]
+  "exclude": ["js/vendor", "node_modules", "dist", "scratch", "tests", "functions"]
 }

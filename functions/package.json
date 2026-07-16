@@ -1,0 +1,12 @@
+{
+    "name": "discourse-analysis-functions",
+    "description": "Key-holding Bible API proxy for the web build (see index.js)",
+    "main": "index.js",
+    "engines": {
+        "node": "22"
+    },
+    "dependencies": {
+        "firebase-functions": "^6.1.0"
+    },
+    "private": true
+}

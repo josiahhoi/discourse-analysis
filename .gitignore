@@ -13,6 +13,8 @@ node_modules/
 dist/
 .env
 .env.local
+firebase-debug.log*
+.firebase/
 
 # Local scratch / debug helpers (not part of the app)
 scratch/

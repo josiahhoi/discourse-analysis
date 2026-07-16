@@ -5,6 +5,30 @@
 const ESV_API = 'https://api.esv.org/v3/passage/text/';
 const SBLGNT_BASE = 'https://raw.githubusercontent.com/Faithlife/SBLGNT/master/data/sblgnt/text/';
 
+// Key-holding proxy for the static web build (Firebase Cloud Function, source
+// in functions/index.js). Holds the ESV and API.Bible keys server-side — a
+// static page can't keep a secret. The Electron desktop app doesn't use it
+// (keys live in .env, read by the main process). Set to '' to disable and
+// always use the keyless Bolls fallback on web. If a deploy prints a
+// different URL, update this AND the connect-src list in index.html's CSP.
+const WEB_PROXY_BASE = 'https://us-central1-discourse-analysis-f4a8e.cloudfunctions.net/bibleProxy';
+
+// USFM book codes (API.Bible passage ids, e.g. ROM.3.21-ROM.3.26), keyed by
+// the BOLLS_BOOKS numeric id so the existing book-name alias table below
+// resolves every spelling: book key → bolls id → USFM code.
+const USFM_BY_BOLLS_ID = {
+  1: 'GEN', 2: 'EXO', 3: 'LEV', 4: 'NUM', 5: 'DEU', 6: 'JOS', 7: 'JDG', 8: 'RUT',
+  9: '1SA', 10: '2SA', 11: '1KI', 12: '2KI', 13: '1CH', 14: '2CH', 15: 'EZR',
+  16: 'NEH', 17: 'EST', 18: 'JOB', 19: 'PSA', 20: 'PRO', 21: 'ECC', 22: 'SNG',
+  23: 'ISA', 24: 'JER', 25: 'LAM', 26: 'EZK', 27: 'DAN', 28: 'HOS', 29: 'JOL',
+  30: 'AMO', 31: 'OBA', 32: 'JON', 33: 'MIC', 34: 'NAM', 35: 'HAB', 36: 'ZEP',
+  37: 'HAG', 38: 'ZEC', 39: 'MAL',
+  40: 'MAT', 41: 'MRK', 42: 'LUK', 43: 'JHN', 44: 'ACT', 45: 'ROM', 46: '1CO',
+  47: '2CO', 48: 'GAL', 49: 'EPH', 50: 'PHP', 51: 'COL', 52: '1TH', 53: '2TH',
+  54: '1TI', 55: '2TI', 56: 'TIT', 57: 'PHM', 58: 'HEB', 59: 'JAS', 60: '1PE',
+  61: '2PE', 62: '1JN', 63: '2JN', 64: '3JN', 65: 'JUD', 66: 'REV'
+};
+
 
 const SBLGNT_BOOKS = {
   matt: 'Matt.txt', matthew: 'Matt.txt', mt: 'Matt.txt',
@@ -252,7 +276,8 @@ const RELATIONSHIP_DEFINITIONS = {
 };
 
 window.DA_CONSTANTS = {
-    ESV_API, SBLGNT_BASE, SBLGNT_BOOKS, FULL_BOOK_NAMES, BOLLS_BOOKS,
+    ESV_API, SBLGNT_BASE, WEB_PROXY_BASE, USFM_BY_BOLLS_ID,
+    SBLGNT_BOOKS, FULL_BOOK_NAMES, BOLLS_BOOKS,
     BRACKET_LABELS, RELATIONSHIP_LABELS, RELATIONSHIP_GROUPS_HIERARCHY,
     SINGLE_LABEL_TYPES, JUMP_OVER_TYPES, BRACKET_GEO,
     RELATIONSHIP_COLORS, RELATIONSHIP_DEFINITIONS,
