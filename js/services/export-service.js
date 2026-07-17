@@ -51,12 +51,20 @@ const DA_EXPORT = {
    * needed afterward.
    */
   enterBracketViewForCapture() {
+    // Comments are reviewer notes, not diagram content: strip their
+    // always-visible highlights (text marks + bracket glow) from every
+    // capture. The caller's pre-capture renderAll picks this up.
+    DA_STATE.suppressCommentVisuals = true;
     const wasBlock = !!(window.DA_BLOCK && DA_BLOCK.isActive());
     if (wasBlock) DA_BLOCK.setActive(false);
     return wasBlock;
   },
 
   restoreViewAfterCapture(wasBlock) {
+    // The caller's post-capture renderAll ran while the flag was still set,
+    // so one more render brings the comment highlights back.
+    DA_STATE.suppressCommentVisuals = false;
+    if (window.renderAll) window.renderAll();
     if (wasBlock && window.DA_BLOCK) DA_BLOCK.setActive(true);
   },
 
@@ -190,11 +198,10 @@ const DA_EXPORT = {
     const wasBlock = this.enterBracketViewForCapture();
     const prevZoom = this.enterBaseZoomForCapture();
 
-    // Save current states and expand all for export
-    const prevShowComments = DA_STATE.showCommentsEnabled;
+    // Save current states and expand all for export (comment highlights are
+    // already stripped by enterBracketViewForCapture above)
     const savedCollapseStates = DA_STATE.brackets.map(b => b.isCollapsed);
 
-    DA_STATE.showCommentsEnabled = false;
     DA_STATE.brackets.forEach(b => b.isCollapsed = false);
 
     if (window.renderAll) window.renderAll();
@@ -207,7 +214,6 @@ const DA_EXPORT = {
       const canvas = await html2canvas(workspace, options);
 
       // Restore original states
-      DA_STATE.showCommentsEnabled = prevShowComments;
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
       // Zoom FIRST, then render: applyZoom({ rerender: false }) re-applies the
       // CSS text scale immediately, so the renderAll below must run at the

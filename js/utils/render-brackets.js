@@ -357,8 +357,9 @@ function renderBrackets() {
 
     const labels = getBracketLabels(bracket.type, bracket.labelsSwapped, bracket.dominanceFlipped);
 
-    // Background highlight path for comments
-    if (DA_STATE.showCommentsEnabled) {
+    // Background highlight path for comments — always visible regardless of
+    // the comments-panel toggle; only the image-export path strips it.
+    if (!DA_STATE.suppressCommentVisuals) {
       const bComments = DA_STATE.comments.filter(c => c.type === 'bracket' && c.target && c.target.bracketId === bracket.id);
       if (bComments.length > 0) {
           group.classList.add('has-comment');

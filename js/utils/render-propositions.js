@@ -631,9 +631,11 @@ function renderParallelCellContent(pSpan, text, i) {
 }
 
 function renderInlineContent(textSpan, text, i) {
-  const textComments = DA_STATE.showCommentsEnabled
-    ? DA_STATE.comments.filter((c) => c.type === 'text' && c.target && c.target.propIndex === i)
-    : [];
+  // Comment highlights stay visible even with the comments panel toggled off
+  // — only the image-export path strips them (suppressCommentVisuals).
+  const textComments = DA_STATE.suppressCommentVisuals
+    ? []
+    : DA_STATE.comments.filter((c) => c.type === 'text' && c.target && c.target.propIndex === i);
   const textFormats = DA_STATE.formatTags.filter((f) => f.propIndex === i && !f.pcol);
   const textArrows = [];
   DA_STATE.wordArrows.forEach((wa, idx) => {

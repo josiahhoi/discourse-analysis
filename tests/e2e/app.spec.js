@@ -870,6 +870,45 @@ test('paste auto-detect: Logos-style flowing text with citation imports as verse
   expect(errors).toEqual([]);
 });
 
+test('comment highlights stay visible with the comments panel toggled off', async ({ page }) => {
+  const errors = collectErrors(page);
+  await importPassage(page);
+
+  // Bracket + bracket comment through the real UI. The comments panel stays
+  // OFF the whole time — highlights must not depend on it.
+  await page.locator('.prop-dot').nth(0).click();
+  await page.locator('.prop-dot').nth(1).click();
+  await page.locator('#labelPicker button.ground').click();
+  await page.locator('.bracket-hitbox').first().click({ button: 'right', force: true });
+  await page.locator('#bracketActions [data-action="comment"]').click();
+  const popover = page.locator('#commentPopover');
+  await popover.locator('.new-comment-area textarea').fill('bracket note');
+  await popover.locator('.save-new-btn').click();
+  await popover.locator('.popover-header .close-btn').click();
+
+  await expect(page.locator('.bracket-group.has-comment')).toHaveCount(1);
+  await expect(page.locator('.bracket-comment-highlight')).toHaveCount(1);
+
+  // Text comment (the selection UI is exercised elsewhere — inject the data
+  // and re-render): its highlight mark renders with the panel still off.
+  await page.evaluate(() => {
+    window.DA_STATE.comments.push({ id: 'c-e2e-text', type: 'text', text: 'note', target: { propIndex: 0, start: 0, end: 5 } });
+    window.renderAll();
+  });
+  await expect(page.locator('mark.comment-highlight')).toHaveCount(1);
+
+  // The panel itself still obeys the toggle; the highlights ignore it.
+  await expect(page.locator('#commentsPreview')).toBeHidden();
+  await page.locator('#toggleCommentsBtn').click();
+  await expect(page.locator('#commentsPreview')).toBeVisible();
+  await page.locator('#toggleCommentsBtn').click();
+  await expect(page.locator('#commentsPreview')).toBeHidden();
+  await expect(page.locator('.bracket-comment-highlight')).toHaveCount(1);
+  await expect(page.locator('mark.comment-highlight')).toHaveCount(1);
+
+  expect(errors).toEqual([]);
+});
+
 test('sidebar folds closed and back open via its edge handle', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/');

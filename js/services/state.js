@@ -32,6 +32,10 @@ window.DA_STATE = {
   selectedArrowIdx: null,
   pendingArrowStart: null,
   showCommentsEnabled: false,
+  // Transient render flag for image export only: strips the always-visible
+  // comment highlights (text marks + bracket glow) from the capture.
+  // showCommentsEnabled above only controls the comments preview panel.
+  suppressCommentVisuals: false,
   // Personal on-screen reading preference (percent: 75-150, see ZOOM_LEVELS),
   // never saved into bracket files. Default here; DA_UI.initZoom() overwrites
   // it from localStorage at startup, same shape as isRTL below.
