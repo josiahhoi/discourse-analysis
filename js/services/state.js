@@ -217,6 +217,10 @@ window.DA_STATE = {
     // Leaving connect mode: the canvas may still carry the visual affordance.
     if (typeof document !== 'undefined') {
       document.getElementById('bracketCanvas')?.classList.remove('connect-mode');
+      // A startup recovery banner (draft restore / cloud reconnect) is moot
+      // once other content is loaded — and its Restore button would clobber
+      // the document that just replaced it.
+      document.querySelectorAll('.draft-recovery-banner').forEach((b) => b.remove());
     }
   },
 

@@ -181,6 +181,27 @@ function showTextContextMenu(propIndex, start, end, centerY, centerX, pcol) {
   setupClickOutside(menu, () => menu.remove());
 }
 
+/**
+ * Label picker placement: underneath the clicked bracket's own last line —
+ * the row its lower arm attaches to — so the bracket and the lines it
+ * directly relates stay visible above the picker while choosing. top =
+ * anchorBottom + GAP, pulled up when less than MIN_H of viewport remains
+ * below (a bracket ending near the screen bottom would otherwise leave a
+ * uselessly short picker); the caller's maxHeight cap shrinks it into the
+ * remaining space and the relationship list scrolls internally. left =
+ * attached to the bracket's gutter edge (mirrored in RTL), viewport-clamped.
+ * Pure rect math (viewport space) so it's testable.
+ */
+function computeLabelPickerPosition({ anchorBottom, aRect, pw, ph, vw, vh, isRTL }) {
+  const GAP = 10;
+  const MARGIN = 5;
+  const MIN_H = 260;
+  const maxTop = vh - Math.min(MIN_H, ph) - MARGIN;
+  const top = Math.max(MARGIN, Math.min(anchorBottom + GAP, maxTop));
+  const left = Math.max(MARGIN, Math.min(isRTL ? aRect.right - pw : aRect.left, vw - pw - MARGIN));
+  return { left, top };
+}
+
 function showLabelPicker(bracketIdx, centerY, centerX) {
   const existing = document.getElementById('labelPicker');
   if (existing) existing.remove();
@@ -211,7 +232,8 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
       <input type="text" class="picker-search" placeholder="Type to filter… (e.g. 'act', 'cause', 'because')" aria-label="Filter relationships">
     </div>
     <div class="relationship-picker-content"></div>
-    <div class="picker-info-panel" style="display: none;">
+    <div class="picker-info-panel">
+      <div class="info-hint">Hover over a relationship to see its definition.</div>
       <strong class="info-name"></strong>
       <div class="info-def"></div>
       <div class="info-keywords"></div>
@@ -306,14 +328,16 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
     const defData = DA_CONSTANTS.RELATIONSHIP_DEFINITIONS?.[typeKey];
     if (defData) {
       btn.addEventListener('mouseenter', () => {
-        infoPanel.style.display = 'block';
+        // Fill the fixed info slot — never toggle the panel's display.
+        // Expanding it on hover reflowed the height-capped picker, shifting
+        // the relationship buttons under the cursor mid-click (real
+        // misclicks). The last-hovered definition simply stays shown.
+        const hint = infoPanel.querySelector('.info-hint');
+        if (hint) hint.style.display = 'none';
         infoPanel.querySelector('.info-name').textContent = labelText;
         infoPanel.querySelector('.info-name').style.color = color;
         infoPanel.querySelector('.info-def').textContent = defData.definition;
         infoPanel.querySelector('.info-keywords').textContent = defData.keywords ? 'Key words: ' + defData.keywords : '';
-      });
-      btn.addEventListener('mouseleave', () => {
-        infoPanel.style.display = 'none';
       });
     }
 
@@ -507,8 +531,29 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
 
   const pw = picker.offsetWidth || 450;
   const ph = picker.offsetHeight;
-  const left = Math.max(5, Math.min(centerX - pw / 2, window.innerWidth - pw - 5));
-  const top = Math.max(5, Math.min(centerY - 150, window.innerHeight - ph - 5));
+  // Anchor underneath the clicked bracket's own last line: the row its lower
+  // arm attaches to. For a bracket-to-bracket connection that's the
+  // sub-bracket's attachment row (star-dominance point), not the bottom of
+  // everything it subsumes — the structure above stays visible, and covering
+  // the sub-group's later rows is the accepted trade-off.
+  const canvas = document.getElementById('bracketCanvas');
+  const group = document.querySelector(`#bracketCanvas .bracket-group[data-index="${bracketIdx}"]`);
+  const aRect = group ? group.getBoundingClientRect() : { left: centerX, right: centerX };
+  let anchorBottom = centerY; // degenerate fallback: the click point
+  if (bracket && canvas && DA_STATE.dotPositions?.length) {
+    const pts = DA_RENDERER.getConnectionPoints(bracket.from, bracket.to, DA_STATE.dotPositions, bracketIdx);
+    const armY = canvas.getBoundingClientRect().top + Math.max(pts.topY, pts.bottomY);
+    // The arm lands mid-row: anchor below the row that contains it.
+    anchorBottom = armY + 16;
+    for (const row of document.querySelectorAll('.proposition-block')) {
+      const r = row.getBoundingClientRect();
+      if (armY >= r.top && armY <= r.bottom) { anchorBottom = r.bottom; break; }
+    }
+  }
+  const { left, top } = computeLabelPickerPosition({
+    anchorBottom, aRect, pw, ph,
+    vw: window.innerWidth, vh: window.innerHeight, isRTL: !!DA_STATE.isRTL
+  });
   picker.style.left = `${left}px`;
   picker.style.top = `${top}px`;
   // The hover info panel adds height after this positioning; cap the picker
@@ -932,5 +977,5 @@ function showArrowActions(arrowIdx, centerY, centerX) {
 }
 
 window.DA_UI = Object.assign(window.DA_UI || {}, {
-  showBracketActions, showTextContextMenu, showLabelPicker, showExportMenu, showOpenMenu, showAlternateViewsMenu, showParallelDialog, showArrowActions
+  showBracketActions, showTextContextMenu, showLabelPicker, computeLabelPickerPosition, showExportMenu, showOpenMenu, showAlternateViewsMenu, showParallelDialog, showArrowActions
 });

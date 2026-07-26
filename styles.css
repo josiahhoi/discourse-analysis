@@ -821,6 +821,12 @@ body {
 .picker-info-panel {
   margin-top: 12px;
   padding: 12px;
+  /* Fixed slot: the panel is always present at a constant height so hovering
+     a relationship never reflows the picker (the button list used to shrink
+     and shift under the cursor whenever the picker was height-capped). */
+  height: 7.5rem;
+  box-sizing: border-box;
+  overflow: hidden auto;
   background-color: var(--surface-elevated);
   border: 1px solid var(--accent);
   border-radius: 8px;
@@ -828,6 +834,11 @@ body {
   line-height: 1.4;
   color: var(--text);
   box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.picker-info-panel .info-hint {
+  font-style: italic;
+  color: var(--text-muted);
 }
 
 .picker-info-panel .info-name {

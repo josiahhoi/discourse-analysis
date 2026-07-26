@@ -211,6 +211,11 @@ function initCloudSync(projectId) {
 function handleCloudData(data) {
   DA_STATE.isUpdatingFromCloud = true;
 
+  // Cloud content replaces the document without going through
+  // resetForNewDocument, so clear any stale startup recovery banner here too
+  // (its Restore button would clobber the incoming cloud copy).
+  document.querySelectorAll('.draft-recovery-banner').forEach((b) => b.remove());
+
   data = decodeProjectDataFromFirestore(data);
 
   if (window.DA_PERSISTENCE && DA_PERSISTENCE.normalizeBracketData) {

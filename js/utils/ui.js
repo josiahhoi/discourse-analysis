@@ -308,8 +308,12 @@ function makePopupDraggable(popover, handleSelector) {
       let left = startLeft + dx;
       let top = startTop + dy;
 
-      left = Math.max(0, Math.min(left, rect.width - popRect.width));
-      top = Math.max(0, Math.min(top, rect.height - popRect.height));
+      // Clamp to the wrapper, but never past the popup's own starting point:
+      // an anchored popup can legitimately open slightly outside the wrapper
+      // (e.g. just below its last line) — it can be dragged back in, but must
+      // not snap on the first pixel of movement.
+      left = Math.max(Math.min(0, startLeft), Math.min(left, Math.max(rect.width - popRect.width, startLeft)));
+      top = Math.max(Math.min(0, startTop), Math.min(top, Math.max(rect.height - popRect.height, startTop)));
 
       popover.style.left = left + 'px';
       popover.style.top = top + 'px';

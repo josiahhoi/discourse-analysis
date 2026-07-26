@@ -417,6 +417,30 @@ test('startup recovery: the draft banner shows when there is no cloud project', 
   expect(errors).toEqual([]);
 });
 
+test('startup recovery: loading a passage dismisses the stale draft banner', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('biblebracket_draft', JSON.stringify({
+      passageRef: 'Draft Passage', propositions: ['saved line'], verseRefs: ['1'],
+    }));
+  });
+  await page.goto('/');
+  await expect(page.locator('.draft-recovery-banner')).toHaveCount(1);
+
+  // Importing new content makes the banner moot — and its Restore button
+  // dangerous (it would clobber the freshly imported passage).
+  await page.getByText('Or paste text to bracket or import').click();
+  await page.locator('#pasteText').fill(
+    '[1] In the beginning God created the heavens [2] And the earth was without form'
+  );
+  await page.locator('#importPassageRef').fill('Genesis 1:1-2');
+  await page.locator('#importBtn').click();
+  await expect(page.locator('.proposition-block')).toHaveCount(2);
+  await expect(page.locator('.draft-recovery-banner')).toHaveCount(0);
+
+  expect(errors).toEqual([]);
+});
+
 test('New bracket forgets the remembered cloud project and old undo/redo history', async ({ page }) => {
   const errors = collectErrors(page);
   await importPassage(page);
@@ -927,5 +951,107 @@ test('sidebar folds closed and back open via its edge handle', async ({ page }) 
   await expect(sidebar).toBeVisible();
   await expect(handle).toHaveCSS('left', '250px');
 
+  expect(errors).toEqual([]);
+});
+
+test('relationship picker opens underneath the bracket\'s last line', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.setViewportSize({ width: 1800, height: 900 });
+  await importPassage(page);
+
+  await page.locator('.prop-dot').nth(0).click();
+  await page.locator('.prop-dot').nth(1).click();
+  await expect(page.locator('#labelPicker')).toBeVisible();
+
+  const picker = await page.locator('#labelPicker').boundingBox();
+  const lastLine = await page.locator('.proposition-block').nth(1).boundingBox();
+  const bracket = await page.locator('.bracket-group').first().boundingBox();
+  // Just below the bracket's last line (GAP = 10, small layout tolerance)…
+  expect(picker.y).toBeGreaterThanOrEqual(lastLine.y + lastLine.height);
+  expect(picker.y - (lastLine.y + lastLine.height)).toBeLessThanOrEqual(20);
+  // …never covering the bracket or the lines it relates…
+  expect(picker.y).toBeGreaterThanOrEqual(bracket.y + bracket.height);
+  // …and fully on-screen.
+  expect(picker.x).toBeGreaterThanOrEqual(0);
+  expect(picker.x + picker.width).toBeLessThanOrEqual(1800);
+  expect(picker.y + picker.height).toBeLessThanOrEqual(900);
+
+  await page.keyboard.press('Escape');
+  expect(errors).toEqual([]);
+});
+
+test('comment popover opens adjacent to the selected text, not on a fixed spot', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.setViewportSize({ width: 1800, height: 900 });
+  await importPassage(page);
+
+  await page.evaluate(() => {
+    const span = document.querySelectorAll('.proposition-block .proposition-text')[0];
+    span.focus();
+    window.DA_EDITOR.setSelectionByGlobalOffset(span, 7, 16); // "beginning"
+  });
+  await page.keyboard.press('c');
+  await expect(page.locator('#commentPopover')).toBeVisible();
+
+  const mark = await page
+    .locator('mark.comment-highlight[data-comment-id="active-comment-target"]')
+    .first()
+    .boundingBox();
+  const pop = await page.locator('#commentPopover').boundingBox();
+  // Adjacent: within 40px below or above the highlighted range, never covering it.
+  const below = pop.y >= mark.y + mark.height && pop.y - (mark.y + mark.height) <= 40;
+  const above = pop.y + pop.height <= mark.y && mark.y - (pop.y + pop.height) <= 40;
+  expect(below || above).toBe(true);
+  // Left-aligned with the selection (LTR), and fully on-screen.
+  expect(Math.abs(pop.x - mark.x)).toBeLessThanOrEqual(5);
+  expect(pop.x).toBeGreaterThanOrEqual(0);
+  expect(pop.y).toBeGreaterThanOrEqual(0);
+  expect(pop.x + pop.width).toBeLessThanOrEqual(1800);
+  expect(pop.y + pop.height).toBeLessThanOrEqual(900);
+
+  await page.keyboard.press('Escape');
+  expect(errors).toEqual([]);
+});
+
+test('comment popover on a long passage opens at the commented line, not screens away', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/');
+  await page.getByText('Or paste text to bracket or import').click();
+  const verses = Array.from(
+    { length: 40 },
+    (_, i) => `[${i + 1}] The quick brown fox jumps over the lazy dog`
+  ).join(' ');
+  await page.locator('#pasteText').fill(verses);
+  await page.locator('#importPassageRef').fill('Psalm 119:1-40');
+  await page.locator('#importBtn').click();
+  await expect(page.locator('.proposition-block')).toHaveCount(40);
+
+  // Work at the very bottom — the old fixed 28%-of-wrapper position would put
+  // the popover thousands of pixels above the commented line.
+  await page.evaluate(() => {
+    const ws = document.getElementById('workspace');
+    ws.scrollTop = ws.scrollHeight;
+    const span = document.querySelectorAll('.proposition-block .proposition-text')[39];
+    span.focus();
+    window.DA_EDITOR.setSelectionByGlobalOffset(span, 4, 9); // "quick"
+  });
+  await page.keyboard.press('c');
+  await expect(page.locator('#commentPopover')).toBeVisible();
+
+  const mark = await page
+    .locator('mark.comment-highlight[data-comment-id="active-comment-target"]')
+    .first()
+    .boundingBox();
+  const pop = await page.locator('#commentPopover').boundingBox();
+  const viewport = page.viewportSize();
+  // On-screen…
+  expect(pop.y + pop.height).toBeGreaterThan(0);
+  expect(pop.y).toBeLessThan(viewport.height);
+  // …and adjacent to the highlighted range (below or flipped above).
+  const below = pop.y >= mark.y + mark.height && pop.y - (mark.y + mark.height) <= 40;
+  const above = pop.y + pop.height <= mark.y && mark.y - (pop.y + pop.height) <= 40;
+  expect(below || above).toBe(true);
+
+  await page.keyboard.press('Escape');
   expect(errors).toEqual([]);
 });

@@ -223,16 +223,12 @@ function showCommentPopover(config) {
 
   const wrapper = document.getElementById('propositions')?.parentElement || document.body;
 
-  // Standardize position for all comment popovers: always center horizontally, 
-  // and set to a consistent vertical position (28% is slightly lower than the old 20%).
-  popover.style.left = '50%';
-  popover.style.top = '28%';
-  popover.style.transform = 'translateX(-50%)';
-
   attachListeners();
   renderContent();
-  
+
+  // Append before positioning: the placement math measures offsetWidth/Height.
   wrapper.appendChild(popover);
+  positionCommentPopover(popover, wrapper, { isBracket, bracketIdx, propIndex });
   makePopupDraggable(popover, '.popover-header');
   if (typeof makeCommentPopoverDraggableAndResizable === 'function') {
     makeCommentPopoverDraggableAndResizable(popover);
@@ -243,6 +239,88 @@ function showCommentPopover(config) {
     if (window.renderAll) window.renderAll();
     popover.remove();
   });
+}
+
+/**
+ * Place the popover adjacent to its target instead of at a fixed spot. The
+ * popover is position:absolute inside .bracket-canvas-wrapper — which
+ * shrink-wraps the whole passage — so any fixed offset (the old left:50% /
+ * top:28%) lands screens away from the commented line on a long passage.
+ * The target is already in the DOM by now: showCommentPopover sets
+ * activeCommentTarget and renders before positioning, which emits the
+ * active-comment-target marks (text) and the bracket group (bracket).
+ * Coordinates are computed in viewport space (prefer below the target, flip
+ * above if there's no room, overlap only as a last resort) and converted to
+ * wrapper-relative values, so the popover scrolls with the text it annotates.
+ */
+function positionCommentPopover(popover, wrapper, { isBracket, bracketIdx, propIndex }) {
+  const GAP = 10;
+  const MARGIN = 8;
+  const pw = popover.offsetWidth;
+  const ph = popover.offsetHeight;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const workspace = document.getElementById('workspace');
+  const wsRect = workspace
+    ? workspace.getBoundingClientRect()
+    : { left: 0, top: 0, width: vw, height: vh };
+
+  let anchor = null;
+  if (isBracket) {
+    const group = document.querySelector(`#bracketCanvas .bracket-group[data-index="${bracketIdx}"]`);
+    if (group) {
+      const r = group.getBoundingClientRect();
+      // A tall bracket can extend far off-screen; anchor on the midpoint of
+      // its visible portion so the popover opens where the user is looking.
+      const visTop = Math.max(r.top, wsRect.top);
+      const visBottom = Math.min(r.bottom, wsRect.top + wsRect.height);
+      const midY = (visTop + visBottom) / 2;
+      anchor = { left: r.left, right: r.right, top: midY - 10, bottom: midY + 10 };
+    }
+  } else {
+    // The highlighted range can be split across several <mark>s when it
+    // crosses other tag boundaries; anchor on their union.
+    let els = Array.from(document.querySelectorAll(
+      '#propositions mark.comment-highlight[data-comment-id="active-comment-target"]'
+    ));
+    if (!els.length && propIndex !== undefined) {
+      const block = document.querySelector(`.proposition-block[data-index="${propIndex}"]`);
+      if (block) els = [block];
+    }
+    if (els.length) {
+      let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+      els.forEach((el) => {
+        const rr = el.getBoundingClientRect();
+        l = Math.min(l, rr.left);
+        t = Math.min(t, rr.top);
+        r = Math.max(r, rr.right);
+        b = Math.max(b, rr.bottom);
+      });
+      anchor = { left: l, top: t, right: r, bottom: b };
+    }
+  }
+
+  let left, top;
+  if (anchor) {
+    left = Math.max(MARGIN, Math.min(DA_STATE.isRTL ? anchor.right - pw : anchor.left, vw - pw - MARGIN));
+    top = anchor.bottom + GAP;
+    if (top + ph > vh - MARGIN) {
+      const above = anchor.top - GAP - ph;
+      if (above >= MARGIN) top = above;
+      else if (vh - anchor.bottom >= anchor.top) top = Math.max(MARGIN, Math.min(top, vh - ph - MARGIN));
+      else top = Math.max(MARGIN, above);
+    }
+  } else {
+    // No target in the DOM: center on the visible workspace, never on the
+    // full-passage wrapper.
+    left = wsRect.left + (wsRect.width - pw) / 2;
+    top = wsRect.top + wsRect.height * 0.2;
+  }
+
+  const wrapperRect = wrapper.getBoundingClientRect();
+  popover.style.left = `${left - wrapperRect.left}px`;
+  popover.style.top = `${top - wrapperRect.top}px`;
+  popover.style.transform = 'none';
 }
 
 function showCommentPopoverForText(propIndex, start, end, existingCommentId = null) {

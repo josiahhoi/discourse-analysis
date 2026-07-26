@@ -188,7 +188,9 @@ window.DA_MOUSE = {
           e.preventDefault();
           const bIdx = parseInt(hit.dataset.index, 10);
           const rect = hit.getBoundingClientRect();
-          DA_UI.showLabelPicker(bIdx, rect.top + rect.height / 2, rect.right + 40);
+          // Pass the hitbox center — showLabelPicker itself places the picker
+          // beside the bracket, same as the mouse path.
+          DA_UI.showLabelPicker(bIdx, rect.top + rect.height / 2, rect.left + rect.width / 2);
         }
       });
     }
@@ -262,7 +264,9 @@ window.DA_MOUSE = {
       if (comment.type === 'text') {
         const block = document.querySelector(`.proposition-block[data-index="${comment.target.propIndex}"]`);
         if (block) {
-          block.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Instant, not smooth: the popover placement reads rects at open
+          // time, and a scroll still in flight would give mid-animation rects.
+          block.scrollIntoView({ block: 'center' });
           block.classList.add('searching');
           setTimeout(() => block.classList.remove('searching'), 2000);
           DA_UI.showCommentPopoverForText(comment.target.propIndex, comment.target.start, comment.target.end, comment.id);
@@ -271,7 +275,8 @@ window.DA_MOUSE = {
         const bracketIdx = DA_STATE.bracketIndexById(comment.target.bracketId);
         const bracketGroup = document.querySelector(`.bracket-group[data-index="${bracketIdx}"]`);
         if (bracketGroup) {
-          bracketGroup.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Instant for the same reason as the text path above.
+          bracketGroup.scrollIntoView({ block: 'center' });
           bracketGroup.classList.add('bracket-hover');
           setTimeout(() => bracketGroup.classList.remove('bracket-hover'), 2000);
           if (DA_STATE.brackets[bracketIdx]) DA_UI.showCommentPopoverForBracket(bracketIdx);
