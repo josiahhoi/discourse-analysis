@@ -1055,3 +1055,141 @@ test('comment popover on a long passage opens at the commented line, not screens
   await page.keyboard.press('Escape');
   expect(errors).toEqual([]);
 });
+
+test('relationship picker flips above the bracket when there is no room below', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/');
+  await page.getByText('Or paste text to bracket or import').click();
+  const verses = Array.from(
+    { length: 40 },
+    (_, i) => `[${i + 1}] The quick brown fox jumps over the lazy dog`
+  ).join(' ');
+  await page.locator('#pasteText').fill(verses);
+  await page.locator('#importPassageRef').fill('Psalm 119:1-40');
+  await page.locator('#importBtn').click();
+  await expect(page.locator('.proposition-block')).toHaveCount(40);
+
+  // Put rows 19-20 near the viewport bottom, then bracket them: the picker
+  // can't fit below, so it must open whole above row 19 — not truncated.
+  // Scroll twice: the first scroll folds the top bar (animated), which
+  // shifts the layout; the second lands the rows where we want them.
+  await page.evaluate(() => {
+    document.querySelectorAll('.proposition-block')[21].scrollIntoView({ block: 'end' });
+  });
+  await page.waitForTimeout(400); // top-bar fold animation settles
+  await page.evaluate(() => {
+    document.querySelectorAll('.proposition-block')[21].scrollIntoView({ block: 'end' });
+  });
+  await page.locator('.prop-dot').nth(19).click();
+  await page.locator('.prop-dot').nth(20).click();
+  await expect(page.locator('#labelPicker')).toBeVisible();
+
+  const picker = await page.locator('#labelPicker').boundingBox();
+  const topLine = await page.locator('.proposition-block').nth(19).boundingBox();
+  const viewport = page.viewportSize();
+  expect(picker.y + picker.height).toBeLessThanOrEqual(topLine.y + 2); // above the top line
+  expect(picker.y).toBeGreaterThanOrEqual(0);
+  expect(picker.height).toBeGreaterThanOrEqual(400); // whole picker, not chrome-only
+  const footer = await page.locator('#labelPicker .picker-footer').boundingBox();
+  expect(footer.y + footer.height).toBeLessThanOrEqual(viewport.height); // Delete reachable
+
+  await page.keyboard.press('Escape');
+  expect(errors).toEqual([]);
+});
+
+test('relationship picker resizes from its corner handle', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.setViewportSize({ width: 1800, height: 900 });
+  await importPassage(page);
+
+  await page.locator('.prop-dot').nth(0).click();
+  await page.locator('.prop-dot').nth(1).click();
+  await expect(page.locator('#labelPicker')).toBeVisible();
+
+  const before = await page.locator('#labelPicker').boundingBox();
+  const handle = await page.locator('#labelPicker .picker-resize-handle').boundingBox();
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+  await page.mouse.down();
+  // Wider but shorter: the auto-cap already extends the picker to the
+  // viewport bottom here, so taller is (correctly) clamped — shrinking
+  // proves the height axis works.
+  await page.mouse.move(handle.x + 150, handle.y - 80, { steps: 4 });
+  await page.mouse.up();
+
+  const after = await page.locator('#labelPicker').boundingBox();
+  expect(after.width).toBeGreaterThan(before.width + 100); // grew past the 480px max-width
+  expect(after.height).toBeLessThan(before.height - 40);
+
+  await page.keyboard.press('Escape');
+  expect(errors).toEqual([]);
+});
+
+test('collapse reduces to the dominant spine and keeps the series bracket drawn', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/');
+  await page.getByText('Or paste text to bracket or import').click();
+  await page.locator('#pasteText').fill(
+    '[1] alpha line one [2] beta line two [3] gamma line three ' +
+    '[4] delta line four [5] epsilon line five [6] zeta line six'
+  );
+  await page.locator('#importPassageRef').fill('James 1:1-6');
+  await page.locator('#importBtn').click();
+  await expect(page.locator('.proposition-block')).toHaveCount(6);
+
+  // James-1:19-25-shaped structure: M=ground(G,p5) → G=action-purpose(E,F) →
+  // F=series(p2, A=ground(p3,p4)), E=ground(p0,p1).
+  await page.evaluate(() => {
+    window.DA_STATE.brackets.push(
+      { id: 'bE', from: 'p0', to: 'p1', type: 'ground', labelsSwapped: false, dominanceFlipped: false },
+      { id: 'bA', from: 'p3', to: 'p4', type: 'ground', labelsSwapped: false, dominanceFlipped: false },
+      { id: 'bF', from: 'p2', to: 'bA', type: 'series', labelsSwapped: false, dominanceFlipped: false },
+      { id: 'bG', from: 'bE', to: 'bF', type: 'action-purpose', labelsSwapped: false, dominanceFlipped: false },
+      { id: 'bM', from: 'bG', to: 'p5', type: 'ground', labelsSwapped: false, dominanceFlipped: false }
+    );
+    window.renderAll();
+  });
+  await expect(page.locator('.bracket-group')).toHaveCount(5);
+  await expect(page.locator('.proposition-block.folded-hidden')).toHaveCount(0);
+
+  // Collapse the outermost bracket: rows 0,1,4,5 fold; the spine (rows 2-3)
+  // stays WITH the series bracket still drawn between the two rows.
+  await page.evaluate(() => window.DA_EDITOR.toggleBracketCollapse(4));
+  await expect(page.locator('.proposition-block.folded-hidden')).toHaveCount(4);
+  await expect(page.locator('.bracket-group')).toHaveCount(2);
+  await expect(page.locator('.bracket-group.is-collapsed')).toHaveCount(1);
+  await expect(page.locator('.bracket-group.series')).toHaveCount(1);
+  await expect(page.locator('.fold-gap')).toHaveCount(2);
+
+  // The series' arm to the folded ground(p3,p4) is reduced: dashed class, and
+  // it lands on row 3's dot rather than the phantom bracket node.
+  const reducedArm = page.locator('.bracket-group.series .bracket-arm.arm-reduced');
+  await expect(reducedArm).toHaveCount(1);
+  const armBox = await reducedArm.boundingBox();
+  const dot3 = await page.locator('.prop-dot').nth(3).boundingBox();
+  expect(Math.abs((armBox.y + armBox.height / 2) - (dot3.y + dot3.height / 2))).toBeLessThanOrEqual(3);
+
+  // The collapsed bracket's summary arm points at the surviving series
+  // bracket's node — the middle of the structure it dominates (midway between
+  // rows 2 and 3) — and carries the standard abbreviation ("G" for ground,
+  // not a truncated canonical name).
+  const mArm = page.locator('.bracket-group.is-collapsed .bracket-arm');
+  const mBox = await mArm.boundingBox();
+  const dot2 = await page.locator('.prop-dot').nth(2).boundingBox();
+  const seriesMidY = ((dot2.y + dot2.height / 2) + (dot3.y + dot3.height / 2)) / 2;
+  expect(Math.abs((mBox.y + mBox.height / 2) - seriesMidY)).toBeLessThanOrEqual(3);
+  await expect(page.locator('.bracket-group.is-collapsed .bracket-label')).toHaveText('G');
+
+  // Expand via the collapsed connection node…
+  await page.locator('.bracket-group.is-collapsed .connection-node').click({ force: true });
+  await expect(page.locator('.bracket-group')).toHaveCount(5);
+  await expect(page.locator('.proposition-block.folded-hidden')).toHaveCount(0);
+
+  // …and via a fold-gap click after re-collapsing.
+  await page.evaluate(() => window.DA_EDITOR.toggleBracketCollapse(4));
+  await expect(page.locator('.fold-gap')).toHaveCount(2);
+  await page.locator('.fold-gap').first().click();
+  await expect(page.locator('.proposition-block.folded-hidden')).toHaveCount(0);
+  await expect(page.locator('.bracket-group')).toHaveCount(5);
+
+  expect(errors).toEqual([]);
+});

@@ -283,20 +283,69 @@ function renderBrackets() {
     });
   });
 
+  // ── Collapse-driven suppression ──────────────────────────────────────────
+  // Same union the row hider builds (computeCollapsedRows is the shared
+  // source of truth). A bracket draws only if every dot it must land on —
+  // each endpoint reduced to the first row of its spine — is still visible.
+  // Rows a collapsed bracket hides ITSELF never count against it: a collapsed
+  // bracket still draws its own summary shape (that's the expand affordance).
+  const { hiddenBy: _hiddenBy } = computeCollapsedRows();
+  const _anyCollapsed = _hiddenBy.size > 0;
+  const _spineBoundsCache = new Map(); // endpoint id -> {from,to}
+  const _spineBounds = (id) => {
+    const key = String(id);
+    if (!_spineBoundsCache.has(key)) _spineBoundsCache.set(key, getRepresentativeRange(id));
+    return _spineBoundsCache.get(key);
+  };
+  const _isBracketRef = (id) => typeof id !== 'number' && !DA_STATE.isPropRef(id);
+  const _hiddenForBracket = (row, idx) => {
+    const owners = _hiddenBy.get(row);
+    return !!owners && owners.some((o) => o !== idx);
+  };
+  const _suppressedIdx = new Set();
+  if (_anyCollapsed) {
+    DA_STATE.brackets.forEach((b, idx) => {
+      const required = [_spineBounds(b.from).from, _spineBounds(b.to).from];
+      if (required.some((r) => _hiddenForBracket(r, idx))) _suppressedIdx.add(idx);
+    });
+  }
+
+  // Where a collapsed bracket's arm lands for endpoint `id`: follow the
+  // dominant chain through brackets that are folded away; if it reaches a
+  // bracket that is still DRAWN (e.g. the series surviving inside the fold),
+  // attach at that bracket's connection node — the same place an expanded
+  // parent arm attaches — using the star-consistent Y that getConnectionPoints
+  // already computed for this side. Only when the chain ends at a bare row
+  // (or can't be followed) does the arm land on the first spine row's dot.
+  const _collapsedAttach = (id, sideY) => {
+    let cur = id;
+    const seen = new Set();
+    while (_isBracketRef(cur) && !seen.has(cur)) {
+      seen.add(cur);
+      const idx = DA_STATE.bracketIndexById(cur);
+      if (idx === -1) break;
+      if (!_suppressedIdx.has(idx)) {
+        return { y: sideY, left: MX(getBracketX(idx)) + _nodeDX };
+      }
+      const eb = DA_STATE.brackets[idx];
+      const eLabels = getBracketLabels(eb.type, eb.labelsSwapped, eb.dominanceFlipped);
+      const eTop = !!((eLabels.top && eLabels.top.includes('*')) || eLabels.single === '*');
+      const eBottom = !!(eLabels.bottom && eLabels.bottom.includes('*'));
+      if (eTop === eBottom) break; // starless/double-star: no single side to follow
+      cur = eTop ? eb.from : eb.to;
+    }
+    const pos = dotPositions[_spineBounds(id).from];
+    return (pos && pos.midY > 0) ? { y: pos.midY, left: pos.left } : null;
+  };
+
   // Per-pass memo for getConnectionPoints: a nested bracket's geometry is
   // otherwise recomputed recursively for every ancestor that references it.
   _connCache = new Map();
   try {
 
   DA_STATE.brackets.forEach((bracket, i) => {
-    // 1. Hide brackets that are inside a collapsed parent
-    const isInsideCollapsed = DA_STATE.brackets.some((otherB, otherIdx) => {
-      if (otherIdx === i || !otherB.isCollapsed) return false;
-      const outerRange = _extents[otherIdx];
-      const innerRange = _extents[i];
-      return innerRange.from >= outerRange.from && innerRange.to <= outerRange.to;
-    });
-    if (isInsideCollapsed) return;
+    // 1. Skip brackets whose structure has been folded away by a collapse.
+    if (_suppressedIdx.has(i)) return;
 
     let { topY, topLeft, bottomY, bottomLeft } = getConnectionPoints(bracket.from, bracket.to, dotPositions, i);
     const x = MX(getBracketX(i));
@@ -305,18 +354,37 @@ function renderBrackets() {
     const _collapseInfo = bracket.isCollapsed ? getCollapseInfo(i) : null;
     const isCollapsedCoord = !!(_collapseInfo && _collapseInfo.isCoordinateShape);
 
+    // A drawn, non-collapsed bracket can reference a bracket that IS folded
+    // away (e.g. the idea-explanation inside a series whose parent collapsed):
+    // snap that arm to the endpoint's first spine dot — the row that
+    // represents the folded structure — instead of the phantom node.
+    let topReduced = false, bottomReduced = false;
+    if (_anyCollapsed && !bracket.isCollapsed) {
+      const _reduceArm = (endpointId) => {
+        if (!_isBracketRef(endpointId)) return null;
+        const epIdx = DA_STATE.bracketIndexById(endpointId);
+        if (epIdx === -1 || !_suppressedIdx.has(epIdx)) return null;
+        const pos = dotPositions[_spineBounds(endpointId).from];
+        return (pos && pos.midY > 0) ? pos : null;
+      };
+      const fromPos = _reduceArm(bracket.from);
+      if (fromPos) { topY = fromPos.midY; topLeft = fromPos.left; topReduced = true; }
+      const toPos = _reduceArm(bracket.to);
+      if (toPos) { bottomY = toPos.midY; bottomLeft = toPos.left; bottomReduced = true; }
+    }
+
     if (bracket.isCollapsed) {
       if (isCollapsedCoord) {
-        // Coordinate collapsed: resolve both visible endpoints and span the full distance
-        const repFrom = getRepresentativeRange(bracket.from);
-        const repTo = getRepresentativeRange(bracket.to);
-        const fromPos = dotPositions[repFrom.from];
-        const toPos = dotPositions[repTo.from];
-        if (fromPos && fromPos.midY > 0 && toPos && toPos.midY > 0) {
-          topY = fromPos.midY;
-          topLeft = fromPos.left;
-          bottomY = toPos.midY;
-          bottomLeft = toPos.left;
+        // Coordinate collapsed: both endpoints resolved to their surviving
+        // attachment (a drawn sub-bracket's node, else the spine dot), the
+        // dashed connector spanning the full distance.
+        const fromAttach = _collapsedAttach(bracket.from, topY);
+        const toAttach = _collapsedAttach(bracket.to, bottomY);
+        if (fromAttach && toAttach) {
+          topY = fromAttach.y;
+          topLeft = fromAttach.left;
+          bottomY = toAttach.y;
+          bottomLeft = toAttach.left;
         } else {
           const extent = _extents[i];
           for (let j = extent.from; j <= extent.to; j++) {
@@ -325,15 +393,17 @@ function renderBrackets() {
           }
         }
       } else {
-        // Subordinate collapsed: snap to the representative dot of the dominant
-        // endpoint (already resolved by getCollapseInfo). getRepresentativeRange
-        // makes bN refs land on the actual proposition dot rather than the
-        // bracket node x position (which may be hidden/unrendered).
-        const repDominant = getRepresentativeRange(_collapseInfo.dominantId);
-        const dominantPos = dotPositions[repDominant.from];
-        if (dominantPos && dominantPos.midY > 0) {
-          topY = bottomY = dominantPos.midY;
-          topLeft = bottomLeft = dominantPos.left;
+        // Subordinate collapsed: single summary arm at the dominant side's
+        // surviving attachment — the node of a still-drawn sub-bracket (so the
+        // arm points at the middle of the structure it dominates, same as an
+        // expanded parent arm), else the dominant spine row's dot.
+        const attach = _collapsedAttach(
+          _collapseInfo.dominantId,
+          _collapseInfo.dominantId === bracket.from ? topY : bottomY
+        );
+        if (attach) {
+          topY = bottomY = attach.y;
+          topLeft = bottomLeft = attach.left;
         } else {
           // Fallback: find first visible prop in the bracket's full extent
           const extent = _extents[i];
@@ -411,7 +481,7 @@ function renderBrackets() {
     }));
     group.appendChild(createSVG('line', {
       x1: x, y1: topY, x2: topLeft, y2: topY,
-      class: `bracket-arm ${bracket.type}`,
+      class: `bracket-arm ${bracket.type}${topReduced ? ' arm-reduced' : ''}`,
       dataset: { index: i }
     }));
 
@@ -424,7 +494,7 @@ function renderBrackets() {
       }));
       group.appendChild(createSVG('line', {
         x1: x, y1: bottomY, x2: bottomLeft, y2: bottomY,
-        class: `bracket-arm ${bracket.type}`,
+        class: `bracket-arm ${bracket.type}${bottomReduced ? ' arm-reduced' : ''}`,
         dataset: { index: i }
       }));
     }

@@ -101,3 +101,72 @@ test('nested coordinate: representative ends follow each sub-bracket dominant ro
   assert.deepEqual(info.hiddenRows, [1, 2]);
   assert.equal(info.isCoordinateShape, true);
 });
+
+// ── Recursive spine (collapse shows dominant structure, not bare rows) ──────
+
+/** James 1:19-25-shaped fixture: subordinate → coordinate → subordinate chain.
+ *  E=ground(p0,p1) star-top, A2=ground(p3,p4) star-top, F=series(p2,A2),
+ *  G=action-purpose(E,F) star-bottom, M=ground(G,p5) star-top. */
+function jamesShape() {
+  return setup([
+    { id: 'bE', from: 'p0', to: 'p1', type: 'ground', labelsSwapped: false, dominanceFlipped: false },
+    { id: 'bA', from: 'p3', to: 'p4', type: 'ground', labelsSwapped: false, dominanceFlipped: false },
+    { id: 'bF', from: 'p2', to: 'bA', type: 'series', labelsSwapped: false, dominanceFlipped: false },
+    { id: 'bG', from: 'bE', to: 'bF', type: 'action-purpose', labelsSwapped: false, dominanceFlipped: false },
+    { id: 'bM', from: 'bG', to: 'p5', type: 'ground', labelsSwapped: false, dominanceFlipped: false },
+  ], 6);
+}
+
+test('deep chain: collapsing the outer bracket keeps the series members\' spine rows', () => {
+  const sb = jamesShape();
+  const info = sb.DA_RENDERER.getCollapseInfo(4); // bM
+  // Old behavior kept row 4 too (series exposed its full extent). The series
+  // member bA now reduces to its own dominant row 3.
+  assert.deepEqual(info.hiddenRows, [0, 1, 4, 5]);
+  assert.equal(info.isCoordinateShape, false);
+  assert.equal(info.dominantId, 'bG');
+});
+
+test('getSpineRows: recursive dominant-spine row sets', () => {
+  const sb = jamesShape();
+  const spine = (id) => Array.from(sb.DA_RENDERER.getSpineRows(id)).sort();
+  assert.deepEqual(spine('bE'), [0]);
+  assert.deepEqual(spine('bF'), [2, 3]); // series: both members, each reduced
+  assert.deepEqual(spine('bG'), [2, 3]); // follows its starred side into bF
+});
+
+test('non-contiguous spine: coordinate of two starred sub-brackets keeps separated rows', () => {
+  const sb = setup([
+    { id: 'bX', from: 'p0', to: 'p1', type: 'ground', labelsSwapped: false, dominanceFlipped: false },
+    { id: 'bY', from: 'p2', to: 'p4', type: 'action-purpose', labelsSwapped: false, dominanceFlipped: false },
+    { id: 'bALT', from: 'bX', to: 'bY', type: 'alternative', labelsSwapped: false, dominanceFlipped: false },
+    { id: 'bP', from: 'bALT', to: 'p5', type: 'ground', labelsSwapped: false, dominanceFlipped: false },
+  ], 6);
+  const info = sb.DA_RENDERER.getCollapseInfo(3); // bP
+  // Spine of bALT is {0, 4} — a range-based keep would wrongly retain 1-3.
+  assert.deepEqual(info.hiddenRows, [1, 2, 3, 5]);
+});
+
+test('getRepresentativeRange returns spine bounds, not the sub-bracket\'s full extent', () => {
+  const sb = jamesShape();
+  assert.deepEqual(sb.DA_RENDERER.getRepresentativeRange('bG'), { from: 2, to: 3 }); // old: {2, 4}
+});
+
+test('coordinate type beats its star (progression P/*): both members survive a parent collapse', () => {
+  const sb = setup([
+    { id: 'bPROG', from: 'p0', to: 'p3', type: 'progression', labelsSwapped: false, dominanceFlipped: false },
+    { id: 'bP2', from: 'bPROG', to: 'p5', type: 'ground', labelsSwapped: false, dominanceFlipped: false },
+  ], 6);
+  const info = sb.DA_RENDERER.getCollapseInfo(1); // bP2
+  assert.deepEqual(info.hiddenRows, [1, 2, 4, 5]); // rows 0 AND 3 kept
+});
+
+test('computeCollapsedRows: per-row ownership across overlapping collapses', () => {
+  const sb = jamesShape();
+  sb.DA_STATE.brackets[4].isCollapsed = true; // bM hides 0,1,4,5
+  sb.DA_STATE.brackets[2].isCollapsed = true; // bF hides 4
+  const { hiddenRows, hiddenBy } = sb.DA_RENDERER.computeCollapsedRows();
+  assert.deepEqual(Array.from(hiddenRows).sort(), [0, 1, 4, 5]);
+  assert.deepEqual(hiddenBy.get(4).sort(), [2, 4]); // both brackets own row 4
+  assert.deepEqual(hiddenBy.get(0), [4]);           // rows 0/1 owned by bM only
+});

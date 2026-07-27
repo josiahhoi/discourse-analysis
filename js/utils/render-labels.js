@@ -11,14 +11,6 @@
 // the label on "/" — so the double-slash is never mistaken for two separators.
 const _GLYPH_DBLSLASH = '\u0001'; // written as an escape so it is visible in editors/diffs
 
-function _twoArmSummary(typeKey, type) {
-  const canonical = window.DA_PROFILES ? DA_PROFILES.getName(typeKey)
-    : (DA_CONSTANTS.RELATIONSHIP_LABELS[typeKey] || type);
-  return canonical.includes('-')
-    ? canonical.split('-').map((s) => s.trim().substring(0, 3)).join('/')
-    : (canonical.length > 6 ? canonical.substring(0, 4) : canonical);
-}
-
 // Memo: getBracketLabels is pure string work over (type, swapped, flipped) plus
 // the active profile, but it's called O(brackets × nesting depth) times per
 // render frame. Cache per profile object — DA_PROFILES.setActive always installs
@@ -95,7 +87,15 @@ function _computeBracketLabels(type, labelsSwapped, dominanceFlipped) {
     bottom = bottom.replace(/\*/g, '');
   }
 
-  return { top: top.trim(), bottom: bottom.trim(), summary: _twoArmSummary(typeKey, type) };
+  // Collapsed single-arm label: the standard abbreviation — both arm
+  // abbreviations joined ("Ac/Mn"), stars stripped; star-only arms drop out
+  // ("* / G" → "G", "∴ / *" → "∴"). Same vocabulary as the expanded labels
+  // and the picker, instead of the old truncated canonical name ("Act/Man").
+  const summary = [top, bottom]
+    .map((s) => s.replace(/\*/g, '').trim())
+    .filter(Boolean)
+    .join('/') || typeKey;
+  return { top: top.trim(), bottom: bottom.trim(), summary };
 }
 
 window.DA_RENDERER = Object.assign(window.DA_RENDERER || {}, { getBracketLabels });

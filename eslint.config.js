@@ -64,7 +64,9 @@ const APP_GLOBALS = {
   getRepresentativeRange: 'readonly', computeVerseDisplay: 'readonly',
   precomputeVerseSuffixes: 'readonly', clampToWordAnchor: 'readonly',
   remapPropositionAnchors: 'readonly',
-  getCollapseInfo: 'readonly', _isJumpOverType: 'readonly', _zoom: 'readonly',
+  getCollapseInfo: 'readonly', getSpineRows: 'readonly',
+  computeCollapsedRows: 'readonly',
+  _isJumpOverType: 'readonly', _zoom: 'readonly',
   // render-labels.js / render-arrows.js / render-comments.js
   getBracketLabels: 'readonly', renderWordArrows: 'readonly',
   renderCommentPreviews: 'readonly',

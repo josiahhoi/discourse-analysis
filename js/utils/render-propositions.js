@@ -72,20 +72,11 @@ function renderPropositions() {
   const existingBlocks = Array.from(container.querySelectorAll('.proposition-block'));
   const targetCount = DA_STATE.propositions.length;
 
-  // Calculate hidden indices from collapsed brackets (getCollapseInfo is the
-  // shared row/arm decision). _hiddenBy remembers which bracket(s) hid each row
-  // so the fold-gap indicator can expand exactly those on click.
-  const hiddenIndices = new Set();
-  const _hiddenBy = new Map();
-  DA_STATE.brackets.forEach((b, idx) => {
-    if (!b.isCollapsed) return;
-    getCollapseInfo(idx).hiddenRows.forEach((k) => {
-      hiddenIndices.add(k);
-      const owners = _hiddenBy.get(k) || [];
-      owners.push(idx);
-      _hiddenBy.set(k, owners);
-    });
-  });
+  // Hidden rows from collapsed brackets — computeCollapsedRows is the shared
+  // row/arm decision (renderBrackets consumes the same helper). _hiddenBy
+  // remembers which bracket(s) hid each row so the fold-gap indicator can
+  // expand exactly those on click.
+  const { hiddenRows: hiddenIndices, hiddenBy: _hiddenBy } = computeCollapsedRows();
 
   // Interior members of a series read as one unit with the ends, so their
   // standalone dots are hidden. This includes lines that are endpoints of a

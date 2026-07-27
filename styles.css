@@ -1509,7 +1509,8 @@ body {
   box-shadow: 0 0 0 2px var(--accent-15);
 }
 
-.comment-popover-resize-handle {
+.comment-popover-resize-handle,
+.picker-resize-handle {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -2549,6 +2550,14 @@ body.rtl-mode .proposition-block .proposition-text {
 .bracket-group.is-collapsed:hover .bracket-arm {
   stroke-width: 3px;
   opacity: 1;
+}
+
+/* An arm that lands on a reduced (spine) dot because the endpoint's own
+   bracket is folded away inside a collapsed ancestor: dashed to signal it
+   summarizes hidden structure. (Collapsed groups already dash everything.) */
+.bracket-group:not(.is-collapsed) .bracket-arm.arm-reduced {
+  stroke-dasharray: 5 3;
+  opacity: 0.75;
 }
 
 .bracket-group.is-selected .bracket-line,

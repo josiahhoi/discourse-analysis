@@ -182,24 +182,88 @@ function showTextContextMenu(propIndex, start, end, centerY, centerX, pcol) {
 }
 
 /**
- * Label picker placement: underneath the clicked bracket's own last line —
- * the row its lower arm attaches to — so the bracket and the lines it
- * directly relates stay visible above the picker while choosing. top =
- * anchorBottom + GAP, pulled up when less than MIN_H of viewport remains
- * below (a bracket ending near the screen bottom would otherwise leave a
- * uselessly short picker); the caller's maxHeight cap shrinks it into the
- * remaining space and the relationship list scrolls internally. left =
- * attached to the bracket's gutter edge (mirrored in RTL), viewport-clamped.
- * Pure rect math (viewport space) so it's testable.
+ * Label picker placement. Preferred: underneath the clicked bracket's own
+ * last line (the row its lower arm attaches to), keeping the bracket and the
+ * lines it directly relates visible above the picker. When the picker
+ * doesn't fit below — bracket ends near the screen bottom — it flips whole
+ * to ABOVE the bracket's first line instead of getting truncated. Only when
+ * neither side holds the full picker does it take the roomier side height-
+ * capped (the relationship list scrolls internally); and when even that
+ * side can't fit the fixed chrome (title/search/info panel/footer ≈ 270px —
+ * a bracket spanning the whole screen), it overlays from the top margin.
+ * left = attached to the bracket's gutter edge (mirrored in RTL), viewport-
+ * clamped. Returns maxH with left/top because the above-side cap ends at
+ * the bracket's top line, not the viewport bottom. Pure rect math
+ * (viewport space) so it's testable.
  */
-function computeLabelPickerPosition({ anchorBottom, aRect, pw, ph, vw, vh, isRTL }) {
+function computeLabelPickerPosition({ anchorTop, anchorBottom, aRect, pw, ph, vw, vh, isRTL }) {
   const GAP = 10;
   const MARGIN = 5;
-  const MIN_H = 260;
-  const maxTop = vh - Math.min(MIN_H, ph) - MARGIN;
-  const top = Math.max(MARGIN, Math.min(anchorBottom + GAP, maxTop));
+  const MIN_USABLE = 380; // below this the list under the fixed chrome is invisible
+  const belowSpace = vh - MARGIN - (anchorBottom + GAP);
+  const aboveSpace = anchorTop - GAP - MARGIN;
+  let top, maxH;
+  if (ph <= belowSpace) {
+    top = anchorBottom + GAP;
+    maxH = belowSpace;
+  } else if (ph <= aboveSpace) {
+    top = anchorTop - GAP - ph;
+    maxH = ph;
+  } else if (Math.max(belowSpace, aboveSpace) >= MIN_USABLE) {
+    if (belowSpace >= aboveSpace) {
+      top = anchorBottom + GAP;
+      maxH = belowSpace;
+    } else {
+      top = MARGIN;
+      maxH = aboveSpace;
+    }
+  } else {
+    top = MARGIN;
+    maxH = vh - 2 * MARGIN;
+  }
   const left = Math.max(MARGIN, Math.min(isRTL ? aRect.right - pw : aRect.left, vw - pw - MARGIN));
-  return { left, top };
+  return { left, top, maxH };
+}
+
+/**
+ * Corner drag-handle resizing for the label picker (same affordance as the
+ * comment popover). A user-driven size takes over from the automatic
+ * maxHeight/max-width caps; both dimensions stay viewport-clamped so the
+ * footer can't be dragged off-screen.
+ */
+function makePickerResizable(picker) {
+  const handle = document.createElement('div');
+  handle.className = 'picker-resize-handle';
+  handle.setAttribute('aria-label', 'Resize');
+  picker.appendChild(handle);
+  handle.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    // preventDefault only — the event must still propagate so
+    // setupClickOutside records that this press started INSIDE the picker;
+    // otherwise a resize drag whose pointer ends past the picker's edge
+    // (e.g. the height hit its viewport clamp) dismisses the picker on
+    // release.
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startW = picker.offsetWidth;
+    const startH = picker.offsetHeight;
+    const rect = picker.getBoundingClientRect();
+    const maxW = window.innerWidth - rect.left - 5;
+    const maxH = window.innerHeight - rect.top - 5;
+    picker.style.maxWidth = 'none';
+    picker.style.maxHeight = 'none';
+    const onMove = (e2) => {
+      picker.style.width = `${Math.max(320, Math.min(maxW, startW + e2.clientX - startX))}px`;
+      picker.style.height = `${Math.max(320, Math.min(maxH, startH + e2.clientY - startY))}px`;
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
 }
 
 function showLabelPicker(bracketIdx, centerY, centerX) {
@@ -540,29 +604,35 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
   const group = document.querySelector(`#bracketCanvas .bracket-group[data-index="${bracketIdx}"]`);
   const aRect = group ? group.getBoundingClientRect() : { left: centerX, right: centerX };
   let anchorBottom = centerY; // degenerate fallback: the click point
+  let anchorTop = centerY;
   if (bracket && canvas && DA_STATE.dotPositions?.length) {
     const pts = DA_RENDERER.getConnectionPoints(bracket.from, bracket.to, DA_STATE.dotPositions, bracketIdx);
-    const armY = canvas.getBoundingClientRect().top + Math.max(pts.topY, pts.bottomY);
-    // The arm lands mid-row: anchor below the row that contains it.
-    anchorBottom = armY + 16;
+    const canvasTop = canvas.getBoundingClientRect().top;
+    const yLow = canvasTop + Math.max(pts.topY, pts.bottomY); // lower arm
+    const yHigh = canvasTop + Math.min(pts.topY, pts.bottomY); // upper arm
+    // The arms land mid-row: anchor below the lower arm's row (preferred
+    // placement) and above the upper arm's row (the flip side).
+    anchorBottom = yLow + 16;
+    anchorTop = yHigh - 16;
     for (const row of document.querySelectorAll('.proposition-block')) {
       const r = row.getBoundingClientRect();
-      if (armY >= r.top && armY <= r.bottom) { anchorBottom = r.bottom; break; }
+      if (yLow >= r.top && yLow <= r.bottom) anchorBottom = r.bottom;
+      if (yHigh >= r.top && yHigh <= r.bottom) anchorTop = r.top;
     }
   }
-  const { left, top } = computeLabelPickerPosition({
-    anchorBottom, aRect, pw, ph,
+  const { left, top, maxH } = computeLabelPickerPosition({
+    anchorTop, anchorBottom, aRect, pw, ph,
     vw: window.innerWidth, vh: window.innerHeight, isRTL: !!DA_STATE.isRTL
   });
   picker.style.left = `${left}px`;
   picker.style.top = `${top}px`;
-  // The hover info panel adds height after this positioning; cap the picker
-  // at the viewport bottom so the footer (Delete Bracket) can never be pushed
-  // below the fold — the relationship list scrolls instead (styles.css caps
-  // overall height, but only relative to the picker's own top).
-  picker.style.maxHeight = `${window.innerHeight - top - 5}px`;
+  // Cap so the footer (Delete Bracket) always stays reachable — the
+  // relationship list scrolls internally. For an above-the-bracket flip the
+  // cap ends at the bracket's top line rather than the viewport bottom.
+  picker.style.maxHeight = `${maxH}px`;
 
   makeFixedDraggable(picker, '.picker-title');
+  makePickerResizable(picker);
 
   manageDialogFocus(picker);
   setupClickOutside(picker, () => picker.remove());
