@@ -119,6 +119,30 @@ test('a stored dominanceFlipped on a star-only arm renders unchanged, not blank'
   assert.equal(flipped.bottom, 'G');
 });
 
+test('star-only arms are detected in custom profiles and cl_ labels too', () => {
+  const sb = setup();
+  // The rule reads the RESOLVED label, not a list of types, so a professor's
+  // published profile or a hand-edited abbreviation is covered the same way.
+  sb.DA_PROFILES.setActive({
+    id: 'prof', name: 'Prof', dominance: true,
+    labels: {
+      ground: { abbr: '* / Grd', name: 'Ground' },
+      conditional: { abbr: 'Prot / *', name: 'Conditional' },
+      'action-result': { abbr: 'Act / Res*', name: 'Action-Result' }
+    }
+  });
+  assert.equal(sb.DA_RENDERER.canFlipDominance('ground'), false);
+  assert.equal(sb.DA_RENDERER.canFlipDominance('conditional'), false);
+  assert.equal(sb.DA_RENDERER.canFlipDominance('action-result'), true);
+  // A flip stored against one of those stays inert rather than blanking an arm.
+  assert.deepEqual(labels(sb, 'conditional', false, true), labels(sb, 'conditional', false, false));
+
+  // Per-bracket custom labels resolve through the same path.
+  sb.DA_STATE.customLabels = [{ id: 'cl_bare', label: '* / Mine' }, { id: 'cl_both', label: 'Aa / Bb*' }];
+  assert.equal(sb.DA_RENDERER.canFlipDominance('cl_bare'), false);
+  assert.equal(sb.DA_RENDERER.canFlipDominance('cl_both'), true);
+});
+
 test('flipping never empties an arm, for any type in any built-in profile', () => {
   const sb = setup();
   const types = Object.keys(sb.DA_CONSTANTS.RELATIONSHIP_LABELS);
