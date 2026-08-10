@@ -278,9 +278,13 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
   const hasTwoLabels = window.DA_PROFILES
     ? DA_PROFILES.isTwoArm(bracket.type)
     : !DA_CONSTANTS.SINGLE_LABEL_TYPES.has(bracket.type);
-  // Switch Stars is meaningless when the active profile doesn't mark dominance
-  // for this relationship, so hide it in that case.
-  const showStars = !window.DA_PROFILES || DA_PROFILES.isDominanceShown(bracket.type);
+  // Switch Stars is hidden when it couldn't do anything sensible: when the
+  // active profile doesn't mark dominance for this relationship at all, and
+  // when one arm of the label is nothing but the star ("* / G", "P / *") —
+  // moving it off would leave that arm blank. Swap is the control that
+  // repositions those, since it carries the star along with the label.
+  const showStars = (!window.DA_PROFILES || DA_PROFILES.isDominanceShown(bracket.type))
+    && (!window.DA_RENDERER || DA_RENDERER.canFlipDominance(bracket.type, bracket.labelsSwapped));
   const RELATIONSHIP_LABELS = DA_CONSTANTS.RELATIONSHIP_LABELS;
 
   picker.innerHTML = `

@@ -42,12 +42,34 @@ test('subordinate, star on bottom (action-purpose Ac/Pur*): keeps the to-row', (
 });
 
 test('dominanceFlipped moves the kept row to the other end', () => {
+  // action-purpose is "Ac / Pur*" — both arms carry vocabulary, so the star
+  // can move between them. (Star-only labels like ground's "* / G" can't; see
+  // the next test.)
   const sb = setup([
-    { id: 'b1', from: 'p0', to: 'p2', type: 'ground', labelsSwapped: false, dominanceFlipped: true },
+    { id: 'b1', from: 'p0', to: 'p2', type: 'action-purpose', labelsSwapped: false, dominanceFlipped: true },
   ]);
   const info = sb.DA_RENDERER.getCollapseInfo(0);
-  assert.deepEqual(info.hiddenRows, [0, 1]);
-  assert.equal(info.dominantId, 'p2');
+  assert.deepEqual(info.hiddenRows, [1, 2]);
+  assert.equal(info.dominantId, 'p0');
+});
+
+test('on a star-only label, swapping (not flipping) moves the kept row', () => {
+  // ground is "* / G": the star IS the top arm. Flipping would take it off an
+  // arm that has nothing else, so the label engine refuses and the picker
+  // hides Switch Stars — a stored flag from before that stays inert.
+  const flipped = setup([
+    { id: 'b1', from: 'p0', to: 'p2', type: 'ground', labelsSwapped: false, dominanceFlipped: true },
+  ]).DA_RENDERER.getCollapseInfo(0);
+  assert.deepEqual(flipped.hiddenRows, [1, 2], 'flip is a no-op');
+  assert.equal(flipped.dominantId, 'p0');
+
+  // Swap carries the star along with the label, so it does move the dominant
+  // end — and leaves both arms labelled ("G" on top, "*" on the bottom).
+  const swapped = setup([
+    { id: 'b1', from: 'p0', to: 'p2', type: 'ground', labelsSwapped: true, dominanceFlipped: false },
+  ]).DA_RENDERER.getCollapseInfo(0);
+  assert.deepEqual(swapped.hiddenRows, [0, 1]);
+  assert.equal(swapped.dominantId, 'p2');
 });
 
 test('coordinate (alternative): keeps both ends, hides the middle', () => {

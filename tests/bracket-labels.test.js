@@ -86,6 +86,59 @@ test('dominanceFlipped moves the star to the opposite side', () => {
   assert.equal(out.bottom.includes('*'), false);
 });
 
+// ── Star-only arms can't flip ───────────────────────────────────────────────
+// In labels like "* / G" or "P / *" one whole arm IS the dominance star, so
+// moving the star off it would leave that side of the bracket blank. Those
+// flips are refused outright and the picker hides Switch Stars for them
+// (Swap carries the star along with the label, which is the move that
+// applies there).
+
+test('canFlipDominance is false when one arm is nothing but the star', () => {
+  const sb = setup();
+  // Josiah: ground "* / G", inference "∴ / *", progression "P / *", …
+  for (const type of ['ground', 'inference', 'temporal', 'locative', 'comparison', 'concessive', 'progression']) {
+    assert.equal(sb.DA_RENDERER.canFlipDominance(type), false, `${type} must not offer Switch Stars`);
+  }
+  // Both arms carry their own vocabulary — flipping is meaningful.
+  for (const type of ['action-result', 'negative-positive', 'conditional', 'question-answer']) {
+    assert.equal(sb.DA_RENDERER.canFlipDominance(type), true, `${type} should offer Switch Stars`);
+  }
+  // Single-arm labels have no second arm to flip against.
+  assert.equal(sb.DA_RENDERER.canFlipDominance('series'), false);
+});
+
+test('a stored dominanceFlipped on a star-only arm renders unchanged, not blank', () => {
+  const sb = setup();
+  // Regression: this used to yield { top: '', bottom: 'G*' } — a bracket with
+  // one arm labelled and the other empty. Old files carrying the flag must
+  // render sensibly too, so the engine ignores the flip rather than trusting it.
+  const flat = labels(sb, 'ground', false, false);
+  const flipped = labels(sb, 'ground', false, true);
+  assert.deepEqual({ top: flipped.top, bottom: flipped.bottom }, { top: flat.top, bottom: flat.bottom });
+  assert.equal(flipped.top, '*');
+  assert.equal(flipped.bottom, 'G');
+});
+
+test('flipping never empties an arm, for any type in any built-in profile', () => {
+  const sb = setup();
+  const types = Object.keys(sb.DA_CONSTANTS.RELATIONSHIP_LABELS);
+  for (const id of ['josiah', 'biblearc', 'gurtner', 'beale', 'schreiner']) {
+    sb.DA_PROFILES.setActiveById(id);
+    for (const type of types) {
+      for (const swapped of [false, true]) {
+        const flat = labels(sb, type, swapped, false);
+        if (flat.single !== undefined) continue; // single-arm label, nothing to flip
+        const flipped = labels(sb, type, swapped, true);
+        const where = `${id}/${type}${swapped ? ' (swapped)' : ''}`;
+        // A bare "*" arm is legitimate — it's the dominance mark. What must
+        // never happen is an arm that HAD something coming back with nothing.
+        if (flat.top.trim()) assert.ok(flipped.top.trim(), `${where}: top arm went blank when flipped`);
+        if (flat.bottom.trim()) assert.ok(flipped.bottom.trim(), `${where}: bottom arm went blank when flipped`);
+      }
+    }
+  }
+});
+
 // ── The comparison "//" glyph ───────────────────────────────────────────────
 
 test('Gurtner comparison is a single-arm "//" glyph (not two empty arms)', () => {

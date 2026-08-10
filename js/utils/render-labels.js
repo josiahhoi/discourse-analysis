@@ -35,6 +35,28 @@ function getBracketLabels(type, labelsSwapped = false, dominanceFlipped = false)
   return result;
 }
 
+/** An arm carrying no vocabulary of its own — just the dominance star (or
+ *  nothing at all). "* / G" and "P / *" each have one. */
+function _isBareArm(arm) {
+  return String(arm).replace(/\*/g, '').trim() === '';
+}
+
+/**
+ * Whether Switch Stars is meaningful for this relationship: true only when
+ * both arms would still be labelled after the star moves. Star-only arms
+ * ("* / G", "∴ / *", "P / *") would be left blank, so the picker hides the
+ * control for them — see the flip guard in _computeBracketLabels.
+ *
+ * Profile-dependent, not a fixed list of types: comparison is "Cf / Cf" in the
+ * built-in defaults (flippable) but "Cf / *" under the Josiah profile (not).
+ */
+function canFlipDominance(type, labelsSwapped = false) {
+  const { top, bottom } = getBracketLabels(type, labelsSwapped, false);
+  // Single-arm labels have no top/bottom at all — nothing to flip between.
+  if (typeof top !== 'string' || typeof bottom !== 'string') return false;
+  return !_isBareArm(top) && !_isBareArm(bottom);
+}
+
 function _computeBracketLabels(type, labelsSwapped, dominanceFlipped) {
   const typeKey = type.toLowerCase();
   // The active notation profile resolves the label (with any rename/alias/custom
@@ -70,7 +92,13 @@ function _computeBracketLabels(type, labelsSwapped, dominanceFlipped) {
 
   if (labelsSwapped) { const t = top; top = bottom; bottom = t; }
 
-  if (dominanceFlipped && showDominance) {
+  // Moving the star between the arms only makes sense when both arms name
+  // something of their own. In labels like "* / G" or "P / *" one whole arm IS
+  // the star, so taking it away leaves that side blank — a bracket with a
+  // label on one arm and nothing on the other. Those flips are ignored (the
+  // picker also hides Switch Stars for them, and Swap — which carries the star
+  // along with the label — is the move that actually applies there).
+  if (dominanceFlipped && showDominance && !_isBareArm(top) && !_isBareArm(bottom)) {
     const st = top.includes('*');
     const sb = bottom.includes('*');
     if (st && !sb) { top = top.replace('*', ''); bottom += '*'; }
@@ -98,4 +126,4 @@ function _computeBracketLabels(type, labelsSwapped, dominanceFlipped) {
   return { top: top.trim(), bottom: bottom.trim(), summary };
 }
 
-window.DA_RENDERER = Object.assign(window.DA_RENDERER || {}, { getBracketLabels });
+window.DA_RENDERER = Object.assign(window.DA_RENDERER || {}, { getBracketLabels, canFlipDominance });
