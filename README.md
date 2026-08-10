@@ -105,7 +105,7 @@ There is no in-app key field. Without keys everything still works via Bolls.
 - Click the first proposition dot, then the second — the bracket is drawn and the **Relationship Picker** opens (type to filter it).
 - **Click** a bracket to change its relationship, swap labels, or switch stars.
 - **Right-click** a bracket for the actions menu: collapse/expand, comment, connect to another bracket, mark as main point, row highlight colors, delete.
-- Click two **non-adjacent** dots to create a jump-over Series/Bilateral/Double-Ground unit.
+- Click two **non-adjacent** dots to create a jump-over Series/Progression/Bilateral/Double-Ground unit.
 
 ### 3. Pick Your Notation
 - **Settings → Notation profile**: choose Josiah, BibleArc, Gurtner, Beale, or Schreiner — or edit any name, abbreviation, color, or dominance star to build your own.

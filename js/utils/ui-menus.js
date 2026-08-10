@@ -487,7 +487,10 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
       : DA_CONSTANTS.RELATIONSHIP_LABELS[t] || t).replace(/\s*\([^)]*\)\s*$/, '').trim());
     const note = document.createElement('p');
     note.className = 'picker-jump-note';
-    note.textContent = `Jump-over bracket — choose ${names.join(' or ')}.`;
+    const choices = names.length <= 2
+      ? names.join(' or ')
+      : `${names.slice(0, -1).join(', ')}, or ${names[names.length - 1]}`;
+    note.textContent = `Jump-over bracket — choose ${choices}.`;
     content.appendChild(note);
     const container = document.createElement('div');
     container.className = 'picker-btn-container';
@@ -511,7 +514,7 @@ function showLabelPicker(bracketIdx, centerY, centerX) {
   const searchRow = picker.querySelector('.picker-search-row');
   const searchInput = picker.querySelector('.picker-search');
   if (bracket.isJumpOver || !window.DA_PROFILES) {
-    // Two or three fixed choices (or no profile module) — no filter needed.
+    // A short fixed list of choices (or no profile module) — no filter needed.
     if (searchRow) searchRow.remove();
   } else if (searchInput) {
     const applyFilter = () => {

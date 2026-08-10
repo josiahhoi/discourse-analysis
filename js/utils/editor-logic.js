@@ -1174,8 +1174,10 @@ function handleDotClick(pointId, x, y) {
     const secondStart = Math.max(ext1.from, ext2.from);
 
     // A forward gap between the two sides means the user "jumped over" the lines
-    // in between. This is allowed only as a SERIES — the line(s) in the gap become
-    // implicit members of one flat series (their dots are hidden at render time).
+    // in between. The line(s) in the gap become implicit members of one flat unit
+    // (their dots are hidden at render time), so the label picker restricts the
+    // choice to DA_CONSTANTS.JUMP_OVER_TYPES; 'series' below is just the default
+    // it opens with.
     // The cross-check below still rejects anything that would truly cross out of
     // the new range. Overlap (firstEnd + 1 > secondStart) keeps the old error.
     let isSeriesJumpOver = false;

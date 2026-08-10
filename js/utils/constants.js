@@ -197,7 +197,7 @@ const SINGLE_LABEL_TYPES = new Set(['series', 'alternative', 'bilateral', 'both-
 // SINGLE canonical list — profiles.js re-exports it, and the renderer
 // (rendering-engine.js) and picker (ui-menus.js) read it from here, so the
 // three copies that once drifted can't come back.
-const JUMP_OVER_TYPES = ['series', 'bilateral', 'double-ground'];
+const JUMP_OVER_TYPES = ['series', 'progression', 'bilateral', 'double-ground'];
 
 const BRACKET_GEO = {
   GAP: 15,

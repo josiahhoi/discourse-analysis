@@ -263,9 +263,9 @@ function renderBrackets() {
   const _starDX = (_rtl ? 12 : -12) * _z;
   const _starAnchor = _rtl ? 'start' : 'end';
 
-  // Connection-nodes to suppress: a bracket "jumped over" by a series or
-  // bilateral is an implicit member, so its own parent-attach anchor would just
-  // dangle inside the span. We hide it. A bracket the jump-over references
+  // Connection-nodes to suppress: a bracket "jumped over" by any JUMP_OVER_TYPES
+  // relationship is an implicit member, so its own parent-attach anchor would
+  // just dangle inside the span. We hide it. A bracket the jump-over references
   // directly (its from/to) keeps its node — the arm terminates there.
   const _hiddenNodeIdx = new Set();
   DA_STATE.brackets.forEach((s, sIdx) => {

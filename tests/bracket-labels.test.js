@@ -23,6 +23,33 @@ function setup() {
 
 const labels = (sb, ...args) => sb.DA_RENDERER.getBracketLabels(...args);
 
+// ── Jump-over type list ──────────────────────────────────────────────────────
+// JUMP_OVER_TYPES is the single canonical list the label picker offers for a
+// bracket spanning non-adjacent dots. The picker intersects it with the active
+// profile's vocabulary, so a profile edit that drops one of these silently
+// shrinks the picker — these two tests make that fail loudly instead.
+
+test('every jump-over type is a real relationship with a name and color', () => {
+  const sb = setup();
+  sb.DA_CONSTANTS.JUMP_OVER_TYPES.forEach((type) => {
+    assert.ok(sb.DA_CONSTANTS.RELATIONSHIP_LABELS[type], `${type} has a menu name`);
+    assert.ok(sb.DA_CONSTANTS.RELATIONSHIP_COLORS[type], `${type} has a color`);
+    assert.ok(sb.DA_CONSTANTS.BRACKET_LABELS[type], `${type} has an abbreviation`);
+  });
+});
+
+test('series and progression are jump-over-capable in every built-in profile', () => {
+  const sb = setup();
+  assert.ok(sb.DA_CONSTANTS.JUMP_OVER_TYPES.includes('progression'));
+  for (const id of ['josiah', 'biblearc', 'gurtner', 'beale', 'schreiner']) {
+    sb.DA_PROFILES.setActiveById(id);
+    const visible = sb.DA_PROFILES.getVisibleTypes();
+    // Guarantees the jump-over picker always offers at least these two.
+    assert.ok(visible.includes('series'), `${id} has series`);
+    assert.ok(visible.includes('progression'), `${id} has progression`);
+  }
+});
+
 test('single-label type returns one label, no top/bottom', () => {
   const sb = setup();
   const out = labels(sb, 'series'); // "S"
