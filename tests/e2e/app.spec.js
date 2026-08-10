@@ -626,6 +626,71 @@ test('zoom: scales text and bracket diagram together, clamps, persists, and expo
   expect(errors).toEqual([]);
 });
 
+test('export captures content that scrolls off screen instead of cropping it to the window', async ({ page }) => {
+  // Regression: the capture canvas was sized to the full content (correct),
+  // but html2canvas paints an element clipped to its own overflow box and
+  // .workspace is a scroll container — so everything past the visible area
+  // came out blank. Exports were silently cropped to whatever fitted on
+  // screen; Hebrew RTL plus a parallel column lost half the page. The two
+  // exports the zoom test compares are both cropped identically, so only a
+  // check against the CONTENT extent catches this.
+  const errors = collectErrors(page);
+
+  // Small window + a long passage: content must overflow both axes.
+  await page.setViewportSize({ width: 700, height: 500 });
+  await page.goto('/');
+  await page.getByText('Or paste text to bracket or import').click();
+  await page.locator('#pasteText').fill(
+    Array.from({ length: 12 }, (_, i) =>
+      `[${i + 1}] Line number ${i + 1} of a passage long enough to scroll past the bottom of a small window.`
+    ).join(' ')
+  );
+  await page.locator('#importBtn').click();
+  await expect(page.locator('.proposition-block')).toHaveCount(12);
+
+  const result = await page.evaluate(async () => {
+    const ws = document.getElementById('workspace');
+    const options = await DA_EXPORT.getCaptureOptions(ws);
+    const canvas = await html2canvas(ws, options);
+    const ctx = canvas.getContext('2d');
+    const d = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    // The corner is always background; anything differing from it is content.
+    const bg = [d[0], d[1], d[2]];
+    let maxX = -1, maxY = -1;
+    for (let y = 0; y < canvas.height; y += 4) {
+      for (let x = 0; x < canvas.width; x += 4) {
+        const i = (y * canvas.width + x) * 4;
+        if (Math.abs(d[i] - bg[0]) > 12 || Math.abs(d[i + 1] - bg[1]) > 12 || Math.abs(d[i + 2] - bg[2]) > 12) {
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    return {
+      canvas: { width: canvas.width, height: canvas.height },
+      ink: { maxX, maxY },
+      client: { width: ws.clientWidth, height: ws.clientHeight },
+      scroll: { width: ws.scrollWidth, height: ws.scrollHeight },
+      scale: canvas.width / options.width
+    };
+  });
+
+  // Precondition: the content really does overflow, or this proves nothing.
+  expect(result.scroll.height).toBeGreaterThan(result.client.height);
+
+  // The bug: ink stopped dead at the visible box. Painted content must run
+  // past it — in device px, so compare against the scaled client height.
+  expect(result.ink.maxY).toBeGreaterThan(result.client.height * result.scale);
+
+  // And the canvas must not be mostly blank: content reaches the far edge on
+  // both axes, give or take the 40px padding the capture adds (2x scaled).
+  const pad = 40 * result.scale * 2;
+  expect(result.ink.maxX).toBeGreaterThan(result.canvas.width - pad);
+  expect(result.ink.maxY).toBeGreaterThan(result.canvas.height - pad);
+
+  expect(errors).toEqual([]);
+});
+
 test('deleting a nested bracket cascades (with confirm) instead of leaving a nonsense bracket', async ({ page }) => {
   const errors = collectErrors(page);
   await importPassage(page);

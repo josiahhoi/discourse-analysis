@@ -3,6 +3,11 @@
  * Handles PNG, PDF, and SVG exports.
  */
 
+// Captures rasterize at 2x CSS pixels so exported text stays sharp in print
+// and when zoomed. Every conversion back to CSS pixels (notably the PDF page
+// size) divides by this, so the two can't drift apart.
+const CAPTURE_SCALE = 2;
+
 const DA_EXPORT = {
   /**
    * Helper to build a clean JSON representation of the current state.
@@ -96,8 +101,21 @@ const DA_EXPORT = {
     const clonedWorkspace = clonedDoc.getElementById('workspace');
     if (clonedWorkspace) {
       clonedWorkspace.style.transform = 'none';
-      clonedWorkspace.style.width = 'auto';
-      clonedWorkspace.style.height = 'auto';
+      // The live .workspace is a SCROLL CONTAINER (styles.css sets
+      // overflow-x:auto, which forces overflow-y to compute to auto too), and
+      // it's a `flex:1; min-width:0` child sized to the viewport. html2canvas
+      // paints an element clipped to its own overflow box, so without the
+      // three properties below the canvas comes out correctly sized to the
+      // full content (getCaptureOptions measures that) but only the ON-SCREEN
+      // portion is painted — the rest is blank background. That silently
+      // cropped every diagram wider or taller than the window; Hebrew RTL plus
+      // a parallel column overflows both axes badly enough to lose half the
+      // page. `max-content` also stops the flex parent from re-imposing the
+      // viewport width once overflow is visible.
+      clonedWorkspace.style.overflow = 'visible';
+      clonedWorkspace.style.flex = 'none';
+      clonedWorkspace.style.width = 'max-content';
+      clonedWorkspace.style.height = 'max-content';
       clonedWorkspace.style.padding = '40px';
       clonedWorkspace.style.background = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#fdfaf3';
       
@@ -165,25 +183,50 @@ const DA_EXPORT = {
     const padding = 40;
     const options = {
       useCORS: true,
-      scale: 2,
+      scale: CAPTURE_SCALE,
       backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#fdfaf3',
       logging: false,
       onclone: this.applyExportCloneStyles.bind(this)
     };
 
     if (found) {
+      // x/y are the capture window's offset from the workspace's border box.
+      // Both go slightly negative whenever the content starts inside less
+      // padding than we add here, and html2canvas handles that fine — it just
+      // translates the window. (Clamping x to 0 while leaving y negative, as
+      // this once did, kept the padding but widened the canvas by the clamped
+      // amount, so exports came out with lopsided margins.)
       options.x = (minX - workspaceRect.left) - padding;
       options.y = (minY - workspaceRect.top) - padding;
       options.width = (maxX - minX) + (padding * 2);
       options.height = (maxY - minY) + (padding * 2);
-      
-      if (options.x < 0) {
-          options.width += Math.abs(options.x);
-          options.x = 0;
-      }
     }
 
     return options;
+  },
+
+  /**
+   * PDF page size, in points, for a capture canvas — the diagram's natural
+   * size. Pure geometry (no DOM, no jsPDF) so it can be unit-tested.
+   *
+   * @param {{width: number, height: number}} canvas rasterized at CAPTURE_SCALE
+   * @returns {{width: number, height: number}} page size in PDF points
+   */
+  getPdfPageSize(canvas) {
+    const CSS_PX_TO_PT = 0.75;   // CSS px = 1/96in, PDF point = 1/72in
+    const JSPDF_MAX_PT = 14400;  // jsPDF silently clamps the MediaBox at 200in
+    let width = (canvas.width / CAPTURE_SCALE) * CSS_PX_TO_PT;
+    let height = (canvas.height / CAPTURE_SCALE) * CSS_PX_TO_PT;
+    // Past that clamp jsPDF keeps the page at 14400pt while addImage goes on
+    // drawing at the requested size, so everything beyond the edge is simply
+    // lost. Scale the page down to fit instead — a huge diagram then prints
+    // small rather than cropped.
+    const overflow = Math.max(width, height) / JSPDF_MAX_PT;
+    if (overflow > 1) {
+      width /= overflow;
+      height /= overflow;
+    }
+    return { width, height };
   },
 
   /**
@@ -352,13 +395,22 @@ const DA_EXPORT = {
 
       const imgData = canvas.toDataURL('image/png');
       const { jsPDF } = jspdf;
+
+      // One page at the diagram's natural size. The canvas is rasterized at 2x
+      // (options.scale) for print sharpness, so its CSS-pixel size is half of
+      // that; a CSS pixel is 1/96in and a PDF point 1/72in, hence 0.75 pt/px.
+      // Using jsPDF's own 'px' unit instead writes a MediaBox 4/3x LARGER than
+      // the pixel count, which turned an ordinary diagram into a ~33x30in
+      // poster that print dialogs then tiled across hundreds of sheets.
+      const pageDims = this.getPdfPageSize(canvas);
+
       const pdf = new jsPDF({
-        orientation: canvas.width > canvas.height ? 'l' : 'p',
-        unit: 'px',
-        format: [canvas.width / 2, canvas.height / 2]
+        orientation: pageDims.width > pageDims.height ? 'l' : 'p',
+        unit: 'pt',
+        format: [pageDims.width, pageDims.height]
       });
 
-      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width / 2, canvas.height / 2);
+      pdf.addImage(imgData, 'PNG', 0, 0, pageDims.width, pageDims.height);
 
       const bracketData = this.buildBracketData();
       const dnaString = JSON.stringify(bracketData);
