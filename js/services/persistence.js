@@ -25,10 +25,12 @@ function clearDraft() {
 // Display letters (a/b/c) are computed at render time from how many propositions
 // share a verse; baking them into stored refs causes double-suffixing ("3b" ->
 // "3ba") and breaks split renumbering, so we normalize back to bare numbers.
+// Chapter-qualified refs keep their chapter: "4:1a" -> "4:1" (multi-chapter
+// documents mark chapter transitions this way).
 function normalizeVerseRef(ref) {
   if (typeof ref !== 'string') return ref;
   const parts = ref.split('-').map(p => {
-    const m = p.match(/^\s*(\d+)/);
+    const m = p.match(/^\s*(\d+(?::\d+)?)/);
     return m ? m[1] : p.trim();
   });
   if (parts.length === 2 && parts[0] === parts[1]) return parts[0];

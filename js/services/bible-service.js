@@ -321,5 +321,6 @@ async function fetchPassageData(version, query) {
 
 window.DA_BIBLE = {
   fetchPassageData,
-  fetchParallelVerses
+  fetchParallelVerses,
+  parsePassageReference
 };

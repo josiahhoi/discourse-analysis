@@ -36,6 +36,15 @@ test('collapses a same-number range (3-3 -> 3)', () => {
   assert.deepEqual(out.verseRefs, ['3']);
 });
 
+test('keeps chapter-qualified refs while stripping letters (4:1a -> 4:1)', () => {
+  const sb = setup();
+  const out = sb.DA_PERSISTENCE.normalizeBracketData({
+    propositions: ['x', 'y'],
+    verseRefs: ['4:1a', '4:1-4:3b'],
+  });
+  assert.deepEqual(out.verseRefs, ['4:1', '4:1-4:3']);
+});
+
 test('keeps pN refs, assigns unique stable ids to modern brackets', () => {
   const sb = setup();
   const out = sb.DA_PERSISTENCE.normalizeBracketData({

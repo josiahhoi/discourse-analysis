@@ -404,6 +404,59 @@ function handleNewBracket() {
   });
 }
 
+/**
+ * Fetch/paste with a non-empty diagram open: add the incoming verses to the
+ * current diagram, or replace it (the historical behavior)? Same visual idiom
+ * as handleNewBracket's save/discard dialog. The dialog only picks add vs
+ * replace — WHERE the verses land (beginning or end) is detected afterward
+ * from the verse references (DA_EDITOR.detectAddPosition).
+ */
+function showReplaceAddDialog({ onAdd, onReplace }) {
+  const wrapper = document.querySelector('.bracket-canvas-wrapper') || document.body;
+  const dialog = document.createElement('div');
+  dialog.className = 'label-picker new-bracket-dialog';
+  dialog.innerHTML = `
+    <p class="picker-title">Add to the current diagram?</p>
+    <div class="new-bracket-buttons">
+      <button type="button" data-action="add">Add</button>
+      <button type="button" data-action="replace" class="secondary">Replace</button>
+      <button type="button" data-action="cancel" class="secondary">Cancel</button>
+    </div>
+  `;
+
+  // Center in the VISIBLE part of the wrapper — the user just clicked
+  // Fetch/Import at the top of the page, and the wrapper is usually taller
+  // than the viewport, so wrapper-center (the new-bracket idiom) could land
+  // the dialog below the fold where it looks like nothing happened.
+  const w = wrapper.offsetWidth || 400;
+  const rect = wrapper.getBoundingClientRect();
+  const visTop = Math.max(0, -rect.top);
+  const visHeight = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+  dialog.style.left = `${Math.max(8, w / 2 - 120)}px`;
+  dialog.style.top = `${Math.max(8, visTop + visHeight / 2 - 55)}px`;
+  wrapper.appendChild(dialog);
+
+  makePopupDraggable(dialog, '.picker-title');
+  setupClickOutside(dialog, () => dialog.remove());
+
+  dialog.querySelector('[data-action="add"]').addEventListener('click', (e) => {
+    e.stopPropagation();
+    dialog.remove();
+    onAdd();
+  });
+
+  dialog.querySelector('[data-action="replace"]').addEventListener('click', (e) => {
+    e.stopPropagation();
+    dialog.remove();
+    onReplace();
+  });
+
+  dialog.querySelector('[data-action="cancel"]').addEventListener('click', (e) => {
+    e.stopPropagation();
+    dialog.remove();
+  });
+}
+
 function startNewBracket() {
   // A new bracket replaces the document: one shared reset ends/forgets the
   // cloud session (carrying the id forward would let a later "Turn Cloud Sync
@@ -449,6 +502,6 @@ function formatBracketType(type) {
 }
 
 window.DA_UI = Object.assign(window.DA_UI || {}, {
-  saveState, restoreState, showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings, openReferenceGuide, closeReferenceGuide, maybeShowWelcome, updateFontByAuthor, syncPassageAuthorDisplay, syncProfileIndicatorDisplay, handleNewBracket, startNewBracket, formatBracketType,
+  saveState, restoreState, showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings, openReferenceGuide, closeReferenceGuide, maybeShowWelcome, updateFontByAuthor, syncPassageAuthorDisplay, syncProfileIndicatorDisplay, handleNewBracket, startNewBracket, showReplaceAddDialog, formatBracketType,
   initZoom, applyZoom, setZoomLevel, zoomIn, zoomOut, resetZoom, getZoomFactor
 });

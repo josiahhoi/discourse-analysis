@@ -123,6 +123,7 @@ window.DA_STATE = {
     return {
       action,
       _debounceKey: debounceKey,
+      passageRef: s.passageRef,
       propositions: s.propositions.slice(),
       verseRefs: s.verseRefs.slice(),
       verseBreaks: s.verseBreaks.map(a => (a || []).slice()),
@@ -147,6 +148,8 @@ window.DA_STATE = {
   /** Apply a snapshot's fields onto live state. Shared by undo and redo. */
   _restore: function(snapshot) {
     const s = window.DA_STATE;
+    // ?? keeps snapshots pushed before passageRef was tracked from blanking it.
+    s.passageRef = snapshot.passageRef ?? s.passageRef;
     s.propositions = snapshot.propositions;
     s.verseRefs = snapshot.verseRefs;
     s.verseBreaks = snapshot.verseBreaks || [];

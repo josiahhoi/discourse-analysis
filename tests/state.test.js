@@ -40,6 +40,16 @@ test('snapshot deep-copies brackets so later edits do not leak into history', ()
   assert.equal(sb.DA_STATE.brackets[0].type, 'series');
 });
 
+test('undo restores passageRef (regression: previously not snapshotted)', () => {
+  const sb = setup({ passageRef: 'Galatians 3:15-22', propositions: ['a'], verseRefs: ['15'] });
+  sb.DA_STATE.pushUndo('add passage');
+  sb.DA_STATE.passageRef = 'Galatians 3:15-25';
+  sb.DA_STATE.undo();
+  assert.equal(sb.DA_STATE.passageRef, 'Galatians 3:15-22');
+  sb.DA_STATE.redo();
+  assert.equal(sb.DA_STATE.passageRef, 'Galatians 3:15-25');
+});
+
 test('undo restores customLabels (regression: previously not snapshotted)', () => {
   const sb = setup({ customLabels: [{ id: 'cl_1', label: 'Orig' }] });
   sb.DA_STATE.pushUndo('add custom label');

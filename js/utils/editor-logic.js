@@ -545,6 +545,291 @@ function mergePropositions(i) {
   });
 }
 
+// ── Add passage (extend the document at either edge) ─────────────────────────
+
+/** Parse the first or last dash-segment of a verse ref into
+ *  { chapter|null, verse }: "20-22" side 'last' → 22; "3:23a" → {3, 23}. */
+function _refVerse(ref, side) {
+  if (typeof ref !== 'string' || !ref.trim()) return null;
+  const parts = ref.split('-');
+  const seg = parts[side === 'first' ? 0 : parts.length - 1].trim();
+  const m = seg.match(/^(?:(\d+):)?(\d+)/);
+  return m ? { chapter: m[1] ? parseInt(m[1], 10) : null, verse: parseInt(m[2], 10) } : null;
+}
+
+/** Chapter+verse at both edges of a verseRefs array. Chapters may be null —
+ *  refs are only chapter-qualified at transitions ('4:1'), so the end chapter
+ *  is taken from the nearest qualified ref scanning backward. */
+function _edgeInfo(refs) {
+  const list = (refs || []).filter(r => typeof r === 'string' && r.trim());
+  if (!list.length) return null;
+  const first = _refVerse(list[0], 'first');
+  const last = _refVerse(list[list.length - 1], 'last');
+  if (!first || !last) return null;
+  let endChapter = last.chapter;
+  for (let i = list.length - 1; i >= 0 && endChapter === null; i--) {
+    const v = _refVerse(list[i], 'first');
+    if (v && v.chapter !== null) endChapter = v.chapter;
+  }
+  return { firstVerse: first.verse, lastVerse: last.verse, startChapter: first.chapter, endChapter };
+}
+
+/** Resolve a caller-supplied ref context (parseRefRange or DA_BIBLE
+ *  parsePassageReference output — both shapes accepted) to start/end chapters. */
+function _ctxChapters(ctx) {
+  if (!ctx) return { start: null, end: null };
+  const start = ctx.startChapter ?? ctx.chapter ?? null;
+  return { start, end: ctx.endChapter ?? start };
+}
+
+/** Compare two chapter:verse positions; null chapters compare as equal
+ *  (single-chapter documents never carry chapter numbers in their refs). */
+function _cmpChapterVerse(chA, vA, chB, vB) {
+  if (chA !== null && chB !== null && chA !== chB) return chA - chB;
+  return vA - vB;
+}
+
+/** Same Bible book? Resolves aliases ("Gal" == "Galatians") through the
+ *  BOLLS_BOOKS id table when constants are loaded; string equality otherwise. */
+function _sameBook(a, b) {
+  const key = (s) => String(s || '').toLowerCase().replace(/[.\s]+/g, '');
+  const ka = key(a), kb = key(b);
+  if (!ka || !kb) return false;
+  const books = (typeof DA_CONSTANTS !== 'undefined' && DA_CONSTANTS.BOLLS_BOOKS) || {};
+  if (books[ka] != null && books[kb] != null) return books[ka] === books[kb];
+  return ka === kb;
+}
+
+/**
+ * Parse a passage label like "Galatians 3:15-4:7" (any dash flavor) into its
+ * parts. Unlike DA_BIBLE's PASSAGE_REF_REGEX this understands cross-chapter
+ * ends. Returns null for unparseable labels ("Imported text", "—").
+ */
+function parseRefRange(ref) {
+  const norm = String(ref || '')
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, '-') // hyphens, en/em dashes, minus
+    .replace(/\u00A0/g, ' ') // non-breaking space
+    .trim();
+  const m = norm.match(/^(.+?)\s+(\d+)(?::(\d+))?(?:\s*-\s*(?:(\d+)\s*:\s*)?(\d+))?$/);
+  if (!m) return null;
+  const startChapter = parseInt(m[2], 10);
+  const startVerse = m[3] ? parseInt(m[3], 10) : null;
+  return {
+    book: m[1].trim(),
+    startChapter,
+    startVerse,
+    endChapter: m[4] ? parseInt(m[4], 10) : startChapter,
+    endVerse: m[5] ? parseInt(m[5], 10) : startVerse
+  };
+}
+
+/**
+ * Which edge of the document does an incoming batch of verses belong to?
+ * 'end' is the safe fallback for every ambiguous case (different book,
+ * unparseable refs, overlapping range): appending needs no anchor remapping,
+ * and checkContiguity's note plus one undo covers a wrong guess.
+ * docCtx/addCtx are optional parsed refs supplying chapter/book context the
+ * verse refs alone may lack.
+ */
+function detectAddPosition(docCtx, existingRefs, addCtx, newRefs) {
+  if (docCtx && addCtx) {
+    const docBook = docCtx.book ?? docCtx.bookName;
+    const addBook = addCtx.book ?? addCtx.bookName;
+    if (docBook && addBook && !_sameBook(docBook, addBook)) return 'end';
+  }
+  const doc = _edgeInfo(existingRefs);
+  const add = _edgeInfo(newRefs);
+  if (!doc || !add) return 'end';
+  const docCh = _ctxChapters(docCtx);
+  const addCh = _ctxChapters(addCtx);
+  const docStartCh = doc.startChapter ?? docCh.start;
+  const docEndCh = doc.endChapter ?? docCh.end ?? docStartCh;
+  const addStartCh = add.startChapter ?? addCh.start;
+  const addEndCh = add.endChapter ?? addCh.end ?? addStartCh;
+  if (_cmpChapterVerse(addStartCh, add.firstVerse, docEndCh, doc.lastVerse) > 0) return 'end';
+  if (_cmpChapterVerse(addEndCh, add.lastVerse, docStartCh, doc.firstVerse) < 0) return 'start';
+  return 'end';
+}
+
+/**
+ * Gentle sanity note for an add — never blocks (adding is undoable, and paste
+ * sources legitimately skip verses). Returns a warning string or null when the
+ * seam is clean: consecutive verses, or a chapter rollover onto verse 1 of the
+ * very next chapter (chapter lengths aren't known, so other cross-chapter
+ * seams only flag the definite cases).
+ */
+function checkContiguity(existingRefs, newRefs, position, docCtx, addCtx) {
+  const doc = _edgeInfo(existingRefs);
+  const add = _edgeInfo(newRefs);
+  if (!doc || !add) return null;
+  const docCh = _ctxChapters(docCtx);
+  const addCh = _ctxChapters(addCtx);
+  const docStartCh = doc.startChapter ?? docCh.start;
+  const docEndCh = doc.endChapter ?? docCh.end ?? docStartCh;
+  const addStartCh = add.startChapter ?? addCh.start;
+  const addEndCh = add.endChapter ?? addCh.end ?? addStartCh;
+  // The seam: [before] existing end → added start (append), or added end →
+  // existing start (prepend).
+  const before = position === 'start' ? { ch: addEndCh, v: add.lastVerse } : { ch: docEndCh, v: doc.lastVerse };
+  const after = position === 'start' ? { ch: docStartCh, v: doc.firstVerse } : { ch: addStartCh, v: add.firstVerse };
+  if (before.ch !== null && after.ch !== null && before.ch !== after.ch) {
+    if (after.ch === before.ch + 1 && after.v === 1) return null;
+    if (after.ch > before.ch) return 'Note: there is a gap between the existing passage and the added verses.';
+    return 'Note: the added verses overlap the existing passage.';
+  }
+  if (after.v === before.v + 1) return null;
+  if (after.v <= before.v) return 'Note: the added verses overlap the existing passage.';
+  return `Note: gap between verse ${before.v} and verse ${after.v}.`;
+}
+
+/**
+ * Extend the passage label across an add: "Galatians 3:15-22" + verses 23-25
+ * → "Galatians 3:15-25"; prepending 3:26-29 to "Galatians 4:1-7" →
+ * "Galatians 3:26-4:7". Pure string logic (unit-testable). Unparseable or
+ * different-book labels get a compound "A + B" the user can hand-edit in the
+ * contenteditable header. Always emits an ASCII hyphen — every consumer
+ * normalizes dashes anyway.
+ */
+function extendPassageRef(currentRef, newPassageRef, addedRefs, position) {
+  const cur = parseRefRange(currentRef);
+  const compound = () => {
+    const label = String(newPassageRef || '').trim() || 'added verses';
+    if (!String(currentRef || '').trim()) return label;
+    return position === 'start' ? `${label} + ${currentRef}` : `${currentRef} + ${label}`;
+  };
+  if (!cur) return compound();
+  const added = parseRefRange(newPassageRef);
+  if (added && !_sameBook(cur.book, added.book)) return compound();
+  if (cur.startVerse === null) return currentRef; // whole-chapter label — leave it
+  const info = _edgeInfo(addedRefs);
+  if (position === 'end') {
+    const endV = info ? info.lastVerse : (added ? (added.endVerse ?? added.startVerse) : null);
+    if (endV === null || endV === undefined) return currentRef;
+    const endCh = (info && info.endChapter !== null ? info.endChapter : null)
+      ?? (added ? added.endChapter : null) ?? cur.endChapter;
+    return endCh !== cur.startChapter
+      ? `${cur.book} ${cur.startChapter}:${cur.startVerse}-${endCh}:${endV}`
+      : `${cur.book} ${cur.startChapter}:${cur.startVerse}-${endV}`;
+  }
+  const startV = info ? info.firstVerse : (added ? added.startVerse : null);
+  if (startV === null || startV === undefined) return currentRef;
+  const startCh = (info && info.startChapter !== null ? info.startChapter : null)
+    ?? (added ? added.startChapter : null) ?? cur.startChapter;
+  const endV = cur.endVerse ?? cur.startVerse;
+  return cur.endChapter !== startCh
+    ? `${cur.book} ${startCh}:${startV}-${cur.endChapter}:${endV}`
+    : `${cur.book} ${startCh}:${startV}-${endV}`;
+}
+
+/** Shift a 'pN' endpoint by k — the whole-document analogue of shiftPropRef
+ *  above (stable 'br…' ids pass through untouched). */
+function _shiftPropRefBy(ref, k) {
+  if (typeof ref === 'string' && /^p\d+$/.test(ref)) {
+    return 'p' + (parseInt(ref.slice(1), 10) + k);
+  }
+  return ref;
+}
+
+/**
+ * Add whole verses at one edge of the document.
+ *
+ * Appending is remap-free by construction: new rows only occupy indices >=
+ * oldLength, so every existing 'pN' bracket ref, propIndex, fromProp/toProp
+ * and comment target stays valid untouched. Prepending shifts every one of
+ * those anchors by exactly k = rows added — the uniform version of the
+ * per-row shift each split already performs.
+ *
+ * @param {{propositions: string[], verseRefs?: string[], passageRef?: string,
+ *          qualifyExistingWithChapter?: number, docRefCtx?: object,
+ *          addRefCtx?: object}} data
+ *        qualifyExistingWithChapter: on a cross-chapter prepend the existing
+ *        unqualified refs silently meant this chapter — rewrite them '4:15'
+ *        style so the new first chapter can own the bare numbers.
+ *        docRefCtx/addRefCtx: optional parsed refs for chapter context in the
+ *        contiguity note.
+ * @param {'start'|'end'} position
+ * @returns {{added: number, warning: string|null}} Throws an Error with a
+ *          user-facing message on empty input / empty document.
+ *
+ * Touches ONLY the five row-parallel arrays, the positional anchors (prepend),
+ * and passageRef — never bracket ids/structure, highlights, custom labels,
+ * the parallel column config, the cloud session, or the DOM. No render call:
+ * callers render, exactly like splitPropositionAtOffset.
+ */
+function addPassage(data, position = 'end') {
+  const props = (data && data.propositions) || [];
+  if (!props.length) throw new Error('Nothing to add.');
+  if (!DA_STATE.propositions.length) throw new Error('No document loaded to add to.');
+  DA_STATE.pushUndo('add passage');
+
+  const oldLen = DA_STATE.propositions.length;
+  // Pad EVERY row-parallel array to oldLen first so an inserted row's entry
+  // can never land at an old row's index. verseRefs/verseBreaks mirror the
+  // renderer's defensive pads; parallelTexts has NO renderer pad and
+  // indentation may legitimately be short (read as `[i] || 0`) — their
+  // neutral values preserve semantics exactly.
+  while (DA_STATE.verseRefs.length < oldLen) DA_STATE.verseRefs.push(String(DA_STATE.verseRefs.length + 1));
+  while (DA_STATE.verseBreaks.length < oldLen) DA_STATE.verseBreaks.push([]);
+  while (DA_STATE.parallelTexts.length < oldLen) DA_STATE.parallelTexts.push('');
+  while (DA_STATE.indentation.length < oldLen) DA_STATE.indentation.push(0);
+
+  const warning = checkContiguity(
+    DA_STATE.verseRefs, data.verseRefs || [], position, data.docRefCtx, data.addRefCtx);
+
+  const k = props.length;
+  if (position === 'start') {
+    DA_STATE.brackets.forEach(b => {
+      b.from = _shiftPropRefBy(b.from, k);
+      b.to = _shiftPropRefBy(b.to, k);
+    });
+    DA_STATE.formatTags.forEach(f => { f.propIndex += k; });
+    DA_STATE.wordArrows.forEach(w => { w.fromProp += k; w.toProp += k; });
+    DA_STATE.comments.forEach(c => {
+      if (c.target && typeof c.target.propIndex === 'number') c.target.propIndex += k;
+    });
+    // An in-progress bracket selection may hold a now-stale 'pN' (same cleanup
+    // as bracket deletion).
+    DA_STATE.bracketSelectStep = 0;
+    DA_STATE.firstBracketPoint = null;
+    if (data.qualifyExistingWithChapter != null) {
+      const ch = data.qualifyExistingWithChapter;
+      DA_STATE.verseRefs = DA_STATE.verseRefs.map(r =>
+        (typeof r === 'string' && r.trim() && !r.includes(':')) ? `${ch}:${r}` : r);
+    }
+  }
+
+  // Fallback refs only matter when a caller supplies bare text with no verse
+  // numbers at all; continue counting from the touched edge.
+  const edge = _refVerse(position === 'end' ? DA_STATE.verseRefs[oldLen - 1] : DA_STATE.verseRefs[0],
+    position === 'end' ? 'last' : 'first');
+  const fallbackRef = (j) => {
+    if (!edge) return String(j + 1);
+    return String(position === 'end' ? edge.verse + 1 + j : Math.max(1, edge.verse - k + j));
+  };
+  const texts = props.map(p => String(p));
+  const refs = texts.map((_, j) => {
+    const r = data.verseRefs && data.verseRefs[j];
+    return (typeof r === 'string' && r.trim()) ? r : fallbackRef(j);
+  });
+
+  if (position === 'end') {
+    DA_STATE.propositions.push(...texts);
+    DA_STATE.verseRefs.push(...refs);
+    DA_STATE.verseBreaks.push(...texts.map(() => []));
+    DA_STATE.parallelTexts.push(...texts.map(() => ''));
+    DA_STATE.indentation.push(...texts.map(() => 0));
+  } else {
+    DA_STATE.propositions.splice(0, 0, ...texts);
+    DA_STATE.verseRefs.splice(0, 0, ...refs);
+    DA_STATE.verseBreaks.splice(0, 0, ...texts.map(() => []));
+    DA_STATE.parallelTexts.splice(0, 0, ...texts.map(() => ''));
+    DA_STATE.indentation.splice(0, 0, ...texts.map(() => 0));
+  }
+
+  DA_STATE.passageRef = extendPassageRef(DA_STATE.passageRef, data.passageRef, refs, position);
+  return { added: k, warning };
+}
+
 /**
  * Backspace-at-start of a cell — the merge mirror of the split rules. The
  * cell's text joins the same column's cell above. The row itself is removed
@@ -989,5 +1274,6 @@ function toggleBracketCollapse(bracketIdx) {
 window.DA_EDITOR = {
     splitPropositionAtOffset, splitParallelAtOffset, mergePropositions, mergeCellIntoPrevious,
     changeIndentation, setSelectionByGlobalOffset,
-    deleteBracket, findBestAttachment, handleDotClick, toggleBracketCollapse, extractFormatTags
+    deleteBracket, findBestAttachment, handleDotClick, toggleBracketCollapse, extractFormatTags,
+    addPassage, extendPassageRef, checkContiguity, detectAddPosition, parseRefRange
 };

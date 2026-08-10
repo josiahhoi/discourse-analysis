@@ -6,7 +6,7 @@ const wordArrowsSvg = document.getElementById('wordArrowsSvg');
 const passageInput = document.getElementById('passageInput');
 const fetchBtn = document.getElementById('fetchBtn');
 if (fetchBtn) {
-  fetchBtn.addEventListener('click', fetchPassage);
+  fetchBtn.addEventListener('click', requestFetchPassage);
 }
 initDelegatedListeners();
 const passageRefEl = document.getElementById('passageRef');
@@ -139,6 +139,9 @@ function undoLastAction() {
   const action = DA_STATE.undo();
   if (action) {
     renderAll();
+    // The header is only ever synced manually; snapshots can change passageRef
+    // (e.g. undoing an added passage restores the shorter range).
+    if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
     DA_UI.showStatus(`Undo: ${action}`, 'success');
   } else {
     DA_UI.showStatus('Nothing to undo', 'info');
@@ -149,6 +152,7 @@ function redoLastAction() {
   const action = DA_STATE.redo();
   if (action) {
     renderAll();
+    if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
     DA_UI.showStatus(`Redo: ${action}`, 'success');
   } else {
     DA_UI.showStatus('Nothing to redo', 'info');
@@ -224,7 +228,22 @@ DA_KEYBOARD.initGlobalShortcuts();
 // parsePassageReference and fetchSBLGNTPassage moved to js/services/bible-service.js
 
 // Fetch passage (ESV or SBLGNT based on version selector)
-async function fetchPassage() {
+/** Non-empty diagram loaded? Same predicate as ui-dialogs' handleNewBracket. */
+function hasDocumentContent() {
+  return DA_STATE.propositions.length > 0 &&
+    DA_STATE.propositions.some((p) => p && p.trim() && p !== '(empty)');
+}
+
+/** Fetch entry point: with a diagram open, ask add-vs-replace first. */
+function requestFetchPassage() {
+  if (!hasDocumentContent()) return fetchPassage('replace');
+  DA_UI.showReplaceAddDialog({
+    onAdd: () => fetchPassage('add'),
+    onReplace: () => fetchPassage('replace')
+  });
+}
+
+async function fetchPassage(mode = 'replace') {
   const versionSelect = document.getElementById('versionSelect');
   const copyrightLabel = document.getElementById('copyrightLabel');
   const version = versionSelect?.value || 'esv';
@@ -240,6 +259,60 @@ async function fetchPassage() {
 
   try {
     const result = await DA_BIBLE.fetchPassageData(version, query);
+
+    if (mode === 'add') {
+      // Direction is document-global (body rtl-mode, arrows disabled in RTL),
+      // so a mixed-direction document is not representable — block, don't warn.
+      if (!!result.isRTL !== !!DA_STATE.isRTL) {
+        DA_UI.showStatus('Cannot add: that text reads in the opposite direction. Fetch it as a new document instead.', 'error');
+        return;
+      }
+      // The Greek/Hebrew font class is also document-global but purely
+      // cosmetic — worth a note, not a block.
+      const fontMismatch = !!propositionsContainer && (
+        !!result.isGreek !== propositionsContainer.classList.contains('greek-text') ||
+        !!result.isHebrew !== propositionsContainer.classList.contains('hebrew-text'));
+
+      // Which edge do these verses belong to? Verse numbers decide; 'end' is
+      // the safe fallback for anything ambiguous.
+      const docCtx = DA_EDITOR.parseRefRange(DA_STATE.passageRef);
+      const addCtx = DA_BIBLE.parsePassageReference(result.passageRef || query);
+      const position = DA_EDITOR.detectAddPosition(docCtx, DA_STATE.verseRefs, addCtx, result.verseRefs);
+
+      // Chapter-qualified refs ('4:1') mark chapter transitions so verse
+      // suffix precompute can't collide same-numbered verses across chapters.
+      // Appending a later chapter qualifies the NEW refs; prepending an
+      // earlier chapter makes the bare existing refs ambiguous instead, so
+      // addPassage qualifies THOSE (inside its undo snapshot).
+      let verseRefs = result.verseRefs;
+      let qualifyExistingWithChapter;
+      if (docCtx && addCtx && typeof addCtx.chapter === 'number') {
+        const docEndCh = docCtx.endChapter ?? docCtx.startChapter;
+        if (position === 'end' && addCtx.chapter !== docEndCh) {
+          verseRefs = result.verseRefs.map((v) => v.includes(':') ? v : `${addCtx.chapter}:${v}`);
+        } else if (position === 'start' && addCtx.chapter !== docCtx.startChapter) {
+          qualifyExistingWithChapter = docCtx.startChapter;
+        }
+      }
+
+      const { added, warning } = DA_EDITOR.addPassage({
+        propositions: result.propositions,
+        verseRefs,
+        passageRef: result.passageRef,
+        qualifyExistingWithChapter,
+        docRefCtx: docCtx,
+        addRefCtx: addCtx
+      }, position);
+
+      if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
+      renderAll();
+      const notes = [warning, fontMismatch ? 'Note: the added text uses a different script than the document.' : null]
+        .filter(Boolean).join(' ');
+      DA_UI.showStatus(
+        `Added ${added} verse${added === 1 ? '' : 's'} to the ${position === 'start' ? 'beginning' : 'end'}.${notes ? ' ' + notes : ''}`,
+        notes ? 'info' : 'success');
+      return; // copyright, script classes, RTL and the reset stay untouched
+    }
 
     // A new passage replaces the document: one shared reset ends/forgets the
     // cloud session and clears every per-document field (brackets, comments,
@@ -310,13 +383,28 @@ if (importBtn) importBtn.addEventListener('click', () => {
     DA_UI.showStatus('Paste some text first.', 'error');
     return;
   }
+  if (!hasDocumentContent()) return importPastedText(raw, 'replace');
+  DA_UI.showReplaceAddDialog({
+    onAdd: () => importPastedText(raw, 'add'),
+    onReplace: () => importPastedText(raw, 'replace')
+  });
+});
+
+function importPastedText(raw, mode) {
+  const pasteText = document.getElementById('pasteText');
 
   // Try to parse as exported JSON bracket text
   try {
     const data = JSON.parse(raw);
     if (data && typeof data === 'object' && Array.isArray(data.propositions)) {
+      if (mode === 'add') {
+        // A project file carries its own brackets/comments — "adding" it
+        // would silently drop them, so it may only replace.
+        DA_UI.showStatus('That is a saved project file — it can only replace the document, not be added to it.', 'error');
+        return;
+      }
       DA_PERSISTENCE.importBracket(data);
-      pasteText.value = '';
+      if (pasteText) pasteText.value = '';
       return;
     }
   } catch (e) {
@@ -324,6 +412,70 @@ if (importBtn) importBtn.addEventListener('click', () => {
   }
   const passageRefInput = document.getElementById('importPassageRef');
   const startVerseInput = document.getElementById('importStartVerse');
+
+  if (mode === 'add') {
+    // Default numbering continues from the last existing verse (chapter
+    // prefix preserved) — text with its own verse markers overrides it.
+    // Typing a start verse below the document's first verse is the one
+    // direction signal UNMARKED text has: it routes the paste to the
+    // beginning via detectAddPosition below.
+    const lastSeg = (DA_STATE.verseRefs[DA_STATE.verseRefs.length - 1] || '')
+      .split('-').pop().match(/^(?:(\d+):)?(\d+)/);
+    const autoStart = lastSeg
+      ? (lastSeg[1] ? `${lastSeg[1]}:${parseInt(lastSeg[2], 10) + 1}` : String(parseInt(lastSeg[2], 10) + 1))
+      : '1';
+    const startVerse = (startVerseInput?.value?.trim() || '').replace(/[^0-9a-z:]/gi, '') || autoStart;
+
+    const parsed = DA_PASTE.parsePastedText(raw, startVerse);
+    const propositions = parsed.propositions.length
+      ? parsed.propositions
+      : [raw.replace(/\[\d+(?::\d+)?\]\s*/g, '').trim() || raw];
+    const verseRefs = parsed.propositions.length ? parsed.verseRefs : [startVerse];
+
+    const addRefStr = passageRefInput?.value?.trim() || parsed.passageRef || '';
+    const docCtx = DA_EDITOR.parseRefRange(DA_STATE.passageRef);
+    const addCtx = DA_EDITOR.parseRefRange(addRefStr);
+    const position = DA_EDITOR.detectAddPosition(docCtx, DA_STATE.verseRefs, addCtx, verseRefs);
+
+    // Cross-chapter adds: same qualification rules as the fetch path.
+    let finalRefs = verseRefs;
+    let qualifyExistingWithChapter;
+    if (docCtx && addCtx) {
+      const docEndCh = docCtx.endChapter ?? docCtx.startChapter;
+      if (position === 'end' && addCtx.startChapter !== docEndCh) {
+        finalRefs = verseRefs.map((v) => v.includes(':') ? v : `${addCtx.startChapter}:${v}`);
+      } else if (position === 'start' && addCtx.endChapter !== docCtx.startChapter) {
+        qualifyExistingWithChapter = docCtx.startChapter;
+      }
+    }
+
+    try {
+      const { added, warning } = DA_EDITOR.addPassage({
+        propositions,
+        verseRefs: finalRefs,
+        passageRef: addRefStr,
+        qualifyExistingWithChapter,
+        docRefCtx: docCtx,
+        addRefCtx: addCtx
+      }, position);
+      if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
+      renderAll();
+      // One-shot inputs clear only on success — a failed add keeps the paste.
+      if (pasteText) pasteText.value = '';
+      if (passageRefInput) passageRefInput.value = '';
+      if (startVerseInput) startVerseInput.value = '';
+      const parallelHint = DA_STATE.parallelLabel
+        ? ' New rows have empty parallel cells — refill via Alternate Views → Change translation.'
+        : '';
+      DA_UI.showStatus(
+        `Added ${added} verse${added === 1 ? '' : 's'} to the ${position === 'start' ? 'beginning' : 'end'}.${warning ? ' ' + warning : ''}${parallelHint}`,
+        (warning || parallelHint) ? 'info' : 'success');
+    } catch (err) {
+      DA_UI.showStatus(err.message || 'Could not add the pasted text.', 'error');
+    }
+    return;
+  }
+
   const startVerse = (startVerseInput?.value?.trim() || '1').replace(/[^0-9a-z:]/gi, '') || '1';
 
   const parsed = DA_PASTE.parsePastedText(raw, startVerse);
@@ -352,14 +504,14 @@ if (importBtn) importBtn.addEventListener('click', () => {
   renderAll();
   // The import box is one-shot: clear it so a detected reference or typed
   // start verse can't leak into the next import as if the user had typed it.
-  pasteText.value = '';
+  if (pasteText) pasteText.value = '';
   if (passageRefInput) passageRefInput.value = '';
   if (startVerseInput) startVerseInput.value = '';
   const detectedNote = (parsed.detection === 'lines' || parsed.detection === 'flow')
     ? `Detected ${parsed.passageRef ? `${parsed.passageRef} — ` : ''}${parsed.verseRefs.length} verse${parsed.verseRefs.length === 1 ? '' : 's'}. `
     : '';
   DA_UI.showStatus(`${detectedNote}Imported. Double-click to split a line, single-click to edit. Click the dots to create brackets.`, 'success');
-});
+}
 
 
 
@@ -394,7 +546,7 @@ if (alternateViewsBtn) {
 
 
 if (passageInput) passageInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') fetchPassage();
+  if (e.key === 'Enter') requestFetchPassage();
 });
 
 // Sidebar Toggles
