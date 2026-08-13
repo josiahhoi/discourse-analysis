@@ -13,6 +13,40 @@ function normalizeRefQuery(query) {
     .trim();
 }
 
+// Any codepoint that can be immediately adjacent to a CUV/CUNPS-style spurious
+// space: CJK punctuation/symbols + the ideographic space itself, plus the
+// full-width forms block. Deliberately does NOT include Hangul (U+AC00-D7AF,
+// U+1100-U+11FF) - Korean (KRV) is genuinely word-spaced and must be left alone.
+const CJK_ADJACENT = '\\u3000-\\u303F\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF\\uFE30-\\uFE4F\\uFF00-\\uFFEF';
+
+/**
+ * bolls.life serves the traditional-Chinese CUV with a plain space wedged
+ * between every character (verified against the live endpoint), and serves
+ * CUNPS with literal <br/> markup that render-propositions.js writes via
+ * textContent - so it shows up on screen as visible "<br/>" instead of a
+ * line break. Both are source-data bugs, not layout bugs, so they're fixed
+ * once here rather than downstream in every renderer.
+ *
+ * The space removal fires when CJK sits on EITHER side, not both: the CUV
+ * writes "耶 和 華 ─ 你" with a U+2500 box-drawing dash, which is outside the
+ * CJK block, so a "both sides" rule would leave that pair of spaces stranded
+ * around the dash.
+ *
+ * U+3000 (IDEOGRAPHIC SPACE) must survive untouched: the CUV uses it as a
+ * reverence marker before the divine name — Exodus 20:2 reads "你的　神", and
+ * collapsing that to an ordinary space loses the distinction. Hence the plain
+ * [ \t] class rather than \s (which matches U+3000), and a hand-rolled trim
+ * rather than String.trim() (which also eats it).
+ */
+function normalizeVerseText(raw) {
+  return String(raw || '')
+    .replace(/<[^>]*>/g, '')                     // inline markup (CUNPS <br/>, etc.)
+    .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')   // zero-widths / BOM
+    .replace(new RegExp('[ \\t]+(?=[' + CJK_ADJACENT + '])', 'g'), '')
+    .replace(new RegExp('(?<=[' + CJK_ADJACENT + '])[ \\t]+', 'g'), '')
+    .replace(/^[ \t\n]+|[ \t\n]+$/g, '');         // trim WITHOUT eating a leading/trailing U+3000
+}
+
 // ── SBLGNT Source (NT Greek) ──────────────────────────────────────────────────
 
 /**
@@ -97,7 +131,17 @@ async function fetchBollsChapter(translation, query, parseErrorMsg) {
   const verses = await res.json();
   if (!Array.isArray(verses) || verses.length === 0) throw new Error('No verses found.');
 
-  return { match, verses, bookName };
+  // Normalize per verse, before fetchFromBolls joins them with "[N] " markers -
+  // the CJK-adjacent space rule in normalizeVerseText would otherwise eat the
+  // space right after the verse-number marker too. Doing it here, in the one
+  // shared pipeline, also fixes an existing asymmetry: fetchFromBolls (the
+  // primary passage-import path) previously had no markup/space cleanup at
+  // all - only the parallel-column path did.
+  return {
+    match,
+    verses: verses.map(v => ({ ...v, text: normalizeVerseText(v.text) })),
+    bookName
+  };
 }
 
 async function fetchFromBolls(translation, query) {
@@ -135,13 +179,12 @@ async function fetchParallelVerses(translation, query) {
   const { verses } = await fetchBollsChapter(
     translation, query, 'Could not read this passage reference. Parallel needs a reference like "John 1:1-5".');
 
+  // Markup strip / zero-width strip / trim now happen once, per verse, inside
+  // fetchBollsChapter (normalizeVerseText) - this loop just reshapes the
+  // already-clean array into a verse-number-keyed map.
   const map = {};
   verses.forEach((v) => {
-    // Display-only text: strip any markup and zero-width characters.
-    map[String(v.verse)] = String(v.text)
-      .replace(/<[^>]*>/g, '')
-      .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
-      .trim();
+    map[String(v.verse)] = v.text;
   });
   return map;
 }

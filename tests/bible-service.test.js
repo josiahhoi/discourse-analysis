@@ -288,3 +288,54 @@ test('fetchPassageData (nasb) on web hits the proxy /nasb route', async () => {
   assert.equal(result.source, 'nasb-api');
   assert.ok(urls[0].includes('/nasb?passage=ROM.3.21'), 'proxy URL carries the USFM passage id');
 });
+
+// ── normalizeVerseText: CUV character-spacing + CUNPS inline markup ─────────
+// bolls.life wedges a plain space between every character of the
+// traditional-Chinese CUV, and serves CUNPS with literal <br/> markup.
+// Verified against the live endpoint (see bible-service.js comments above
+// normalizeVerseText for the full rationale, incl. why U+3000 survives).
+
+test('normalizeVerseText closes up CUV character-spacing', () => {
+  const sb = setup();
+  const spaced = '神 吩 咐 這 一 切 的 話 說 ：';
+  assert.equal(sb.normalizeVerseText(spaced), '神吩咐這一切的話說：');
+});
+
+test('normalizeVerseText keeps the U+3000 reverence marker while still closing up the dash', () => {
+  const sb = setup();
+  const spaced = '我 是 耶 和 華 ─ 你 的 　 神 ， 曾 將';
+  assert.equal(sb.normalizeVerseText(spaced), '我是耶和華─你的　神，曾將');
+});
+
+test('normalizeVerseText strips CUNPS inline <br/> markup', () => {
+  const sb = setup();
+  const markedUp = '〔大卫的诗。〕<br/>耶和华是我的牧者。';
+  assert.equal(sb.normalizeVerseText(markedUp), '〔大卫的诗。〕耶和华是我的牧者。');
+});
+
+test('normalizeVerseText leaves genuinely word-spaced Korean (KRV) untouched', () => {
+  const sb = setup();
+  const korean = '여호와는 나의 목자시니';
+  assert.equal(sb.normalizeVerseText(korean), korean);
+});
+
+test('normalizeVerseText leaves Latin, Greek, and Hebrew untouched', () => {
+  const sb = setup();
+  assert.equal(sb.normalizeVerseText('In the beginning'), 'In the beginning');
+  assert.equal(sb.normalizeVerseText('ἐν ἀρχῇ ἦν ὁ λόγος'), 'ἐν ἀρχῇ ἦν ὁ λόγος');
+  assert.equal(sb.normalizeVerseText('וַיְדַבֵּ֣ר אֱלֹהִ֔ים'), 'וַיְדַבֵּ֣ר אֱלֹהִ֔ים');
+});
+
+test('fetchFromBolls (the primary passage-import path) also comes back unspaced for CUV', async () => {
+  const sb = setup();
+  sb.fetch = async () => ({
+    ok: true,
+    json: async () => [
+      { verse: 1, text: '神 吩 咐 這 一 切 的 話 說 ：' },
+      { verse: 2, text: '我 是 耶 和 華 ─ 你 的 　 神 ， 曾 將 你 從 埃 及 地 為 奴 之 家 領 出 來 。' }
+    ]
+  });
+  const result = await sb.fetchFromBolls('CUV', 'Exodus 20:1-2');
+  assert.ok(result.text.includes('[1] 神吩咐這一切的話說：'), 'verse 1 unspaced, marker space intact');
+  assert.ok(result.text.includes('我是耶和華─你的　神'), 'verse 2 dash closes up, U+3000 reverence marker survives');
+});

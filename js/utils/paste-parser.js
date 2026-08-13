@@ -41,7 +41,11 @@ function normalizePaste(raw) {
     .replace(/\[[a-z]\]/g, '')
     .replace(SUPERSCRIPT_VERSE_RUN, (run) => `[${run.split('').map(c => SUPERSCRIPT_DIGITS[c]).join('')}] `)
     .replace(SUPERSCRIPT_DIGIT_RUN, '') // remaining runs are footnote numbers
-    .replace(/[^\S\n]+/g, ' ');
+    // Collapse whitespace runs to one space, but exempt U+3000 (IDEOGRAPHIC
+    // SPACE): \s matches it, so pasting Chinese scripture used to silently
+    // flatten the CUV's reverence marker before the divine name ("你的　神")
+    // into an ordinary ASCII space.
+    .replace(/[^\S\n　]+/g, ' ');
 }
 
 /**

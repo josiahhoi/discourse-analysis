@@ -240,3 +240,13 @@ test('leading junk line under a header is dropped (flow mode)', () => {
   assert.deepEqual(r.verseRefs, ['21', '22']);
   assert.ok(r.propositions[0].startsWith('But now'));
 });
+
+// normalizePaste's whitespace collapse used \s, which also matches U+3000
+// (IDEOGRAPHIC SPACE) — pasting Chinese text (e.g. CUV) would silently turn
+// its reverence-marker space into an ordinary ASCII space. Ordinary runs of
+// spaces/tabs must still collapse to one, just not that specific character.
+test('normalizePaste preserves the U+3000 ideographic space while still collapsing ordinary spaces', () => {
+  const sb = setup();
+  assert.equal(sb.normalizePaste('你的　神'), '你的　神');
+  assert.equal(sb.normalizePaste('a    b'), 'a b');
+});
