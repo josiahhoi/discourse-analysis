@@ -2145,7 +2145,7 @@ mark.comment-highlight.comment-highlight-card-hover {
   margin-left: 1rem;
   padding-left: 1rem;
   border-left: 1px solid var(--border);
-  color: var(--text-muted);
+  color: var(--text); /* full contrast, matching the primary text — not muted */
   font-size: calc(0.95rem * var(--da-zoom));
   line-height: 1.6;
   outline: none;         /* editable span: same quiet chrome as .proposition-text */
