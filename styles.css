@@ -2391,8 +2391,23 @@ body.rtl-mode .proposition-block .proposition-text {
 /* 11. Footer, Cloud Sync & States           */
 /* ========================================= */
 .footer {
-  padding: 0.75rem 2rem;
-  font-size: 0.8rem;
+  /* Single compact row: sources on the left, version/credits on the right.
+     flex-wrap lets it degrade to two lines at narrow widths instead of
+     overflowing — there are no @media queries in this file, so this is
+     the only responsive behavior the footer gets. */
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+  /* .app is a fixed 100vh flex column (see .app above); without this the
+     footer could be squeezed by flex's default shrink behavior with
+     nothing else compensating. Nothing measures the footer's height, so
+     letting it shrink just hands the space back to the workspace. */
+  flex-shrink: 0;
+  padding: 0.3rem 2rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
   color: var(--text-muted);
   border-top: 1px solid var(--border);
 }
@@ -2407,8 +2422,8 @@ body.rtl-mode .proposition-block .proposition-text {
 }
 
 .footer-version {
-  margin: 0.25rem 0 0;
-  font-size: 0.75rem;
+  /* Now a span in the flex row, not a block <p> — no margin needed. */
+  margin: 0;
   color: var(--text-muted);
 }
 
