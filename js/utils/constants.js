@@ -13,6 +13,11 @@ const SBLGNT_BASE = 'https://raw.githubusercontent.com/Faithlife/SBLGNT/master/d
 // different URL, update this AND the connect-src list in index.html's CSP.
 const WEB_PROXY_BASE = 'https://us-central1-discourse-analysis-f4a8e.cloudfunctions.net/bibleProxy';
 
+// The public web build (GitHub Pages). Share links point here when the app
+// itself isn't running on the web (the desktop app's file:// address can't be
+// opened by anyone else).
+const WEB_APP_URL = 'https://josiahhoi.github.io/discourse-analysis/';
+
 // USFM book codes (API.Bible passage ids, e.g. ROM.3.21-ROM.3.26), keyed by
 // the BOLLS_BOOKS numeric id so the existing book-name alias table below
 // resolves every spelling: book key → bolls id → USFM code.
@@ -276,7 +281,7 @@ const RELATIONSHIP_DEFINITIONS = {
 };
 
 window.DA_CONSTANTS = {
-    ESV_API, SBLGNT_BASE, WEB_PROXY_BASE, USFM_BY_BOLLS_ID,
+    ESV_API, SBLGNT_BASE, WEB_PROXY_BASE, WEB_APP_URL, USFM_BY_BOLLS_ID,
     SBLGNT_BOOKS, FULL_BOOK_NAMES, BOLLS_BOOKS,
     BRACKET_LABELS, RELATIONSHIP_LABELS, RELATIONSHIP_GROUPS_HIERARCHY,
     SINGLE_LABEL_TYPES, JUMP_OVER_TYPES, BRACKET_GEO,

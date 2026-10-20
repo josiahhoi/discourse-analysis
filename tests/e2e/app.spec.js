@@ -1319,3 +1319,101 @@ test('main point summary: add, type freely, undo/redo, export crop, save round-t
 
   expect(errors).toEqual([]);
 });
+
+test('main point summary: lines up with the diagram box; comments anchor to words and follow edits', async ({ page }) => {
+  const errors = collectErrors(page);
+  // Wide window: the diagram box centers itself, which is exactly when a
+  // summary laid out on its own drifted to the left.
+  await page.setViewportSize({ width: 1800, height: 1000 });
+  await importPassage(page);
+
+  await page.locator('#addSummaryBtn').click();
+  await page.keyboard.type('God made everything. So worship him.');
+  await page.locator('#passageRef').click(); // leave the field
+
+  const edges = await page.evaluate(() => {
+    const box = document.querySelector('.bracket-canvas-wrapper').getBoundingClientRect();
+    const panel = document.querySelector('#mainPointSummary .summary-body').getBoundingClientRect();
+    return { box: [box.left, box.right], panel: [panel.left, panel.right] };
+  });
+  expect(Math.abs(edges.panel[0] - edges.box[0])).toBeLessThan(1);
+  expect(Math.abs(edges.panel[1] - edges.box[1])).toBeLessThan(1);
+
+  // ── Select "everything" and right-click → Add Comment ──
+  /** Select [start, end) of the summary text (its single text node). */
+  const selectInSummary = (start, end) => page.evaluate(({ start, end }) => {
+    const box = document.getElementById('summaryText');
+    box.focus();
+    const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    let seen = 0, node;
+    while ((node = walker.nextNode())) {
+      const len = node.textContent.length;
+      if (seen + len >= start && range.startContainer === document) range.setStart(node, start - seen);
+      if (seen + len >= end) { range.setEnd(node, end - seen); break; }
+      seen += len;
+    }
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    const r = range.getBoundingClientRect();
+    box.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 2, clientY: r.top + 2 }));
+  }, { start, end });
+
+  const text = 'God made everything. So worship him.';
+  await selectInSummary(text.indexOf('everything'), text.indexOf('everything') + 'everything'.length);
+  await page.locator('#textContextMenu [data-action="add-comment"]').click();
+  const popover = page.locator('#commentPopover');
+  await expect(popover.locator('.popover-title')).toHaveText('Main point summary: "everything"');
+  await popover.locator('.new-comment-area textarea').fill('Everything, or all creation?');
+  await popover.locator('.save-new-btn').click();
+  await popover.locator('.popover-header .close-btn').click();
+
+  const mark = page.locator('#summaryText mark.comment-highlight');
+  await expect(mark).toHaveCount(1);
+  await expect(mark).toHaveText('everything');
+
+  // ── Edit text BEFORE the comment: the highlight stays on the same word ──
+  await page.evaluate(() => {
+    const box = document.getElementById('summaryText');
+    box.focus();
+    const range = document.createRange();
+    range.setStart(box.firstChild, 0);
+    range.collapse(true);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+  });
+  await page.keyboard.type('In the beginning, ');
+  await page.locator('#passageRef').click();
+  await expect(mark).toHaveText('everything');
+  expect(await page.evaluate(() => {
+    const c = window.DA_STATE.comments.find((x) => x.type === 'summary');
+    return window.DA_STATE.mainPointSummary.slice(c.target.start, c.target.end);
+  })).toBe('everything');
+
+  // ── Undo the edit: text and anchor go back together ──
+  await page.locator('#undoDivideBtn').click();
+  expect(await page.evaluate(() => window.DA_STATE.mainPointSummary)).toBe(text);
+  await expect(mark).toHaveText('everything');
+
+  // ── Sidebar card names the summary; clicking it reopens the comment ──
+  await page.locator('#toggleCommentsBtn').click();
+  const card = page.locator('.comments-preview-card');
+  await expect(card).toContainText('Main point summary: "everything"');
+  await card.locator('.comment-text').click();
+  await expect(popover.locator('.comment-display .comment-text')).toContainText('Everything, or all creation?');
+  await popover.locator('.popover-header .close-btn').click();
+
+  // ── Image exports strip reviewer highlights, as for proposition comments ──
+  const marksDuringCapture = await page.evaluate(() => {
+    const wasBlock = window.DA_EXPORT.enterBracketViewForCapture();
+    window.renderAll();
+    const n = document.querySelectorAll('#summaryText mark').length;
+    window.DA_EXPORT.restoreViewAfterCapture(wasBlock);
+    return n;
+  });
+  expect(marksDuringCapture).toBe(0);
+  await expect(mark).toHaveCount(1);
+
+  expect(errors).toEqual([]);
+});

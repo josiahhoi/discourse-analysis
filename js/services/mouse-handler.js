@@ -271,6 +271,12 @@ window.DA_MOUSE = {
           setTimeout(() => block.classList.remove('searching'), 2000);
           DA_UI.showCommentPopoverForText(comment.target.propIndex, comment.target.start, comment.target.end, comment.id);
         }
+      } else if (comment.type === 'summary') {
+        const box = document.getElementById('summaryText');
+        if (box) {
+          box.scrollIntoView({ block: 'center' }); // instant, as above
+          DA_SUMMARY.openComment(comment);
+        }
       } else if (comment.type === 'bracket') {
         const bracketIdx = DA_STATE.bracketIndexById(comment.target.bracketId);
         const bracketGroup = document.querySelector(`.bracket-group[data-index="${bracketIdx}"]`);

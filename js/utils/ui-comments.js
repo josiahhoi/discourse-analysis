@@ -7,8 +7,12 @@
  */
 
 function showCommentPopover(config) {
-  const { propIndex, start, end, bracketIdx, existingCommentId } = config;
+  // Three kinds of target: a bracket (bracketIdx), a range of proposition text
+  // (propIndex/start/end), or a range of the main point summary
+  // (summary: { start, end }).
+  const { propIndex, start, end, bracketIdx, summary, existingCommentId } = config;
   const isBracket = bracketIdx !== undefined;
+  const isSummary = !isBracket && !!summary;
   
   const existing = document.getElementById('commentPopover');
   if (existing) {
@@ -21,7 +25,9 @@ function showCommentPopover(config) {
   // different bracket if the array is reordered mid-popover (e.g. cloud update).
   DA_STATE.activeCommentTarget = isBracket
     ? { type: 'bracket', bracketId: DA_STATE.brackets[bracketIdx]?.id }
-    : { type: 'text', propIndex, start, end };
+    : isSummary
+      ? { type: 'summary', start: summary.start, end: summary.end }
+      : { type: 'text', propIndex, start, end };
   if (window.renderAll) window.renderAll();
 
   const template = document.getElementById('commentPopoverTemplate');
@@ -52,6 +58,8 @@ function showCommentPopover(config) {
     const vsRange = v1 === v2 ? v1 : `${v1}-${v2}`;
     const fullRef = chapter ? `${chapter}:${vsRange}` : vsRange;
     targetDesc = `Bracket (${fullRef}): ${b ? formatBracketType(b.type) : 'Unknown'}`;
+  } else if (isSummary) {
+    targetDesc = summaryCommentLabel(summary.start, summary.end);
   } else if (propIndex !== undefined) {
     const verse = DA_RENDERER.computeVerseDisplay(propIndex) || '?';
     const fullRef = chapter ? `${chapter}:${verse}` : verse;
@@ -159,10 +167,13 @@ function showCommentPopover(config) {
         author: localStorage.getItem(DA_CONSTANTS.REVIEWER_NAME_KEY) || 'Anonymous',
         text,
         timestamp: Date.now(),
-        type: isBracket ? 'bracket' : 'text',
+        type: isBracket ? 'bracket' : isSummary ? 'summary' : 'text',
         // Bracket comments anchor to the bracket's stable id, so they survive
         // other brackets being added/deleted without any index fix-ups.
-        target: isBracket ? { bracketId: DA_STATE.brackets[bracketIdx]?.id } : { propIndex, start, end },
+        // Summary comments are a character range the summary editor remaps.
+        target: isBracket ? { bracketId: DA_STATE.brackets[bracketIdx]?.id }
+          : isSummary ? { start: summary.start, end: summary.end }
+          : { propIndex, start, end },
         replies: []
       };
       DA_STATE.comments.push(newComment);
@@ -228,7 +239,7 @@ function showCommentPopover(config) {
 
   // Append before positioning: the placement math measures offsetWidth/Height.
   wrapper.appendChild(popover);
-  positionCommentPopover(popover, wrapper, { isBracket, bracketIdx, propIndex });
+  positionCommentPopover(popover, wrapper, { isBracket, isSummary, bracketIdx, propIndex });
   makePopupDraggable(popover, '.popover-header');
   if (typeof makeCommentPopoverDraggableAndResizable === 'function') {
     makeCommentPopoverDraggableAndResizable(popover);
@@ -253,7 +264,7 @@ function showCommentPopover(config) {
  * above if there's no room, overlap only as a last resort) and converted to
  * wrapper-relative values, so the popover scrolls with the text it annotates.
  */
-function positionCommentPopover(popover, wrapper, { isBracket, bracketIdx, propIndex }) {
+function positionCommentPopover(popover, wrapper, { isBracket, isSummary, bracketIdx, propIndex }) {
   const GAP = 10;
   const MARGIN = 8;
   const pw = popover.offsetWidth;
@@ -280,10 +291,14 @@ function positionCommentPopover(popover, wrapper, { isBracket, bracketIdx, propI
   } else {
     // The highlighted range can be split across several <mark>s when it
     // crosses other tag boundaries; anchor on their union.
+    const host = isSummary ? '#summaryText' : '#propositions';
     let els = Array.from(document.querySelectorAll(
-      '#propositions mark.comment-highlight[data-comment-id="active-comment-target"]'
+      `${host} mark.comment-highlight[data-comment-id="active-comment-target"]`
     ));
-    if (!els.length && propIndex !== undefined) {
+    if (!els.length && isSummary) {
+      const box = document.getElementById('summaryText');
+      if (box) els = [box];
+    } else if (!els.length && propIndex !== undefined) {
       const block = document.querySelector(`.proposition-block[data-index="${propIndex}"]`);
       if (block) els = [block];
     }
@@ -323,6 +338,13 @@ function positionCommentPopover(popover, wrapper, { isBracket, bracketIdx, propI
   popover.style.transform = 'none';
 }
 
+/** Header / sidebar label for a summary comment: the commented words, or a
+ *  note that they've since been deleted (the comment itself is kept). */
+function summaryCommentLabel(start, end) {
+  const snippet = (DA_STATE.mainPointSummary || '').substring(start, end);
+  return snippet ? `Main point summary: "${snippet}"` : 'Main point summary (commented text was removed)';
+}
+
 function showCommentPopoverForText(propIndex, start, end, existingCommentId = null) {
   showCommentPopover({ propIndex, start, end, existingCommentId });
 }
@@ -333,5 +355,5 @@ function showCommentPopoverForBracket(bracketIdx) {
 }
 
 window.DA_UI = Object.assign(window.DA_UI || {}, {
-  showCommentPopover, showCommentPopoverForText, showCommentPopoverForBracket
+  showCommentPopover, showCommentPopoverForText, showCommentPopoverForBracket, summaryCommentLabel
 });

@@ -1739,16 +1739,32 @@ body {
 /* ========================================= */
 /* 9. Bracket Canvas & SVG Connectors        */
 /* ========================================= */
-.bracket-canvas-wrapper {
-  position: relative;
+/* The diagram box plus the main point summary under it. The column does the
+   centering/shrink-wrapping the box used to do on its own; the summary takes
+   the column's width without contributing to it (width:0 + min-width:100%),
+   so the box alone decides how wide both are. */
+.diagram-column {
   margin: 0 auto; /* Center on widescreen */
-  width: fit-content; /* Shrink-wrap around content */
-  min-width: min-content; /* Ensure it contains brackets and text */
-  min-height: 100px;
-  /* The workspace is a flex column; without this the wrapper (a flex child) is
+  width: fit-content;
+  min-width: min-content;
+  /* The workspace is a flex column; without this the column (a flex child) is
      compressed below its content height when the passage is taller than the
      viewport, clipping the last rows — most visibly a tall parallel-column
      cell. Keeping it unshrinkable lets the workspace's own overflow scroll. */
+  flex-shrink: 0;
+}
+
+.diagram-column > .main-point-summary {
+  width: 0;
+  min-width: 100%;
+  box-sizing: border-box;
+}
+
+.bracket-canvas-wrapper {
+  position: relative;
+  width: fit-content; /* Shrink-wrap around content */
+  min-width: min-content; /* Ensure it contains brackets and text */
+  min-height: 100px;
   flex-shrink: 0;
   background: var(--surface);
   border-radius: var(--radius);
@@ -2171,18 +2187,12 @@ body.rtl-mode .parallel-text {
   color: var(--text-muted);
 }
 
-/* Main point summary (below the diagram). Same box model as .propositions —
-   content-box width plus the JS-copied gutter padding — so its text starts at
-   the same x as the proposition text and wraps at the same width. */
+/* Main point summary: a panel directly under the diagram box. Both live in
+   .diagram-column (see that rule), so the panel always spans exactly the
+   box's width and shares its centering — in the bracket view, the block
+   diagram, with or without the parallel column. */
 .main-point-summary {
-  width: calc(900px * var(--da-zoom));
-  box-sizing: content-box;
-  padding: 0 1.5rem 1.5rem 1.5rem;
-  margin-top: 0.5rem;
-}
-
-.main-point-summary.has-parallel {
-  width: calc(1280px * var(--da-zoom));
+  margin-top: 0.75rem;
 }
 
 .main-point-summary[hidden] {
@@ -2190,13 +2200,15 @@ body.rtl-mode .parallel-text {
 }
 
 .summary-add-btn {
+  display: block;
+  width: 100%;
   background: none;
   border: 1px dashed var(--border);
   border-radius: var(--radius);
   color: var(--text-muted);
   font: inherit;
   font-size: 0.85rem;
-  padding: 0.4rem 0.8rem;
+  padding: 0.6rem 1rem;
   cursor: pointer;
 }
 
@@ -2213,8 +2225,10 @@ body.rtl-mode .parallel-text {
 
 .main-point-summary.is-open .summary-body {
   display: block;
-  border-top: 1px solid var(--border);
-  padding-top: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.5rem 1.25rem;
 }
 
 .summary-heading {
@@ -2768,7 +2782,8 @@ body.rtl-mode .proposition-block .proposition-text {
 }
 
 /* Comment highlight in proposition text */
-.proposition-text mark.comment-highlight {
+.proposition-text mark.comment-highlight,
+.summary-text mark.comment-highlight {
   background: var(--comment-note-40);
   color: inherit;
   padding: 0;
@@ -2778,13 +2793,15 @@ body.rtl-mode .proposition-block .proposition-text {
   transition: background 0.2s, box-shadow 0.2s;
 }
 
-.proposition-text mark.comment-highlight:hover {
+.proposition-text mark.comment-highlight:hover,
+.summary-text mark.comment-highlight:hover {
   background: var(--comment-note-55);
   box-shadow: 0 0 8px var(--comment-note);
 }
 
 /* Active Comment Target Highlight */
-.proposition-text mark.comment-highlight[data-comment-id="active-comment-target"] {
+.proposition-text mark.comment-highlight[data-comment-id="active-comment-target"],
+.summary-text mark.comment-highlight[data-comment-id="active-comment-target"] {
   background: rgba(201, 168, 108, 0.5) !important;
   border-bottom: 2px solid var(--accent) !important;
   box-shadow: 0 0 10px var(--accent-15);

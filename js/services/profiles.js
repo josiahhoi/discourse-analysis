@@ -471,6 +471,49 @@
   }
 
   /**
+   * A link that loads the named cloud profile when opened (?profile=<key>).
+   * Points at this page when it's served over http(s) — the live site, or
+   * localhost while developing — and at the public web build otherwise (the
+   * desktop app runs from file://, which nobody else can open).
+   */
+  function shareLink(name, loc = window.location) {
+    const key = nameKey(name);
+    if (!key) return '';
+    const base = /^https?:$/.test(loc.protocol) ? loc.origin + loc.pathname : DA_CONSTANTS.WEB_APP_URL;
+    const url = new URL(base);
+    url.searchParams.set('profile', key);
+    return url.toString();
+  }
+
+  /**
+   * Startup: if the page was opened with ?profile=<name>, load that cloud
+   * profile and make it active — exactly like Settings → Load, so it stays
+   * the active profile afterwards. The parameter is then removed from the
+   * address bar, so a later manual profile switch isn't undone by a refresh
+   * or a bookmark; reopening the original link picks up the latest version.
+   * A network failure keeps the parameter so a refresh can retry.
+   */
+  async function loadFromUrl(loc = window.location) {
+    const name = new URL(loc.href).searchParams.get('profile');
+    if (!name) return null;
+    const dropParam = () => {
+      const url = new URL(loc.href);
+      url.searchParams.delete('profile');
+      window.history.replaceState(window.history.state, '', url);
+    };
+    try {
+      const loaded = await loadFromCloud(name);
+      dropParam();
+      if (loaded) DA_UI.showStatus(`Notation profile "${loaded.name}" loaded.`, 'success');
+      else DA_UI.showStatus(`No notation profile named "${name}" was found.`, 'error');
+      return loaded;
+    } catch (err) {
+      DA_UI.showStatus(`Could not load notation profile "${name}": ${err.message || 'unknown error'}`, 'error');
+      return null;
+    }
+  }
+
+  /**
    * If the given name contains "gurtner" (any variation), automatically switch
    * to the Gurtner profile — but only when the current profile is the Standard
    * built-in, so an explicit choice by the user is never overridden.
@@ -486,7 +529,7 @@
     getAbbr, getName, getColor, isDominanceShown,
     effectiveType, isTwoArm, profileTypes, getVisibleTypes,
     searchNorm, searchIndexFor, matchesSearch,
-    nameKey, sha256Hex, publishToCloud, loadFromCloud,
+    nameKey, sha256Hex, publishToCloud, loadFromCloud, shareLink, loadFromUrl,
     maybeApplyGurtnerProfile
   };
 })();

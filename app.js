@@ -682,6 +682,9 @@ document.addEventListener('DOMContentLoaded', () => {
   DA_PERSISTENCE.initMagicPaste();
   DA_PERSISTENCE.attachFilenameObservers();
   DA_SUMMARY.init();
+  // ?profile=<name> share link → load that notation profile (async; the page
+  // renders meanwhile and re-renders when it lands, via setActive).
+  DA_PROFILES.loadFromUrl();
 
   // Final initial render
   DA_RENDERER.renderAll();

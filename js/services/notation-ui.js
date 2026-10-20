@@ -206,6 +206,7 @@
     });
 
     document.getElementById('cloudLoadBtn')?.addEventListener('click', loadFromCloud);
+    document.getElementById('cloudShareLinkBtn')?.addEventListener('click', copyShareLink);
     document.getElementById('cloudPublishBtn')?.addEventListener('click', publishToCloud);
   }
 
@@ -220,6 +221,21 @@
       DA_UI.showStatus(`Loaded profile "${loaded.name}".`, 'success');
     } catch (err) {
       DA_UI.showStatus(err.message || 'Could not load profile.', 'error');
+    }
+  }
+
+  /** Copy the ?profile= link for the typed name (or the active custom profile). */
+  async function copyShareLink() {
+    const typed = document.getElementById('cloudProfileName')?.value.trim();
+    const active = DA_PROFILES.getActive();
+    const name = typed || (active.builtin ? '' : active.name);
+    if (!name) return DA_UI.showStatus('Enter the published profile name to share.', 'error');
+    const link = DA_PROFILES.shareLink(name);
+    try {
+      await navigator.clipboard.writeText(link);
+      DA_UI.showStatus(`Link copied. Anyone who opens it gets "${name}": ${link}`, 'success');
+    } catch (_) {
+      DA_UI.showStatus(`Copy this link: ${link}`, 'info');
     }
   }
 

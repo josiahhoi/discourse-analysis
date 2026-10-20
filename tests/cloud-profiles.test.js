@@ -119,3 +119,75 @@ test('publish requires a name and a password', async () => {
   await assert.rejects(() => sb.DA_PROFILES.publishToCloud(profile(''), 'pw'), /name/);
   await assert.rejects(() => sb.DA_PROFILES.publishToCloud(profile('X'), ''), /password/);
 });
+
+// ── ?profile= share links ───────────────────────────────────────────────────
+
+/** Sandbox with what the link code touches: URL (not an ECMAScript built-in,
+ *  so the vm context lacks it), history.replaceState and the status toast. */
+function linkSetup(href) {
+  const cloud = fakeCloud();
+  const replaced = [];
+  const statuses = [];
+  const sb = createSandbox({
+    db: cloud.db, firebase: cloud.firebase, URL,
+    history: { state: null, replaceState: (_s, _t, url) => replaced.push(String(url)) },
+    DA_UI: { showStatus: (msg, kind) => statuses.push({ msg, kind }) },
+  });
+  sb.history = sb.window.history;
+  load(sb, 'js/utils/constants.js');
+  load(sb, 'js/services/state.js');
+  load(sb, 'js/services/profiles.js');
+  const loc = href ? new URL(href) : null;
+  return { sb, replaced, statuses, loc };
+}
+
+test('shareLink points at this page on the web, and at the public site from the desktop app', () => {
+  const { sb } = linkSetup();
+  const web = new URL('https://josiahhoi.github.io/discourse-analysis/?project=ABC');
+  assert.equal(sb.DA_PROFILES.shareLink('Reformation Bible College', web),
+    'https://josiahhoi.github.io/discourse-analysis/?profile=reformation_bible_college');
+  const local = new URL('http://localhost:8765/index.html');
+  assert.equal(sb.DA_PROFILES.shareLink('RBC', local), 'http://localhost:8765/index.html?profile=rbc');
+  const desktop = new URL('file:///Applications/Discourse%20Analysis.app/index.html');
+  assert.equal(sb.DA_PROFILES.shareLink('RBC', desktop), sb.DA_CONSTANTS.WEB_APP_URL + '?profile=rbc');
+  assert.equal(sb.DA_PROFILES.shareLink('  ', web), '');
+});
+
+test('opening a ?profile= link loads that profile, keeps it active, and cleans the URL', async () => {
+  const { sb, replaced, statuses, loc } = linkSetup('https://example.org/app/?profile=class_a&project=XYZ');
+  await sb.DA_PROFILES.publishToCloud(profile('Class A', { dominance: { default: false, perType: {} } }), 'pw');
+  sb.DA_PROFILES.setActiveById('josiah');
+
+  const loaded = await sb.DA_PROFILES.loadFromUrl(loc);
+  assert.equal(loaded.name, 'Class A');
+  assert.equal(sb.DA_PROFILES.getActive().name, 'Class A');
+  // Persisted like a manual Load, so it survives a reload.
+  assert.equal(JSON.parse(sb.localStorage.getItem('da_active_profile')).name, 'Class A');
+  // Only the profile param is removed; anything else (a project code) stays.
+  assert.deepEqual(replaced, ['https://example.org/app/?project=XYZ']);
+  assert.equal(statuses.at(-1).kind, 'success');
+});
+
+test('a ?profile= link to a missing profile reports it and leaves the active profile alone', async () => {
+  const { sb, replaced, statuses, loc } = linkSetup('https://example.org/?profile=nope');
+  sb.DA_PROFILES.setActiveById('biblearc');
+  assert.equal(await sb.DA_PROFILES.loadFromUrl(loc), null);
+  assert.equal(sb.DA_PROFILES.getActive().id, 'biblearc');
+  assert.deepEqual(replaced, ['https://example.org/']);
+  assert.equal(statuses.at(-1).kind, 'error');
+});
+
+test('a ?profile= link that fails to reach the cloud keeps the param so a refresh can retry', async () => {
+  const { sb, replaced, statuses, loc } = linkSetup('https://example.org/?profile=class_a');
+  sb.db.collection = () => ({ doc: () => ({ get: async () => { throw new Error('offline'); } }) });
+  assert.equal(await sb.DA_PROFILES.loadFromUrl(loc), null);
+  assert.deepEqual(replaced, []);
+  assert.match(statuses.at(-1).msg, /offline/);
+});
+
+test('no ?profile= param: nothing happens', async () => {
+  const { sb, replaced, statuses, loc } = linkSetup('https://example.org/?project=XYZ');
+  assert.equal(await sb.DA_PROFILES.loadFromUrl(loc), null);
+  assert.deepEqual(replaced, []);
+  assert.deepEqual(statuses, []);
+});

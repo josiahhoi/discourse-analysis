@@ -45,6 +45,8 @@ function renderCommentPreviews() {
       const text = DA_STATE.propositions[propIdx] || '';
       const snippet = text.substring(comment.target.start, comment.target.end);
       targetDesc = `${fullRef}: "${snippet}"`;
+    } else if (comment.type === 'summary') {
+      targetDesc = DA_UI.summaryCommentLabel(comment.target.start, comment.target.end);
     } else {
       const bIdx = DA_STATE.bracketIndexById(comment.target.bracketId);
       const b = DA_STATE.brackets[bIdx];
@@ -103,7 +105,7 @@ function renderCommentPreviews() {
       if (!newId) return;
       const comment = DA_STATE.comments.find(c => c.id === newId);
       if (!comment) return;
-      if (comment.type === 'text') {
+      if (comment.type === 'text' || comment.type === 'summary') {
         document.querySelectorAll(`mark.comment-highlight[data-comment-id="${newId}"]`)
           .forEach(el => el.classList.add('comment-highlight-card-hover'));
       } else {
