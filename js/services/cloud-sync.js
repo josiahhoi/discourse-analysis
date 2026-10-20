@@ -230,6 +230,7 @@ function handleCloudData(data) {
   DA_STATE.parallelTexts = data.parallelTexts || [];
   DA_STATE.parallelLabel = data.parallelLabel || '';
   DA_STATE.parallelHidden = !!data.parallelHidden;
+  DA_STATE.mainPointSummary = data.mainPointSummary || '';
   DA_STATE.brackets = data.brackets || [];
   DA_STATE.formatTags = data.formatTags || [];
   DA_STATE.wordArrows = data.wordArrows || [];

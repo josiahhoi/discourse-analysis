@@ -681,6 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
   DA_PERSISTENCE.initDragAndDrop();
   DA_PERSISTENCE.initMagicPaste();
   DA_PERSISTENCE.attachFilenameObservers();
+  DA_SUMMARY.init();
 
   // Final initial render
   DA_RENDERER.renderAll();

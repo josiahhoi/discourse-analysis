@@ -33,13 +33,14 @@ declare var DA_RENDERER: any;
 declare var DA_KEYBOARD: any;
 declare var DA_MOUSE: any;
 declare var DA_BLOCK: any;
+declare var DA_SUMMARY: any;
 
 // window.* extras set by app.js / state.js / mouse-handler.js / preload.js
 interface Window {
   DA_STATE: any; DA_CONSTANTS: any; DA_PROFILES: any; DA_UI: any; DA_PASTE: any;
   DA_NOTATION: any; DA_PERSISTENCE: any; DA_MODES: any; DA_BIBLE: any;
   DA_CLOUD: any; DA_EDITOR: any; DA_RENDERER: any; DA_EXPORT: any;
-  DA_KEYBOARD: any; DA_MOUSE: any; DA_BLOCK: any;
+  DA_KEYBOARD: any; DA_MOUSE: any; DA_BLOCK: any; DA_SUMMARY: any;
   db: any;
   renderAll: () => void;
   scheduleVisualUpdate: () => void;

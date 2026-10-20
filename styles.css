@@ -2171,6 +2171,83 @@ body.rtl-mode .parallel-text {
   color: var(--text-muted);
 }
 
+/* Main point summary (below the diagram). Same box model as .propositions —
+   content-box width plus the JS-copied gutter padding — so its text starts at
+   the same x as the proposition text and wraps at the same width. */
+.main-point-summary {
+  width: calc(900px * var(--da-zoom));
+  box-sizing: content-box;
+  padding: 0 1.5rem 1.5rem 1.5rem;
+  margin-top: 0.5rem;
+}
+
+.main-point-summary.has-parallel {
+  width: calc(1280px * var(--da-zoom));
+}
+
+.main-point-summary[hidden] {
+  display: none;
+}
+
+.summary-add-btn {
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+
+.summary-add-btn:hover,
+.summary-add-btn:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.summary-body,
+.main-point-summary.is-open .summary-add-btn {
+  display: none;
+}
+
+.main-point-summary.is-open .summary-body {
+  display: block;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.summary-heading {
+  margin: 0 0 0.4rem;
+  font-size: calc(0.75rem * var(--da-zoom));
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.summary-text {
+  font-size: calc(1rem * var(--da-zoom));
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  outline: none;
+  min-height: 1.6em;
+  border-radius: var(--radius);
+}
+
+.summary-text:focus {
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.summary-text:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  font-style: italic;
+  pointer-events: none;
+}
+
 .propositions.bracket-gutter {
   /* padding-left is set dynamically in JS based on actual bracket nesting depth */
 }
@@ -2747,6 +2824,7 @@ body.rtl-mode .proposition-block .proposition-text {
 }
 
 .sans-serif-mode .proposition-text,
+.sans-serif-mode .summary-text,
 .sans-serif-mode .proposition-editor,
 .sans-serif-mode .passage-header,
 .sans-serif-mode .import-section textarea,
@@ -2857,6 +2935,10 @@ body.rtl-mode .proposition-block .proposition-text {
 
 .reference-table td {
   color: var(--text-muted);
+}
+
+.reference-table .abbr-cell {
+  white-space: nowrap; /* "W / Ed*" must not break at its spaces */
 }
 
 .reference-table .keyword-cell {

@@ -183,6 +183,13 @@
           </div>
           <div class="block-diagram" id="blockDiagram"></div>
         </div>
+        <section class="main-point-summary" id="mainPointSummary" aria-label="Main point summary" hidden>
+          <button type="button" class="summary-add-btn" id="addSummaryBtn">+ Add main point summary</button>
+          <div class="summary-body">
+            <h3 class="summary-heading">Main Point Summary</h3>
+            <div class="summary-text" id="summaryText" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Main point summary" dir="auto" data-placeholder="State the passage's main point in your own words…"></div>
+          </div>
+        </section>
       </section>
 
       <aside class="comments-preview comments-collapsed" id="commentsPreview">
@@ -288,7 +295,7 @@
   <div id="referenceModal" class="modal-overlay" style="display: none;">
     <div class="modal-content reference-modal">
       <div class="modal-header">
-        <h2>Logical Relationships Guide</h2>
+        <h2 id="referenceGuideTitle">Logical Relationships Guide</h2>
         <button id="closeReferenceBtn" class="close-btn">&times;</button>
       </div>
       <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
@@ -410,6 +417,7 @@
   <script src="js/utils/render-arrows.js?v=3.2.3"></script>
   <script src="js/utils/render-comments.js?v=3.2.3"></script>
   <script src="js/utils/block-diagram.js?v=3.2.3"></script>
+  <script src="js/utils/main-point-summary.js?v=3.2.3"></script>
   <script src="js/services/export-service.js?v=3.2.3"></script>
   <script src="js/services/keyboard-handler.js?v=3.2.3"></script>
   <script src="js/services/mouse-handler.js?v=3.2.3"></script>

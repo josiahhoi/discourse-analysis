@@ -20,7 +20,7 @@ const APP_GLOBALS = {
   DA_UI: 'readonly', DA_NOTATION: 'readonly', DA_PERSISTENCE: 'readonly', DA_PASTE: 'readonly',
   DA_MODES: 'readonly', DA_BIBLE: 'readonly', DA_CLOUD: 'readonly',
   DA_EDITOR: 'readonly', DA_RENDERER: 'readonly', DA_EXPORT: 'readonly',
-  DA_KEYBOARD: 'readonly', DA_MOUSE: 'readonly', DA_BLOCK: 'readonly',
+  DA_KEYBOARD: 'readonly', DA_MOUSE: 'readonly', DA_BLOCK: 'readonly', DA_SUMMARY: 'readonly',
   // app.js
   undoLastAction: 'readonly', redoLastAction: 'readonly', fetchPassage: 'readonly',
   // window.* aliases set in app.js / state.js

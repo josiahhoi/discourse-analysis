@@ -273,48 +273,93 @@ function closeReferenceGuide() {
     }
 }
 
+/**
+ * The guide's content for the ACTIVE notation profile, as plain data:
+ * [{ name, subgroup, rows: [{ type, name, abbr, keywords, definition }] }].
+ *
+ * Names and abbreviations resolve exactly like the diagram does (profile
+ * rename, star placement, dominance off), so the guide can never disagree with
+ * what a bracket draws. Only the profile's own relationships are listed, in the
+ * canonical group order; any it exposes that the hierarchy doesn't know (a
+ * custom/cloud profile) land in a trailing "Other" section. Empty groups drop.
+ */
+function referenceGuideSections() {
+    const defs = DA_CONSTANTS.RELATIONSHIP_DEFINITIONS;
+    const visible = DA_PROFILES.getVisibleTypes();
+    const placed = new Set();
+
+    const abbrFor = (type) => {
+        const l = DA_RENDERER.getBracketLabels(type);
+        return l.single != null ? l.single : `${l.top} / ${l.bottom}`.trim();
+    };
+    const rowFor = (type) => {
+        placed.add(type);
+        const def = defs[type] || {};
+        return {
+            type,
+            name: DA_PROFILES.getName(type).replace(/\s*\([^)]*\)\s*$/, ''),
+            abbr: abbrFor(type),
+            keywords: def.keywords || '',
+            definition: def.definition || ''
+        };
+    };
+    const rowsOf = (types) => types.filter((t) => visible.includes(t)).map(rowFor);
+
+    const sections = [];
+    DA_CONSTANTS.RELATIONSHIP_GROUPS_HIERARCHY.forEach((group) => {
+        const head = { name: group.name, subgroup: false, rows: rowsOf(group.types || []) };
+        const subs = (group.subgroups || [])
+            .map((sg) => ({ name: sg.name, subgroup: true, rows: rowsOf(sg.types) }))
+            .filter((sg) => sg.rows.length);
+        if (head.rows.length || subs.length) sections.push(head, ...subs);
+    });
+
+    const rest = visible.filter((t) => !placed.has(t));
+    if (rest.length) sections.push({ name: 'OTHER RELATIONSHIPS', subgroup: false, rows: rest.map(rowFor) });
+    return sections;
+}
+
+/** Rebuilt on every open, so a profile switch or edit is always reflected. */
 function populateReferenceGuide() {
     const tbody = document.getElementById('referenceTableBody');
-    if (!tbody || tbody.children.length > 0) return; // Already populated
+    if (!tbody) return;
+    tbody.replaceChildren();
 
-    const hierarchy = DA_CONSTANTS.RELATIONSHIP_GROUPS_HIERARCHY;
-    const defs = DA_CONSTANTS.RELATIONSHIP_DEFINITIONS;
-    const labels = DA_CONSTANTS.RELATIONSHIP_LABELS;
-    const abbrs = DA_CONSTANTS.BRACKET_LABELS;
-    
-    const addRow = (typeKey) => {
-        const defData = defs[typeKey];
-        if (!defData) return;
+    const title = document.getElementById('referenceGuideTitle');
+    if (title) title.textContent = `Logical Relationships Guide — ${DA_PROFILES.getActive().name}`;
 
-        const name = labels[typeKey] ? labels[typeKey].split(' (')[0] : typeKey;
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td><strong>${name}</strong></td>
-            <td>${abbrs[typeKey] || ''}</td>
-            <td class="keyword-cell">${defData.keywords || ''}</td>
-            <td>${defData.definition}</td>
-        `;
-        tbody.appendChild(tr);
+    // textContent throughout: names and abbreviations can come from an
+    // imported or cloud profile, so they must never be parsed as HTML.
+    const cell = (text, opts = {}) => {
+        const td = document.createElement('td');
+        if (opts.className) td.className = opts.className;
+        if (opts.colSpan) td.colSpan = opts.colSpan;
+        if (opts.strong) {
+            const b = document.createElement('strong');
+            b.textContent = text;
+            td.appendChild(b);
+        } else {
+            td.textContent = text;
+        }
+        return td;
     };
 
-    const addHeader = (text, isSubgroup = false) => {
-        const tr = document.createElement('tr');
-        tr.className = isSubgroup ? 'subgroup-header' : 'group-header';
-        tr.innerHTML = `<td colspan="4">${text}</td>`;
-        tbody.appendChild(tr);
-    };
+    referenceGuideSections().forEach((section) => {
+        const head = document.createElement('tr');
+        head.className = section.subgroup ? 'subgroup-header' : 'group-header';
+        head.appendChild(cell(section.name, { colSpan: 4 }));
+        tbody.appendChild(head);
 
-    hierarchy.forEach(group => {
-        addHeader(group.name);
-        if (group.types) {
-            group.types.forEach(type => addRow(type));
-        }
-        if (group.subgroups) {
-            group.subgroups.forEach(sub => {
-                addHeader(sub.name, true);
-                sub.types.forEach(type => addRow(type));
-            });
-        }
+        section.rows.forEach((row) => {
+            const tr = document.createElement('tr');
+            tr.append(
+                cell(row.name, { strong: true }),
+                cell(row.abbr, { className: 'abbr-cell' }),
+                cell(row.keywords, { className: 'keyword-cell' }),
+                cell(row.definition)
+            );
+            tbody.appendChild(tr);
+        });
     });
 }
 
@@ -502,6 +547,6 @@ function formatBracketType(type) {
 }
 
 window.DA_UI = Object.assign(window.DA_UI || {}, {
-  saveState, restoreState, showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings, openReferenceGuide, closeReferenceGuide, maybeShowWelcome, updateFontByAuthor, syncPassageAuthorDisplay, syncProfileIndicatorDisplay, handleNewBracket, startNewBracket, showReplaceAddDialog, formatBracketType,
+  saveState, restoreState, showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings, openReferenceGuide, closeReferenceGuide, referenceGuideSections, maybeShowWelcome, updateFontByAuthor, syncPassageAuthorDisplay, syncProfileIndicatorDisplay, handleNewBracket, startNewBracket, showReplaceAddDialog, formatBracketType,
   initZoom, applyZoom, setZoomLevel, zoomIn, zoomOut, resetZoom, getZoomFactor
 });

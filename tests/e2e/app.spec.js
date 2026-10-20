@@ -650,8 +650,8 @@ test('export captures content that scrolls off screen instead of cropping it to 
 
   const result = await page.evaluate(async () => {
     const ws = document.getElementById('workspace');
-    const options = await DA_EXPORT.getCaptureOptions(ws);
-    const canvas = await html2canvas(ws, options);
+    const options = await window.DA_EXPORT.getCaptureOptions(ws);
+    const canvas = await window.html2canvas(ws, options);
     const ctx = canvas.getContext('2d');
     const d = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     // The corner is always background; anything differing from it is content.
@@ -1255,6 +1255,67 @@ test('collapse reduces to the dominant spine and keeps the series bracket drawn'
   await page.locator('.fold-gap').first().click();
   await expect(page.locator('.proposition-block.folded-hidden')).toHaveCount(0);
   await expect(page.locator('.bracket-group')).toHaveCount(5);
+
+  expect(errors).toEqual([]);
+});
+
+test('main point summary: add, type freely, undo/redo, export crop, save round-trip', async ({ page }) => {
+  const errors = collectErrors(page);
+
+  // Blank page: nothing to summarize, so no "+ Add" button either.
+  await page.goto('/');
+  await expect(page.locator('#mainPointSummary')).toBeHidden();
+
+  await importPassage(page);
+  const section = page.locator('#mainPointSummary');
+  const box = page.locator('#summaryText');
+  await expect(page.locator('#addSummaryBtn')).toBeVisible();
+  await expect(box).toBeHidden();
+
+  // ── Add and type. The text contains t/a/b/c (mode shortcuts) and an Enter
+  // (proposition split): none of them may be hijacked inside the summary. ──
+  await page.locator('#addSummaryBtn').click();
+  await expect(box).toBeFocused();
+  await page.keyboard.type('God created all things.');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('So creation belongs to him.');
+  await expect(page.locator('.proposition-block')).toHaveCount(2);
+  await expect(page.locator('body')).not.toHaveClass(/text-edit-mode-active/);
+  const expected = 'God created all things.\nSo creation belongs to him.';
+  expect(await page.evaluate(() => window.DA_STATE.mainPointSummary)).toBe(expected);
+
+  // ── Leave the field; one undo step removes the whole edit session ──
+  await page.locator('#passageRef').click();
+  await page.locator('#undoDivideBtn').click();
+  expect(await page.evaluate(() => window.DA_STATE.mainPointSummary)).toBe('');
+  await expect(page.locator('#addSummaryBtn')).toBeVisible();
+  await page.locator('#redoBtn').click();
+  expect(await page.evaluate(() => window.DA_STATE.mainPointSummary)).toBe(expected);
+  await expect(box).toHaveText(/God created all things\.\s*So creation belongs to him\./);
+
+  // ── Export crop reaches the summary (it sits outside the diagram) ──
+  const covered = await page.evaluate(async () => {
+    const ws = document.getElementById('workspace');
+    const o = await window.DA_EXPORT.getCaptureOptions(ws);
+    const s = document.getElementById('mainPointSummary').getBoundingClientRect();
+    const w = ws.getBoundingClientRect();
+    return (s.bottom - w.top + ws.scrollTop) <= o.y + o.height;
+  });
+  expect(covered).toBe(true);
+
+  // ── Save → fresh page → re-import: the summary comes back ──
+  await page.locator('#exportMenuBtn').click();
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#exportMenu [data-action="json"]').click();
+  const filePath = await (await downloadPromise).path();
+  const saved = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  expect(saved.mainPointSummary).toBe(expected);
+
+  await page.goto('/');
+  await page.locator('#importFileInput').setInputFiles(filePath);
+  await expect(page.locator('.proposition-block')).toHaveCount(2);
+  await expect(section).toHaveClass(/is-open/);
+  await expect(box).toHaveText(/God created all things\.\s*So creation belongs to him\./);
 
   expect(errors).toEqual([]);
 });

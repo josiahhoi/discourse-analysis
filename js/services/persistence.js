@@ -54,7 +54,9 @@ function normalizeBracketData(data) {
     parallelTexts: data.propositions.map((_, i) =>
       (Array.isArray(data.parallelTexts) && typeof data.parallelTexts[i] === 'string') ? data.parallelTexts[i] : ''),
     parallelLabel: typeof data.parallelLabel === 'string' ? data.parallelLabel : '',
-    parallelHidden: !!data.parallelHidden
+    parallelHidden: !!data.parallelHidden,
+    // Main point summary: files that predate the field have none.
+    mainPointSummary: typeof data.mainPointSummary === 'string' ? data.mainPointSummary : ''
   };
 
   // ── Verse boundaries: legacy invisible markers → structured verseBreaks ────
@@ -303,6 +305,7 @@ function importBracket(data) {
     parallelTexts: data.parallelTexts.slice(),
     parallelLabel: data.parallelLabel,
     parallelHidden: data.parallelHidden,
+    mainPointSummary: data.mainPointSummary,
     brackets: (Array.isArray(data.brackets) ? data.brackets : (Array.isArray(data.arcs) ? data.arcs : [])).map((a) => ({ ...a })),
     formatTags: Array.isArray(data.formatTags) ? data.formatTags.map((t) => ({ ...t })) : [],
     wordArrows: Array.isArray(data.wordArrows) ? data.wordArrows.map((w) => ({ ...w })) : [],

@@ -51,6 +51,10 @@ window.DA_STATE = {
   parallelTexts: [],
   parallelLabel: '',
   parallelHidden: false,
+  // Main point summary: the student's written-out summary of the passage's
+  // main point, shown below the diagram. One plain-text document field ('' =
+  // none). Additive in saved files — older files simply lack it.
+  mainPointSummary: '',
   indentation: [],
   activeCommentTarget: null,
   bracketHighlights: {},
@@ -138,6 +142,7 @@ window.DA_STATE = {
       indentation: s.indentation.slice(),
       parallelTexts: s.parallelTexts.slice(),
       parallelLabel: s.parallelLabel,
+      mainPointSummary: s.mainPointSummary,
       bracketHighlights: Object.assign({}, s.bracketHighlights),
       customLabels: s.customLabels.map(cl => ({ ...cl })),
       bracketSelectStep: s.bracketSelectStep,
@@ -160,6 +165,7 @@ window.DA_STATE = {
     s.indentation = snapshot.indentation || [];
     s.parallelTexts = snapshot.parallelTexts || [];
     s.parallelLabel = snapshot.parallelLabel || '';
+    s.mainPointSummary = snapshot.mainPointSummary || '';
     s.bracketHighlights = snapshot.bracketHighlights || {};
     s.customLabels = snapshot.customLabels || [];
     s.bracketSelectStep = snapshot.bracketSelectStep ?? 0;
@@ -206,7 +212,8 @@ window.DA_STATE = {
       activeCommentTarget: null,
       parallelTexts: [],
       parallelLabel: '',
-      parallelHidden: false
+      parallelHidden: false,
+      mainPointSummary: ''
     }, overrides || {});
     // verseBreaks is parallel to propositions — keep the invariant even when a
     // caller only supplies propositions.

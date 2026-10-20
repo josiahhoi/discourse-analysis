@@ -149,3 +149,21 @@ test('redo stack is capped at 50 entries', () => {
   for (let i = 0; i < 60; i++) sb.DA_STATE.undo();
   assert.equal(sb.DA_STATE.redoStack.length, 50);
 });
+
+test('undo/redo restore the main point summary', () => {
+  const sb = setup({ propositions: ['a'], mainPointSummary: 'old' });
+  sb.DA_STATE.pushUndo('edit main point summary');
+  sb.DA_STATE.mainPointSummary = 'new';
+  sb.DA_STATE.undo();
+  assert.equal(sb.DA_STATE.mainPointSummary, 'old');
+  sb.DA_STATE.redo();
+  assert.equal(sb.DA_STATE.mainPointSummary, 'new');
+});
+
+test('resetForNewDocument clears the main point summary unless the new document supplies one', () => {
+  const sb = setup({ mainPointSummary: 'stale' });
+  sb.DA_STATE.resetForNewDocument({ propositions: ['a'] });
+  assert.equal(sb.DA_STATE.mainPointSummary, '');
+  sb.DA_STATE.resetForNewDocument({ propositions: ['a'], mainPointSummary: 'loaded' });
+  assert.equal(sb.DA_STATE.mainPointSummary, 'loaded');
+});

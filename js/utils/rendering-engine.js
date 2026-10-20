@@ -37,6 +37,7 @@ function renderAll() {
   renderWordArrows();
   renderBrackets();
   renderCommentPreviews();
+  if (window.DA_SUMMARY) DA_SUMMARY.render(); // after renderPropositions: it copies the text column's gutter
 }
 
 function updateBracketPositions() {

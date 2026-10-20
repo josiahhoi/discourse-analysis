@@ -58,3 +58,11 @@ test('a page already within the cap is never rescaled', () => {
   const p = pageSize(sb, 2996, 2347);
   assert.equal(p.width, (2996 / 2) * 0.75, 'no scaling applied below the cap');
 });
+
+test('buildBracketData saves the main point summary (empty string when none)', () => {
+  const sb = setup();
+  load(sb, 'js/services/state.js');
+  assert.equal(sb.DA_EXPORT.buildBracketData().mainPointSummary, '');
+  sb.DA_STATE.mainPointSummary = 'The main point.';
+  assert.equal(sb.DA_EXPORT.buildBracketData().mainPointSummary, 'The main point.');
+});

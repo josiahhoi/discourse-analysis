@@ -157,3 +157,17 @@ test('files with structured verseBreaks pass through unchanged', () => {
   assert.deepEqual(out.verseBreaks, [[6]]);
   assert.equal(out.propositions[0], 'first second');
 });
+
+test('files without a main point summary load with an empty one', () => {
+  const sb = setup();
+  const out = sb.DA_PERSISTENCE.normalizeBracketData({ propositions: ['x'], verseRefs: ['1'] });
+  assert.equal(out.mainPointSummary, '');
+});
+
+test('a saved main point summary passes through; a non-string is coerced to empty', () => {
+  const sb = setup();
+  const kept = sb.DA_PERSISTENCE.normalizeBracketData({ propositions: ['x'], mainPointSummary: 'God saves.\nSo rejoice.' });
+  assert.equal(kept.mainPointSummary, 'God saves.\nSo rejoice.');
+  const bad = sb.DA_PERSISTENCE.normalizeBracketData({ propositions: ['x'], mainPointSummary: { text: 'x' } });
+  assert.equal(bad.mainPointSummary, '');
+});

@@ -30,6 +30,7 @@ const DA_EXPORT = {
       parallelTexts: (DA_STATE.parallelTexts || []).slice(),
       parallelLabel: DA_STATE.parallelLabel || '',
       parallelHidden: !!DA_STATE.parallelHidden,
+      mainPointSummary: DA_STATE.mainPointSummary || '',
       brackets: DA_STATE.brackets.map((a) => ({ ...a })),
       formatTags: DA_STATE.formatTags.map((t) => ({ ...t })),
       wordArrows: DA_STATE.wordArrows.map((w) => ({ ...w })),
@@ -126,7 +127,9 @@ const DA_EXPORT = {
         .cloud-sync-btn,
         .profile-indicator,
         .connection-node,
-        .bracket-hitbox
+        .bracket-hitbox,
+        .summary-add-btn,
+        .main-point-summary:not(.has-text)
       `).forEach(el => {
         el.style.display = 'none';
       });
@@ -145,7 +148,7 @@ const DA_EXPORT = {
       }
 
       // Ensure text is visible
-      clonedDoc.querySelectorAll('.proposition-text, .bracket-label, .verse-ref').forEach(el => {
+      clonedDoc.querySelectorAll('.proposition-text, .bracket-label, .verse-ref, .summary-text').forEach(el => {
         el.style.color = textColor;
       });
     }
@@ -159,7 +162,10 @@ const DA_EXPORT = {
       document.getElementById('workspaceHeader'),
       ...Array.from(workspace.querySelectorAll('.proposition-block')),
       ...Array.from(workspace.querySelectorAll('#bracketCanvas *')),
-      ...Array.from(workspace.querySelectorAll('#wordArrowsSvg *'))
+      ...Array.from(workspace.querySelectorAll('#wordArrowsSvg *')),
+      // The summary sits outside the diagram, so it must be listed explicitly
+      // or the crop cuts it off. Only when written — never the "+ Add" button.
+      DA_STATE.mainPointSummary ? workspace.querySelector('#mainPointSummary') : null
     ].filter(Boolean);
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
