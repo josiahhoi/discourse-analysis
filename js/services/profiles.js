@@ -250,6 +250,7 @@
     // load) funnels through here, so this single call keeps the header's
     // active-profile indicator in sync everywhere without a call at each site.
     if (window.DA_UI && DA_UI.syncProfileIndicatorDisplay) DA_UI.syncProfileIndicatorDisplay();
+    if (document.getElementById('referenceModal')?.style.display === 'flex') window.DA_UI?.populateReferenceGuide?.();
     return _active;
   }
 
@@ -307,7 +308,7 @@
    * punctuation, or [] for empty/no-alphanumeric input.
    */
   function searchNorm(s) {
-    const spaced = String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const spaced = String(s || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
     return spaced ? [spaced, spaced.replace(/ /g, '')] : [];
   }
 
@@ -351,6 +352,10 @@
     const activeName = getName(t);
     const altByName = new Map(); // display name -> [profile names]
     sourceTypes.forEach((src) => {
+      if (window.DA_RELATIONSHIPS) {
+        DA_RELATIONSHIPS.searchTerms(src).forEach((s) => add(s, nameTerms));
+        DA_RELATIONSHIPS.searchKeywords(src).forEach((s) => add(s, kwTerms));
+      }
       if (src !== t) {
         add(src, nameTerms);
         add(DA_CONSTANTS.RELATIONSHIP_LABELS[src], nameTerms);
@@ -371,9 +376,9 @@
     });
 
     const altHint = altByName.size
-      ? 'Also called ' + Array.from(altByName.entries())
+      ? DA_I18N.t('relationship.alsoCalled', {names: Array.from(altByName.entries())
           .map(([n, ps]) => `${n.replace(/\s*\([^)]*\)\s*$/, '')} (${ps.join(', ')})`)
-          .join(', ')
+          .join(', ')})
       : '';
 
     return {
@@ -436,10 +441,10 @@
    * a bare sha256(password); those are accepted once and re-written salted.
    */
   async function publishToCloud(profile, password) {
-    if (!window.db) throw new Error('Cloud is not available.');
-    if (!password) throw new Error('A password is required to publish.');
+    if (!window.db) throw new Error(DA_I18N.t('s.S0253'));
+    if (!password) throw new Error(DA_I18N.t('s.S0254'));
     const key = nameKey(profile && profile.name);
-    if (!key) throw new Error('Enter a profile name first.');
+    if (!key) throw new Error(DA_I18N.t('s.S0255'));
 
     const saltedHash = await sha256Hex(`${key}:${password}`);
     const legacyHash = await sha256Hex(password); // pre-salt scheme
@@ -448,7 +453,7 @@
     return db.runTransaction(async (tx) => {
       const snap = await tx.get(ref);
       if (snap.exists && snap.data().pwHash !== saltedHash && snap.data().pwHash !== legacyHash) {
-        throw new Error('That name is taken and the password does not match.');
+        throw new Error(DA_I18N.t('s.S0256'));
       }
       tx.set(ref, {
         ...normalize(profile),
@@ -462,9 +467,9 @@
 
   /** Load a profile by name and make it active. Returns the profile, or null. */
   async function loadFromCloud(name) {
-    if (!window.db) throw new Error('Cloud is not available.');
+    if (!window.db) throw new Error(DA_I18N.t('s.S0253'));
     const key = nameKey(name);
-    if (!key) throw new Error('Enter a profile name.');
+    if (!key) throw new Error(DA_I18N.t('s.S0257'));
     const snap = await db.collection('profiles').doc(key).get();
     if (!snap.exists) return null;
     return setActive(fromCloud(snap.data()));
@@ -504,11 +509,11 @@
     try {
       const loaded = await loadFromCloud(name);
       dropParam();
-      if (loaded) DA_UI.showStatus(`Notation profile "${loaded.name}" loaded.`, 'success');
-      else DA_UI.showStatus(`No notation profile named "${name}" was found.`, 'error');
+      if (loaded) DA_UI.showTranslatedStatus('s.S0258', () => ({ name: loaded.name }), 'success');
+      else DA_UI.showTranslatedStatus('s.S0259', () => ({ name: name }), 'error');
       return loaded;
     } catch (err) {
-      DA_UI.showStatus(`Could not load notation profile "${name}": ${err.message || 'unknown error'}`, 'error');
+      DA_UI.showTranslatedStatus('s.S0260', () => ({ name: name, error: err.message || DA_I18N.t('error.unknown') }), 'error');
       return null;
     }
   }

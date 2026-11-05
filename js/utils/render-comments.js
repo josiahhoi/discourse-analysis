@@ -37,6 +37,7 @@ function renderCommentPreviews() {
     const chapterMatch = (DA_STATE.passageRef || '').match(/(\d+):/);
     const chapter = chapterMatch ? chapterMatch[1] : '';
 
+    const describeTarget = () => {
     let targetDesc = '';
     if (comment.type === 'text') {
       const propIdx = comment.target.propIndex;
@@ -55,9 +56,12 @@ function renderCommentPreviews() {
       const v2 = computeVerseDisplay(extent.to) || '?';
       const vsRange = v1 === v2 ? v1 : `${v1}-${v2}`;
       const fullRef = chapter ? `${chapter}:${vsRange}` : vsRange;
-      targetDesc = `Bracket (${fullRef}): ${b ? DA_UI.formatBracketType(b.type) : 'Unknown'}`;
+      targetDesc = DA_I18N.t('s.S0406', { reference: fullRef, relationship: b ? DA_UI.formatBracketType(b.type) : DA_I18N.t('s.S0809') });
     }
 
+    return targetDesc;
+    };
+    const targetDesc = describeTarget();
     const newHtml = `
       <div class="comment-card-header">
         <span class="comment-target">${DA_UI.escapeHtml(targetDesc)}</span>
@@ -73,8 +77,8 @@ function renderCommentPreviews() {
         `).join('')}
       </div>
       <div class="reply-input-row">
-        <input type="text" placeholder="Reply..." class="reply-input" data-id="${comment.id}">
-        <button class="send-reply-btn" data-id="${comment.id}" title="Send reply">→</button>
+        <input type="text" data-i18n-placeholder="comment.replyPlaceholder" placeholder="Reply..." aria-label="Reply..." data-i18n-aria-label="comment.replyPlaceholder" class="reply-input" data-id="${comment.id}">
+        <button class="send-reply-btn" data-id="${comment.id}" title="Send reply" data-i18n-title="comment.sendReply" aria-label="Send reply" data-i18n-aria-label="comment.sendReply">→</button>
       </div>
     `;
     
@@ -82,6 +86,7 @@ function renderCommentPreviews() {
       card.innerHTML = newHtml;
       card._lastHtml = newHtml;
     }
+    DA_I18N.bindValue(card.querySelector('.comment-target'), describeTarget);
   });
 
   // Card hover → corresponding highlight glow (set up once on the list container)

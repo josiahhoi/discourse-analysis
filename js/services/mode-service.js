@@ -10,9 +10,9 @@ function toggleTextEditMode() {
     document.body.classList.toggle('text-edit-mode-active', DA_STATE.textEditMode);
 
     if (btn) {
-        btn.title = DA_STATE.textEditMode
-            ? 'Text edit mode on: edit text directly, use Tab for indent, Enter for newlines. (T or Esc to exit)'
-            : 'Toggle text edit mode: edit text freely with newlines and indentation. (T)';
+        DA_I18N.bindValue(btn, () => (DA_STATE.textEditMode
+            ? DA_I18N.t('s.S0112')
+            : DA_I18N.t('s.S0113')), 'title');
     }
 
     if (DA_STATE.textEditMode) {
@@ -23,9 +23,9 @@ function toggleTextEditMode() {
         DA_STATE.bracketSelectStep = 0;
         DA_STATE.firstBracketPoint = null;
         DA_UI.clearPropositionHighlights();
-        DA_UI.showStatus('Text Edit mode on. Brackets disabled.', 'success');
+        DA_UI.showTranslatedStatus('s.S0114', {}, 'success');
     } else {
-        DA_UI.showStatus('Text Edit mode off.', 'success');
+        DA_UI.showTranslatedStatus('s.S0115', {}, 'success');
     }
 }
 
@@ -37,13 +37,13 @@ function toggleArrowMode(forceState) {
 
     if (DA_STATE.arrowMode) {
         if (DA_STATE.textEditMode) toggleTextEditMode();
-        DA_UI.showStatus('Arrow mode on. Click a word to start.', 'success');
+        DA_UI.showTranslatedStatus('s.S0116', {}, 'success');
     } else {
         // Leaving the mode discards any half-built arrow — otherwise the stale
         // start would silently complete on the first click of a later session.
         DA_STATE.pendingArrowStart = null;
         if (window.DA_MOUSE) DA_MOUSE.hideArrowHighlight();
-        if (forceState === undefined) DA_UI.showStatus('Arrow mode off.', 'success');
+        if (forceState === undefined) DA_UI.showTranslatedStatus('s.S0117', {}, 'success');
     }
 }
 

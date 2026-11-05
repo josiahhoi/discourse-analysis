@@ -1,8 +1,13 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+const { createNativeMenuTranslator } = require('./js/i18n/native-menu.cjs');
+const updateNativeMenu = createNativeMenuTranslator(Menu, app.name);
 let mainWindow = null;
+ipcMain.on('set-interface-locale', (event, locale) => {
+  if (mainWindow && event.sender === mainWindow.webContents) updateNativeMenu(locale);
+});
 let pendingFilePath = null; // file path received before window was ready
 
 /**
@@ -30,6 +35,9 @@ function loadDotEnv() {
 }
 
 const ENV = loadDotEnv();
+
+// Read-only system language metadata; no access to document or user content.
+ipcMain.handle('get-system-languages', () => app.getPreferredSystemLanguages());
 
 /**
  * Fetch ESV passage text ourselves (main process) rather than handing the API

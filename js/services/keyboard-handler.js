@@ -84,14 +84,14 @@ window.DA_KEYBOARD = {
           DA_STATE.firstBracketPoint = null;
           DA_UI.clearPropositionHighlights();
           document.getElementById('bracketCanvas')?.classList.remove('connect-mode');
-          DA_UI.showStatus('Bracket selection cancelled.', 'info');
+          DA_UI.showTranslatedStatus('s.S0105', {}, 'info');
           if (window.renderAll) window.renderAll();
           return;
         }
         if (DA_STATE.arrowMode && DA_STATE.pendingArrowStart) {
           DA_STATE.pendingArrowStart = null;
           if (window.DA_MOUSE) DA_MOUSE.hideArrowHighlight();
-          DA_UI.showStatus('Arrow selection cancelled.', 'info');
+          DA_UI.showTranslatedStatus('s.S0106', {}, 'info');
           return;
         }
 
@@ -227,7 +227,7 @@ window.DA_KEYBOARD = {
           DA_STATE.wordArrows.splice(DA_STATE.selectedArrowIdx, 1);
           DA_STATE.selectedArrowIdx = null;
           if (window.renderAll) window.renderAll();
-          DA_UI.showStatus('Arrow removed.', 'success');
+          DA_UI.showTranslatedStatus('s.S0108', {}, 'success');
         }
       }
     }, true);
@@ -433,7 +433,7 @@ window.DA_KEYBOARD = {
               // can delete brackets the user can't see happening.
               const _aboveBlock = container.querySelector(`.proposition-block[data-index="${i - 1}"]`);
               if (_aboveBlock && _aboveBlock.classList.contains('folded-hidden')) {
-                DA_UI.showStatus('The row above is in a collapsed section. Expand it before merging.', 'warning');
+                DA_UI.showTranslatedStatus('s.S0110', {}, 'warning');
                 return;
               }
 

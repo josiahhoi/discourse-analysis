@@ -16,6 +16,8 @@ declare const firebase: any;
 declare var db: any;
 
 // App namespaces — each file assigns window.DA_X; classic scripts read them bare.
+declare var DA_I18N: any;
+declare var DA_RELATIONSHIPS: any;
 declare var DA_STATE: any;
 declare var DA_CONSTANTS: any;
 declare var DA_PROFILES: any;
@@ -37,6 +39,7 @@ declare var DA_SUMMARY: any;
 
 // window.* extras set by app.js / state.js / mouse-handler.js / preload.js
 interface Window {
+  DA_I18N_CATALOGS: any; DA_I18N_PROFILE_LABELS: any; DA_I18N: any; DA_RELATIONSHIPS: any;
   DA_STATE: any; DA_CONSTANTS: any; DA_PROFILES: any; DA_UI: any; DA_PASTE: any;
   DA_NOTATION: any; DA_PERSISTENCE: any; DA_MODES: any; DA_BIBLE: any;
   DA_CLOUD: any; DA_EDITOR: any; DA_RENDERER: any; DA_EXPORT: any;
@@ -49,6 +52,9 @@ interface Window {
   pushUndo: (action: string, debounceKey?: string) => void;
   showLabelPicker: (bracketIdx: number, y: number, x: number) => void;
   electronAPI?: {
+    getSystemLanguages: () => Promise<string[]>;
+    setInterfaceLocale: (locale: string) => void;
+
     onOpenFile: (cb: (content: string) => void) => void;
     fetchESV: (query: string) => Promise<any>;
     fetchNASB: (passageId: string) => Promise<any>;

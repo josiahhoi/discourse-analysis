@@ -280,7 +280,7 @@ function getDraft() {
 
 function importBracket(data) {
   if (!data || !Array.isArray(data.propositions)) {
-    DA_UI.showStatus('Invalid bracket file.', 'error');
+    DA_UI.showTranslatedStatus('s.S0153', {}, 'error');
     return;
   }
   
@@ -347,7 +347,7 @@ function importBracket(data) {
   
   addToRecent(data);
   clearDraft();
-  DA_UI.showStatus('Project loaded.', 'success');
+  DA_UI.showTranslatedStatus('s.S0155', {}, 'success');
 }
 
 function addToRecent(data) {
@@ -396,8 +396,8 @@ function renderRecentList() {
   recentListEl.innerHTML = '';
   items.forEach((item, idx) => {
     const li = document.createElement('li');
-    const label = item.passageRef || item.data?.passageRef || 'Bracket';
-    li.innerHTML = `<button type="button" class="recent-item" data-idx="${idx}" title="Load this bracket">${DA_UI.escapeHtml(label)}</button>`;
+    const label = item.passageRef || item.data?.passageRef || DA_I18N.t('s.S0808');
+    li.innerHTML = `<button type="button" class="recent-item" data-idx="${idx}" title="Load this bracket" data-i18n-title="s.S0158">${DA_UI.escapeHtml(label)}</button>`;
     li.querySelector('button').addEventListener('click', () => {
       const bracket = getRecentBrackets()[idx];
       if (bracket?.data) importBracket(bracket.data);
@@ -454,7 +454,7 @@ function getExportFilename(defaultOnly = false) {
 
 function updateFilenamePlaceholder() {
   const input = document.getElementById('exportFilename');
-  if (input) input.placeholder = getExportFilename(true);
+  if (input) DA_I18N.bindValue(input, () => getExportFilename(true), 'placeholder');
 }
 
 function attachFilenameObservers() {
@@ -486,7 +486,7 @@ function initMagicPaste() {
                     const json = LZString.decompressFromEncodedURIComponent(compressed);
                     const data = JSON.parse(json);
                     if (data && Array.isArray(data.propositions)) {
-                        DA_UI.showMagicPasteBanner(data, '📋 Diagram detected in paste! ');
+                        DA_UI.showMagicPasteBanner(data, 's.S0178');
                         return;
                     }
                 } catch (err) { console.error('Failed to parse DNA from HTML paste', err); }
@@ -498,7 +498,7 @@ function initMagicPaste() {
             try {
                 const data = JSON.parse(text);
                 if (data && Array.isArray(data.propositions)) {
-                    DA_UI.showMagicPasteBanner(data, '📋 Bracket data detected! ');
+                    DA_UI.showMagicPasteBanner(data, 's.S0180');
                 }
             } catch (_) {}
         }
@@ -521,7 +521,7 @@ function initMagicPaste() {
             try { data = JSON.parse(trimmed); } catch (_) { return; }
             if (!data || !Array.isArray(data.propositions)) return;
 
-            DA_UI.showMagicPasteBanner(data, '📋 Bracket data detected on clipboard: ');
+            DA_UI.showMagicPasteBanner(data, 's.S0181');
         } catch (_) {}
     });
 }
@@ -534,20 +534,21 @@ function initDraftRecovery() {
     const wrapper = document.querySelector('.bracket-canvas-wrapper') || document.body;
     const banner = document.createElement('div');
     banner.className = 'draft-recovery-banner';
-    const label = draft.passageRef || 'an unnamed passage';
+    const label = draft.passageRef || DA_I18N.t('s.S0182');
     banner.innerHTML = `
-      <span class="draft-recovery-text">📝 Unsaved work on <strong>${DA_UI.escapeHtml(label)}</strong> was found. Restore it?</span>
+      <span class="draft-recovery-text"></span>
       <div class="draft-recovery-actions">
-        <button type="button" data-action="restore">Restore</button>
-        <button type="button" data-action="dismiss" class="secondary">Dismiss</button>
+        <button type="button" data-action="restore" data-i18n="s.S0185">Restore</button>
+        <button type="button" data-action="dismiss" class="secondary" data-i18n="s.S0186">Dismiss</button>
       </div>
     `;
+    DA_I18N.bindText(banner.querySelector('.draft-recovery-text'), 'recovery.draft', {label});
     wrapper.prepend(banner);
 
     banner.querySelector('[data-action="restore"]').addEventListener('click', () => {
       banner.remove();
       importBracket(draft);
-      DA_UI.showStatus('Draft restored.', 'success');
+      DA_UI.showTranslatedStatus('s.S0187', {}, 'success');
     });
     banner.querySelector('[data-action="dismiss"]').addEventListener('click', () => {
       banner.remove();
@@ -577,14 +578,15 @@ function showCloudReconnectBanner(projectId) {
     const banner = document.createElement('div');
     banner.className = 'draft-recovery-banner';
     banner.setAttribute('role', 'dialog');
-    banner.setAttribute('aria-label', 'Reconnect to cloud project');
+    DA_I18N.bindValue(banner, () => (DA_I18N.t('s.S0189')), 'aria-label');
     banner.innerHTML = `
-      <span class="draft-recovery-text">🌐 You were connected to cloud project <strong>${DA_UI.escapeHtml(projectId)}</strong>. Reconnect?</span>
+      <span class="draft-recovery-text"></span>
       <div class="draft-recovery-actions">
-        <button type="button" data-action="reconnect">Reconnect</button>
-        <button type="button" data-action="dismiss" class="secondary">Start Fresh</button>
+        <button type="button" data-action="reconnect" data-i18n="s.S0193">Reconnect</button>
+        <button type="button" data-action="dismiss" class="secondary" data-i18n="s.S0194">Start Fresh</button>
       </div>
     `;
+    DA_I18N.bindText(banner.querySelector('.draft-recovery-text'), 'recovery.cloud', {projectId});
     wrapper.prepend(banner);
 
     // Drop the stale ?project= param so a later reload doesn't re-prompt.
@@ -596,7 +598,7 @@ function showCloudReconnectBanner(projectId) {
 
     banner.querySelector('[data-action="reconnect"]').addEventListener('click', () => {
         banner.remove();
-        DA_UI.showStatus(`Loading project ${projectId}…`, 'info');
+        DA_UI.showTranslatedStatus('s.S0195', () => ({ projectId: projectId }), 'info');
         if (window.DA_CLOUD) DA_CLOUD.joinCloudSync(projectId);
     });
     banner.querySelector('[data-action="dismiss"]').addEventListener('click', () => {
@@ -723,22 +725,22 @@ function processDNA(encoded) {
     let cleaned = decodeURIComponent(encoded).trim();
     cleaned = cleaned.replace(/[\u2013\u2014]/g, "-");
     if (typeof LZString === 'undefined') {
-      DA_UI.showStatus('Decompression failed: LZString not loaded.', 'error');
+      DA_UI.showTranslatedStatus('s.S0198', {}, 'error');
       return;
     }
     const json = LZString.decompressFromEncodedURIComponent(cleaned);
     if (!json) {
-      DA_UI.showStatus('Found data, but decompression failed.', 'error');
+      DA_UI.showTranslatedStatus('s.S0199', {}, 'error');
       return;
     }
     const data = JSON.parse(json);
     if (data && Array.isArray(data.propositions)) {
       importBracket(data);
     } else {
-      DA_UI.showStatus('Data found, but it is not a valid bracket.', 'error');
+      DA_UI.showTranslatedStatus('s.S0200', {}, 'error');
     }
   } catch (err) {
-    DA_UI.showStatus('Failed to read data: ' + err.message, 'error');
+    DA_UI.showTranslatedStatus('s.S0201', () => ({error: err.message}), 'error');
   }
 }
 
@@ -746,7 +748,7 @@ let _currentFileHandle = null;
 
 async function saveBracket(forceSaveAs = false) {
   if (DA_STATE.propositions.length === 0) {
-    DA_UI.showStatus('Nothing to save.', 'error');
+    DA_UI.showTranslatedStatus('s.S0202', {}, 'error');
     return;
   }
   const data = DA_EXPORT.buildBracketData();
@@ -766,7 +768,7 @@ async function saveBracket(forceSaveAs = false) {
       await writable.write(json);
       await writable.close();
       addToRecent(data);
-      DA_UI.showStatus('Saved.', 'success');
+      DA_UI.showTranslatedStatus('s.S0203', {}, 'success');
     } else {
       exportBracket();
     }
@@ -778,7 +780,7 @@ async function saveBracket(forceSaveAs = false) {
 
 function exportBracket() {
   if (DA_STATE.propositions.length === 0) {
-    DA_UI.showStatus('Nothing to export.', 'error');
+    DA_UI.showTranslatedStatus('s.S0204', {}, 'error');
     return;
   }
   const data = DA_EXPORT.buildBracketData();
@@ -790,7 +792,7 @@ function exportBracket() {
   a.click();
   URL.revokeObjectURL(a.href);
   addToRecent(data);
-  DA_UI.showStatus('Bracket exported.', 'success');
+  DA_UI.showTranslatedStatus('s.S0205', {}, 'success');
 }
 
 function initDragAndDrop() {
@@ -824,15 +826,15 @@ function initDragAndDrop() {
             try {
                 const text = await file.text();
                 importBracket(JSON.parse(text));
-            } catch (_) { DA_UI.showStatus('Could not read JSON file.', 'error'); }
+            } catch (_) { DA_UI.showTranslatedStatus('s.S0206', {}, 'error'); }
         } else if (file.type === 'image/png' || file.name.endsWith('.png')) {
             const data = await extractPngMetadata(file);
             if (data) importBracket(data);
-            else DA_UI.showStatus('No embedded data found in PNG.', 'error');
+            else DA_UI.showTranslatedStatus('s.S0207', {}, 'error');
         } else if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
             const data = await extractPdfMetadata(file);
             if (data) importBracket(data);
-            else DA_UI.showStatus('No embedded data found in PDF.', 'error');
+            else DA_UI.showTranslatedStatus('s.S0208', {}, 'error');
         }
     });
 }

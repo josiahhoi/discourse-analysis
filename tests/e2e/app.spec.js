@@ -46,6 +46,7 @@ test.beforeEach(async ({ page }) => {
     localStorage.setItem('biblebracket_comment_author', 'E2E Tester');
     localStorage.setItem('biblebracket_welcome_seen', 'true');
     localStorage.setItem('biblebracket_theme', 'light');
+    localStorage.setItem('biblebracket_language', 'en');
   });
 });
 
@@ -1227,10 +1228,17 @@ test('collapse reduces to the dominant spine and keeps the series bracket drawn'
 
   // The series' arm to the folded ground(p3,p4) is reduced: dashed class, and
   // it lands on row 3's dot rather than the phantom bracket node.
+  // A scheduled SVG rebuild can briefly detach a matched line between reads.
+  // Wait for a measurable node; keep every geometry assertion and 3px limit.
+  const measuredBox = async locator => {
+    let box;
+    await expect.poll(async () => { box = await locator.boundingBox(); return box !== null; }).toBe(true);
+    return box;
+  };
   const reducedArm = page.locator('.bracket-group.series .bracket-arm.arm-reduced');
   await expect(reducedArm).toHaveCount(1);
-  const armBox = await reducedArm.boundingBox();
-  const dot3 = await page.locator('.prop-dot').nth(3).boundingBox();
+  const armBox = await measuredBox(reducedArm);
+  const dot3 = await measuredBox(page.locator('.prop-dot').nth(3));
   expect(Math.abs((armBox.y + armBox.height / 2) - (dot3.y + dot3.height / 2))).toBeLessThanOrEqual(3);
 
   // The collapsed bracket's summary arm points at the surviving series
@@ -1238,8 +1246,8 @@ test('collapse reduces to the dominant spine and keeps the series bracket drawn'
   // rows 2 and 3) — and carries the standard abbreviation ("G" for ground,
   // not a truncated canonical name).
   const mArm = page.locator('.bracket-group.is-collapsed .bracket-arm');
-  const mBox = await mArm.boundingBox();
-  const dot2 = await page.locator('.prop-dot').nth(2).boundingBox();
+  const mBox = await measuredBox(mArm);
+  const dot2 = await measuredBox(page.locator('.prop-dot').nth(2));
   const seriesMidY = ((dot2.y + dot2.height / 2) + (dot3.y + dot3.height / 2)) / 2;
   expect(Math.abs((mBox.y + mBox.height / 2) - seriesMidY)).toBeLessThanOrEqual(3);
   await expect(page.locator('.bracket-group.is-collapsed .bracket-label')).toHaveText('G');

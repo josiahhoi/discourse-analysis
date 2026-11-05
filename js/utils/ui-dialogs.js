@@ -72,14 +72,15 @@ function showMagicPasteBanner(data, messagePrefix) {
   const wrapper = document.querySelector('.bracket-canvas-wrapper') || document.body;
   const banner = document.createElement('div');
   banner.className = 'magic-paste-banner';
-  const label = data.passageRef || 'bracket data';
+  const label = data.passageRef || DA_I18N.t('s.S0457');
   banner.innerHTML = `
-    <span class="draft-recovery-text">${messagePrefix} <strong>${escapeHtml(label)}</strong></span>
+    <span class="draft-recovery-text"></span>
     <div class="draft-recovery-actions">
-      <button type="button" data-action="import">Import</button>
-      <button type="button" data-action="dismiss" class="secondary">Dismiss</button>
+      <button type="button" data-action="import" data-i18n="s.S0460">Import</button>
+      <button type="button" data-action="dismiss" class="secondary" data-i18n="s.S0186">Dismiss</button>
     </div>
   `;
+  DA_I18N.bindValue(banner.querySelector('.draft-recovery-text'), () => DA_I18N.t('paste.detected', {message: DA_I18N.t(messagePrefix), label}));
   wrapper.prepend(banner);
 
   banner.querySelector('[data-action="import"]').addEventListener('click', () => {
@@ -109,7 +110,7 @@ function updateThemeButtonText() {
     const btn = document.getElementById('themeToggle');
     if (!btn) return;
     const current = document.documentElement.getAttribute('data-theme') || 'dark';
-    btn.textContent = current === 'dark' ? 'Light Mode' : 'Dark Mode';
+    DA_I18N.bindValue(btn, () => (current === 'dark' ? DA_I18N.t('s.S0462') : DA_I18N.t('s.S0463')), 'text');
 }
 
 /**
@@ -242,7 +243,7 @@ function maybeShowWelcome() {
 
         if (window.DA_PROFILES) DA_PROFILES.maybeApplyGurtnerProfile(name);
         close();
-        showStatus(`Welcome, ${name}!`, 'success');
+        DA_UI.showTranslatedStatus('s.S0465', () => ({ name: name }), 'success');
     };
 
     saveBtn.addEventListener('click', save);
@@ -297,10 +298,10 @@ function referenceGuideSections() {
         const def = defs[type] || {};
         return {
             type,
-            name: DA_PROFILES.getName(type).replace(/\s*\([^)]*\)\s*$/, ''),
+            name: (window.DA_RELATIONSHIPS ? DA_RELATIONSHIPS.getName(type) : DA_PROFILES.getName(type)).replace(/\s*\([^)]*\)\s*$/, ''),
             abbr: abbrFor(type),
-            keywords: def.keywords || '',
-            definition: def.definition || ''
+            keywords: window.DA_RELATIONSHIPS ? DA_RELATIONSHIPS.getKeywords(type) : def.keywords || '',
+            definition: window.DA_RELATIONSHIPS ? DA_RELATIONSHIPS.getDefinition(type) : (def.definition || '')
         };
     };
     const rowsOf = (types) => types.filter((t) => visible.includes(t)).map(rowFor);
@@ -326,7 +327,9 @@ function populateReferenceGuide() {
     tbody.replaceChildren();
 
     const title = document.getElementById('referenceGuideTitle');
-    if (title) title.textContent = `Logical Relationships Guide — ${DA_PROFILES.getActive().name}`;
+    if (title) DA_I18N.bindValue(title, () => (window.DA_I18N
+      ? DA_I18N.t('guide.title', { profile: DA_PROFILES.getActive().name })
+      : `Logical Relationships Guide — ${DA_PROFILES.getActive().name}`), 'text');
 
     // textContent throughout: names and abbreviations can come from an
     // imported or cloud profile, so they must never be parsed as HTML.
@@ -334,6 +337,7 @@ function populateReferenceGuide() {
         const td = document.createElement('td');
         if (opts.className) td.className = opts.className;
         if (opts.colSpan) td.colSpan = opts.colSpan;
+        if (opts.title) td.title = opts.title;
         if (opts.strong) {
             const b = document.createElement('strong');
             b.textContent = text;
@@ -347,13 +351,14 @@ function populateReferenceGuide() {
     referenceGuideSections().forEach((section) => {
         const head = document.createElement('tr');
         head.className = section.subgroup ? 'subgroup-header' : 'group-header';
-        head.appendChild(cell(section.name, { colSpan: 4 }));
+        head.title = section.name;
+        head.appendChild(cell(window.DA_RELATIONSHIPS ? DA_RELATIONSHIPS.getGroupName(section.name) : section.name, { colSpan: 4 }));
         tbody.appendChild(head);
 
         section.rows.forEach((row) => {
             const tr = document.createElement('tr');
             tr.append(
-                cell(row.name, { strong: true }),
+                cell(window.DA_RELATIONSHIPS ? DA_RELATIONSHIPS.selectorPresentation(row.type).full : row.name, { strong: true, title: window.DA_RELATIONSHIPS ? DA_RELATIONSHIPS.selectorPresentation(row.type).full : row.name }),
                 cell(row.abbr, { className: 'abbr-cell' }),
                 cell(row.keywords, { className: 'keyword-cell' }),
                 cell(row.definition)
@@ -382,7 +387,7 @@ function syncPassageAuthorDisplay() {
     const input = document.getElementById('pageAuthor');
     const display = document.getElementById('passageAuthor');
     if (display && input) {
-        display.textContent = input.value.trim() ? `By: ${input.value.trim()}` : '';
+        DA_I18N.bindValue(display, () => (input.value.trim() ? DA_I18N.t('s.S0471', { name: input.value.trim() }) : ''), 'text');
     }
 }
 
@@ -410,11 +415,11 @@ function handleNewBracket() {
   const dialog = document.createElement('div');
   dialog.className = 'label-picker new-bracket-dialog';
   dialog.innerHTML = `
-    <p class="picker-title">Save current bracket before starting new?</p>
+    <p class="picker-title" data-i18n="s.S0473">Save current bracket before starting new?</p>
     <div class="new-bracket-buttons">
-      <button type="button" data-action="save">Save</button>
-      <button type="button" data-action="discard" class="secondary">Discard</button>
-      <button type="button" data-action="cancel" class="secondary">Cancel</button>
+      <button type="button" data-action="save" data-i18n="s.S0474">Save</button>
+      <button type="button" data-action="discard" class="secondary" data-i18n="s.S0475">Discard</button>
+      <button type="button" data-action="cancel" class="secondary" data-i18n="s.S0476">Cancel</button>
     </div>
   `;
   
@@ -461,11 +466,11 @@ function showReplaceAddDialog({ onAdd, onReplace }) {
   const dialog = document.createElement('div');
   dialog.className = 'label-picker new-bracket-dialog';
   dialog.innerHTML = `
-    <p class="picker-title">Add to the current diagram?</p>
+    <p class="picker-title" data-i18n="s.S0479">Add to the current diagram?</p>
     <div class="new-bracket-buttons">
-      <button type="button" data-action="add">Add</button>
-      <button type="button" data-action="replace" class="secondary">Replace</button>
-      <button type="button" data-action="cancel" class="secondary">Cancel</button>
+      <button type="button" data-action="add" data-i18n="s.S0480">Add</button>
+      <button type="button" data-action="replace" class="secondary" data-i18n="s.S0481">Replace</button>
+      <button type="button" data-action="cancel" class="secondary" data-i18n="s.S0476">Cancel</button>
     </div>
   `;
 
@@ -539,14 +544,14 @@ function startNewBracket() {
       updateFontByAuthor();
     }
   }
-  showStatus('New bracket started.', 'success');
+  DA_UI.showTranslatedStatus('s.S0484', {}, 'success');
 }
 
 function formatBracketType(type) {
-  return DA_CONSTANTS.RELATIONSHIP_LABELS[type] || type.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-');
+  return window.DA_RELATIONSHIPS ? DA_RELATIONSHIPS.getName(type) : DA_CONSTANTS.RELATIONSHIP_LABELS[type] || type;
 }
 
 window.DA_UI = Object.assign(window.DA_UI || {}, {
-  saveState, restoreState, showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings, openReferenceGuide, closeReferenceGuide, referenceGuideSections, maybeShowWelcome, updateFontByAuthor, syncPassageAuthorDisplay, syncProfileIndicatorDisplay, handleNewBracket, startNewBracket, showReplaceAddDialog, formatBracketType,
+  saveState, restoreState, showMagicPasteBanner, initTheme, toggleTheme, updateThemeButtonText, openSettings, closeSettings, openReferenceGuide, closeReferenceGuide, referenceGuideSections, populateReferenceGuide, maybeShowWelcome, updateFontByAuthor, syncPassageAuthorDisplay, syncProfileIndicatorDisplay, handleNewBracket, startNewBracket, showReplaceAddDialog, formatBracketType,
   initZoom, applyZoom, setZoomLevel, zoomIn, zoomOut, resetZoom, getZoomFactor
 });

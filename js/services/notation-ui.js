@@ -67,7 +67,7 @@
     if (!active.builtin) {
       const opt = document.createElement('option');
       opt.value = 'custom';
-      opt.textContent = (active.name || 'Custom') + ' (custom)';
+      DA_I18N.bindValue(opt, () => (DA_I18N.t('profile.customOption', {name: active.name || 'Custom'})), 'text');
       sel.appendChild(opt);
     }
     Object.values(builtins).forEach((p) => {
@@ -91,8 +91,9 @@
       const name = document.createElement('input');
       name.type = 'text';
       name.className = 'notation-name';
+      DA_I18N.bindValue(name, () => DA_I18N.t('notation.nameAria', {name: DA_RELATIONSHIPS.getName(type)}), 'aria-label');
       name.value = stripAbbr(DA_PROFILES.getName(type));
-      name.title = type;
+      DA_I18N.bindValue(name, () => DA_RELATIONSHIPS.getName(type) + ' [' + type + ']', 'title');
       name.addEventListener('change', () => {
         const w = ensureWorking();
         setOverride(w, type, 'name', name.value.trim(), stripAbbr(DA_CONSTANTS.RELATIONSHIP_LABELS[type]));
@@ -102,6 +103,7 @@
       const label = document.createElement('input');
       label.type = 'text';
       label.className = 'notation-label';
+      DA_I18N.bindValue(label, () => DA_I18N.t('notation.labelAria', {name: DA_RELATIONSHIPS.getName(type)}), 'aria-label');
       label.value = DA_PROFILES.getAbbr(type);
       label.addEventListener('change', () => {
         const w = ensureWorking();
@@ -117,7 +119,7 @@
       const isSingle = !DA_PROFILES.isTwoArm(type);
       dom.checked = !isSingle && DA_PROFILES.isDominanceShown(type);
       dom.disabled = isSingle; // single-arm relationships have no dominance
-      dom.title = isSingle ? 'No dominance for this relationship' : 'Mark dominance with a star';
+      DA_I18N.bindValue(dom, () => (isSingle ? DA_I18N.t('s.S0126') : DA_I18N.t('s.S0127')), 'title');
       dom.addEventListener('change', () => {
         const w = ensureWorking();
         w.dominance.perType[type] = dom.checked;
@@ -127,6 +129,7 @@
 
       const color = document.createElement('input');
       color.type = 'color';
+      DA_I18N.bindValue(color, () => DA_I18N.t('notation.colorAria', {name: DA_RELATIONSHIPS.getName(type)}), 'aria-label');
       color.className = 'notation-color';
       color.value = DA_PROFILES.getColor(type);
       color.addEventListener('change', () => {
@@ -157,7 +160,7 @@
     w.dominance.default = on;
     w.dominance.perType = {}; // a blanket choice clears per-type exceptions
     applyWorking(w);
-    DA_UI.showStatus(`Dominance turned ${on ? 'on' : 'off'} for all relationships.`, 'success');
+    DA_UI.showTranslatedStatus('s.S0128', () => ({ state: DA_I18N.t(on ? 'state.on' : 'state.off') }), 'success');
   }
 
   function exportProfile() {
@@ -168,17 +171,17 @@
     a.download = `${(p.name || 'profile').replace(/[^a-z0-9]+/gi, '-')}.daprofile.json`;
     a.click();
     URL.revokeObjectURL(a.href);
-    DA_UI.showStatus('Profile exported.', 'success');
+    DA_UI.showTranslatedStatus('s.S0132', {}, 'success');
   }
 
   function importProfileData(data) {
     if (!data || typeof data !== 'object' || (!data.dominance && !data.labels)) {
-      DA_UI.showStatus('That file is not a notation profile.', 'error');
+      DA_UI.showTranslatedStatus('s.S0133', {}, 'error');
       return;
     }
     DA_PROFILES.setActive(data); // normalize() inside guards the shape
     renderEditor();
-    DA_UI.showStatus(`Loaded profile "${DA_PROFILES.getActive().name}".`, 'success');
+    DA_UI.showTranslatedStatus('s.S0134', () => ({ name: DA_PROFILES.getActive().name }), 'success');
   }
 
   function init() {
@@ -200,7 +203,7 @@
       try {
         importProfileData(JSON.parse(await file.text()));
       } catch (_) {
-        DA_UI.showStatus('Could not read profile file.', 'error');
+        DA_UI.showTranslatedStatus('s.S0135', {}, 'error');
       }
       fileInput.value = '';
     });
@@ -212,15 +215,15 @@
 
   async function loadFromCloud() {
     const name = document.getElementById('cloudProfileName')?.value.trim();
-    if (!name) return DA_UI.showStatus('Enter a profile name to load.', 'error');
-    DA_UI.showStatus(`Loading "${name}"…`, 'info');
+    if (!name) return DA_UI.showTranslatedStatus('s.S0136', {}, 'error');
+    DA_UI.showTranslatedStatus('s.S0137', () => ({ name: name }), 'info');
     try {
       const loaded = await DA_PROFILES.loadFromCloud(name);
-      if (!loaded) return DA_UI.showStatus(`No profile named "${name}" found.`, 'error');
+      if (!loaded) return DA_UI.showTranslatedStatus('s.S0138', () => ({ name: name }), 'error');
       renderEditor();
-      DA_UI.showStatus(`Loaded profile "${loaded.name}".`, 'success');
+      DA_UI.showTranslatedStatus('s.S0139', () => ({ name: loaded.name }), 'success');
     } catch (err) {
-      DA_UI.showStatus(err.message || 'Could not load profile.', 'error');
+      DA_UI.showStatus(err.message || DA_I18N.t('s.S0140'), 'error');
     }
   }
 
@@ -229,21 +232,21 @@
     const typed = document.getElementById('cloudProfileName')?.value.trim();
     const active = DA_PROFILES.getActive();
     const name = typed || (active.builtin ? '' : active.name);
-    if (!name) return DA_UI.showStatus('Enter the published profile name to share.', 'error');
+    if (!name) return DA_UI.showTranslatedStatus('s.S0141', {}, 'error');
     const link = DA_PROFILES.shareLink(name);
     try {
       await navigator.clipboard.writeText(link);
-      DA_UI.showStatus(`Link copied. Anyone who opens it gets "${name}": ${link}`, 'success');
+      DA_UI.showTranslatedStatus('s.S0142', () => ({ name: name, link: link }), 'success');
     } catch (_) {
-      DA_UI.showStatus(`Copy this link: ${link}`, 'info');
+      DA_UI.showTranslatedStatus('s.S0143', () => ({ link: link }), 'info');
     }
   }
 
   async function publishToCloud() {
     const name = document.getElementById('cloudProfileName')?.value.trim();
     const password = document.getElementById('cloudProfilePassword')?.value || '';
-    if (!name) return DA_UI.showStatus('Enter a profile name to publish.', 'error');
-    if (!password) return DA_UI.showStatus('Enter a password to publish.', 'error');
+    if (!name) return DA_UI.showTranslatedStatus('s.S0144', {}, 'error');
+    if (!password) return DA_UI.showTranslatedStatus('s.S0145', {}, 'error');
 
     // Publish the active profile under the typed name (forking a built-in into
     // a named custom profile if needed). The fork is only made ACTIVE after the
@@ -252,17 +255,17 @@
     const working = ensureWorking();
     working.name = name;
 
-    DA_UI.showStatus(`Publishing "${name}"…`, 'info');
+    DA_UI.showTranslatedStatus('s.S0146', () => ({ name: name }), 'info');
     try {
       const created = await DA_PROFILES.publishToCloud(working, password);
       DA_PROFILES.setActive(working);
       const pw = document.getElementById('cloudProfilePassword');
       if (pw) pw.value = '';
       renderEditor();
-      DA_UI.showStatus(created ? `Published "${name}". Students can load it by name.`
-                               : `Updated "${name}".`, 'success');
+      DA_UI.showStatus(created ? DA_I18N.t('s.S0147', { name: name })
+                               : DA_I18N.t('s.S0148', { name: name }), 'success');
     } catch (err) {
-      DA_UI.showStatus(err.message || 'Could not publish profile.', 'error');
+      DA_UI.showStatus(err.message || DA_I18N.t('s.S0149'), 'error');
     }
   }
 

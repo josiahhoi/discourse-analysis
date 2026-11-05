@@ -28,7 +28,7 @@ function renderPropositions() {
     container.innerHTML = '';
     const ta = document.createElement('textarea');
     ta.id = 'propositionEditor';
-    ta.placeholder = 'Fetch or import a passage to start. Click in the text and press Enter to split it into a new line. Click the dots to create brackets and logical relationships.';
+    DA_I18N.bindValue(ta, () => (DA_I18N.t('s.S0034')), 'placeholder');
     ta.className = 'proposition-editor';
     container.appendChild(ta);
     const svg = document.getElementById('bracketCanvas');
@@ -145,7 +145,7 @@ function renderPropositions() {
       const count = end - start + 1;
       const gap = document.createElement('div');
       gap.className = 'fold-gap';
-      gap.textContent = `··· ${count} row${count !== 1 ? 's' : ''} collapsed ···`;
+      DA_I18N.bindValue(gap, () => (DA_I18N.t('s.S0422', { count: count, rows: count !== 1 ? 'rows' : 'row' })), 'text');
 
       // Clicking (or Enter/Space on) the gap expands every collapsed bracket
       // that hides a row in this run. Gaps are rebuilt each render, so the
@@ -154,8 +154,8 @@ function renderPropositions() {
       for (let k = start; k <= end; k++) (_hiddenBy.get(k) || []).forEach((bi) => owners.add(bi));
       gap.setAttribute('role', 'button');
       gap.tabIndex = 0;
-      gap.title = 'Click to expand';
-      gap.setAttribute('aria-label', `Expand ${count} collapsed row${count !== 1 ? 's' : ''}`);
+      DA_I18N.bindValue(gap, () => (DA_I18N.t('s.S0424')), 'title');
+      DA_I18N.bindValue(gap, () => (DA_I18N.t('s.S0425', { count: count, rows: count !== 1 ? 'rows' : 'row' })), 'aria-label');
       const expandRun = () => {
         DA_STATE.pushUndo('expand section');
         owners.forEach((bi) => { const b = DA_STATE.brackets[bi]; if (b) b.isCollapsed = false; });
@@ -476,7 +476,7 @@ function updatePropositionBlock(block, text, i, verseDisplay, highlightEntries, 
   if (dot) {
     dot.dataset.index = i;
     const vd = verseDisplay !== undefined ? verseDisplay : computeVerseDisplay(i);
-    dot.setAttribute('aria-label', `Verse ${vd || i + 1}: select for bracket`);
+    DA_I18N.bindValue(dot, () => (DA_I18N.t('s.S0428', { verse: vd || i + 1 })), 'aria-label');
   }
 
   const isDirectPropSelection = DA_STATE.firstBracketPoint === `p${i}`;

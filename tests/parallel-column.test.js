@@ -263,7 +263,7 @@ test('buildBracketData serializes the column; import restores it (round-trip)', 
   const sb = setupEditor();
   load(sb, 'js/services/export-service.js');
   load(sb, 'js/services/persistence.js');
-  sb.DA_UI = { showStatus: () => {}, clearPropositionHighlights: () => {} };
+  sb.DA_UI = { showStatus: () => {}, showTranslatedStatus: () => {}, clearPropositionHighlights: () => {} };
   sb.renderAll = () => {}; // renderAll pulls render-arrows.js, not loaded here
   seed(sb);
 
@@ -290,7 +290,7 @@ test('buildBracketData serializes the column; import restores it (round-trip)', 
 test('old files (no parallel fields) load with the column off; misaligned arrays are guarded', () => {
   const sb = setupEditor();
   load(sb, 'js/services/persistence.js');
-  sb.DA_UI = { showStatus: () => {}, clearPropositionHighlights: () => {} };
+  sb.DA_UI = { showStatus: () => {}, showTranslatedStatus: () => {}, clearPropositionHighlights: () => {} };
   sb.renderAll = () => {}; // renderAll pulls render-arrows.js, not loaded here
 
   sb.DA_PERSISTENCE.importBracket({ passageRef: 'John 1:1', propositions: ['a', 'b'], verseRefs: ['1', '2'] });

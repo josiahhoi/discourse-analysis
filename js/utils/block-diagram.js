@@ -29,7 +29,7 @@
     const key = String(type).toLowerCase();
     // Resolve through the active notation profile (handles renames + Gurtner).
     const name = window.DA_PROFILES
-      ? DA_PROFILES.getName(key)
+      ? DA_RELATIONSHIPS.getName(key)
       : (DA_CONSTANTS.RELATIONSHIP_LABELS[key] || type);
     // Strip a trailing " (ABBR)" suffix, then lowercase.
     return name.replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
@@ -68,7 +68,7 @@
   function versePhrase(refs) {
     const list = refs.filter(Boolean);
     if (list.length === 0) return '';
-    return (list.length === 1 ? 'verse ' : 'verses ') + list.join(', ');
+    return DA_I18N.t('block.verses', {unit: list.length === 1 ? 'verse' : 'verses', refs: list.join(', ')});
   }
 
   /**
@@ -155,7 +155,7 @@
         if (inRange(subRange.from)) {
           subFrags[subRange.from].push({
             type: String(b.type).toLowerCase(),
-            text: `${friendlyRelName(b.type)} to ${versePhrase([refOfRange(domRange)])}`
+            text: DA_I18N.t('block.to', {relationship: friendlyRelName(b.type), verses: versePhrase([refOfRange(domRange)])})
           });
         }
       }
@@ -170,7 +170,7 @@
           .sort((a, c) => a.idx - c.idx)
           .map(x => x.ref)
           .filter(r => r && !seen.has(r) && seen.add(r));
-        frags.push({ type: key, text: `${friendlyRelName(key)} with ${versePhrase(partners)}` });
+        frags.push({ type: key, text: DA_I18N.t('block.with', {relationship: friendlyRelName(key), verses: versePhrase(partners)}) });
       });
       // Subordinate fragments.
       subFrags[i].forEach(f => frags.push(f));
@@ -191,7 +191,7 @@
     if (DA_STATE.propositions.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'bd-empty';
-      empty.textContent = 'No passage loaded. Fetch or import a passage first.';
+      DA_I18N.bindValue(empty, () => (DA_I18N.t('s.S0265')), 'text');
       container.appendChild(empty);
       return;
     }
@@ -211,7 +211,8 @@
 
       const txt = document.createElement('span');
       txt.className = 'bd-text';
-      txt.style.paddingLeft = `${(levels[i] || 0) * INDENT_PX}px`;
+      txt.style.paddingInlineStart = `${(levels[i] || 0) * INDENT_PX}px`;
+      txt.dir = 'auto';
       txt.textContent = cleanText(text);
       line.appendChild(txt);
 
@@ -233,7 +234,7 @@
             ? DA_PROFILES.getColor(frag.type)
             : DA_CONSTANTS.RELATIONSHIP_COLORS[frag.type])
             || DA_CONSTANTS.RELATIONSHIP_COLORS.unspecified;
-          fragEl.textContent = frag.text;
+          DA_I18N.bindValue(fragEl, () => computeLabels()[i]?.[fi]?.text || '');
           lab.appendChild(fragEl);
         });
         line.appendChild(lab);

@@ -33,20 +33,24 @@ function showCommentPopover(config) {
   const template = document.getElementById('commentPopoverTemplate');
   const popover = document.createElement('div');
   popover.id = 'commentPopover';
+  popover.setAttribute('role', 'dialog');
+  popover.setAttribute('aria-labelledby', 'commentPopoverTitle');
   popover.className = 'comment-popover';
   popover.style.width = '640px'; 
   popover.appendChild(template.content.cloneNode(true));
+  if (window.DA_I18N) DA_I18N.apply(popover);
   
   let comment = existingCommentId ? DA_STATE.comments.find(c => c.id === existingCommentId) : null;
   
   const formatDate = (ts) => {
-    if (!ts) return 'Unknown Date';
+    if (!ts) return DA_I18N.t('s.S0437');
     const d = new Date(ts);
-    return isNaN(d.getTime()) ? 'Unknown Date' : d.toLocaleString();
+    return isNaN(d.getTime()) ? DA_I18N.t('s.S0437') : d.toLocaleString(DA_I18N.getLocale());
   };
 
-  // Calculate target description for the header
-  let targetDesc = isBracket ? 'Bracket Comment' : 'Text Comment';
+  // Calculate target description without replacing the editor or its selection.
+  const targetDescription = () => {
+  let targetDesc = isBracket ? DA_I18N.t('s.S0438') : DA_I18N.t('s.S0439');
   const chapterMatch = (DA_STATE.passageRef || '').match(/(\d+):/);
   const chapter = chapterMatch ? chapterMatch[1] : '';
 
@@ -57,7 +61,7 @@ function showCommentPopover(config) {
     const v2 = DA_RENDERER.computeVerseDisplay(extent.to) || '?';
     const vsRange = v1 === v2 ? v1 : `${v1}-${v2}`;
     const fullRef = chapter ? `${chapter}:${vsRange}` : vsRange;
-    targetDesc = `Bracket (${fullRef}): ${b ? formatBracketType(b.type) : 'Unknown'}`;
+    targetDesc = DA_I18N.t('s.S0440', { reference: fullRef, relationship: b ? formatBracketType(b.type) : DA_I18N.t('s.S0809') });
   } else if (isSummary) {
     targetDesc = summaryCommentLabel(summary.start, summary.end);
   } else if (propIndex !== undefined) {
@@ -68,7 +72,10 @@ function showCommentPopover(config) {
     targetDesc = `${fullRef}: "${snippet}"`;
   }
 
-  popover.querySelector('.popover-title').textContent = targetDesc;
+  return targetDesc;
+  };
+  popover.querySelector('.popover-title').id = 'commentPopoverTitle';
+  DA_I18N.bindValue(popover.querySelector('.popover-title'), targetDescription);
 
   const renderContent = () => {
     const displayArea = popover.querySelector('.comment-display');
@@ -80,8 +87,8 @@ function showCommentPopover(config) {
       newArea.style.display = 'none';
       repliesSection.style.display = 'block';
 
-      popover.querySelector('.comment-author').textContent = comment.author || 'Anonymous';
-      popover.querySelector('.comment-time').textContent = formatDate(comment.timestamp || comment.createdAt);
+      DA_I18N.bindValue(popover.querySelector('.comment-author'), () => (comment.author || DA_I18N.t('s.S0443')), 'text');
+      DA_I18N.bindValue(popover.querySelector('.comment-time'), () => formatDate(comment.timestamp || comment.createdAt));
       popover.querySelector('.comment-text').innerHTML = renderCommentText(comment.text);
       popover.querySelector('.comment-edit-area textarea').value = comment.text;
 
@@ -92,8 +99,8 @@ function showCommentPopover(config) {
       (comment.replies || []).forEach((r, rIdx) => {
         const replyEl = /** @type {DocumentFragment} */ (replyTemplate.content.cloneNode(true)).querySelector('.reply-item');
         replyEl.dataset.idx = rIdx;
-        replyEl.querySelector('.comment-author').textContent = r.author || 'Anonymous';
-        replyEl.querySelector('.comment-time').textContent = formatDate(r.timestamp || r.createdAt);
+        DA_I18N.bindValue(replyEl.querySelector('.comment-author'), () => (r.author || DA_I18N.t('s.S0443')), 'text');
+        DA_I18N.bindValue(replyEl.querySelector('.comment-time'), () => formatDate(r.timestamp || r.createdAt));
         replyEl.querySelector('.comment-text').innerHTML = renderCommentText(r.text);
         replyEl.querySelector('textarea').value = r.text;
 
@@ -123,7 +130,7 @@ function showCommentPopover(config) {
         };
 
         replyEl.querySelector('.delete-reply-btn').onclick = () => {
-          if (!confirm('Delete this reply?')) return;
+          if (!confirm(DA_I18N.t('s.S0446'))) return;
           DA_STATE.pushUndo('delete reply');
           comment.replies.splice(rIdx, 1);
           renderContent();
@@ -207,7 +214,7 @@ function showCommentPopover(config) {
     };
     
     popover.querySelector('.delete-btn').onclick = () => {
-      if (!confirm('Delete this comment?')) return;
+      if (!confirm(DA_I18N.t('s.S0450'))) return;
       DA_STATE.pushUndo('delete comment');
       DA_STATE.comments = DA_STATE.comments.filter(c => c.id !== comment.id);
       DA_STATE.activeCommentTarget = null;
@@ -342,7 +349,7 @@ function positionCommentPopover(popover, wrapper, { isBracket, isSummary, bracke
  *  note that they've since been deleted (the comment itself is kept). */
 function summaryCommentLabel(start, end) {
   const snippet = (DA_STATE.mainPointSummary || '').substring(start, end);
-  return snippet ? `Main point summary: "${snippet}"` : 'Main point summary (commented text was removed)';
+  return snippet ? DA_I18N.t('s.S0455', { snippet: snippet }) : DA_I18N.t('s.S0456');
 }
 
 function showCommentPopoverForText(propIndex, start, end, existingCommentId = null) {

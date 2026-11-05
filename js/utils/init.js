@@ -27,7 +27,7 @@
         console.error('[DA Error]', msg, 'at', src + ':' + line + ':' + col, err);
         const el = document.createElement('div');
         el.className = 'status error';
-        el.textContent = '\u26a0 Error: ' + msg;
+        DA_I18N.bindValue(el, () => (DA_I18N.t('s.S0377', {error: msg})), 'text');
         document.body.appendChild(el);
         setTimeout(() => {
             el.style.opacity = '0';
