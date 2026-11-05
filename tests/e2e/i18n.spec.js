@@ -150,7 +150,7 @@ test('guide follows profile names, approved help and immediate locale changes', 
     await page.locator('.sidebar-help > summary').click();
     await page.locator('#openReferenceGuideBtn').click();
     await expect(page.locator('#referenceTableBody')).toContainText('双向支持 Bilateral');
-    await expect(page.locator('#referenceTableBody')).toContainText('中间命题作为根据，支持其前后两边');
+    await expect(page.locator('#referenceTableBody')).toContainText('双向关系：中间命题支持前面的命题，同时受到后面的命题支持。');
     await expect(page.locator('#referenceTableBody')).toContainText('中央命题受到前后两侧理由的支持');
     await page.evaluate(() => window.DA_I18N.setPreference('en'));
     await expect(page.locator('#referenceGuideTitle')).toHaveText('Logical Relationships Guide — Schreiner');

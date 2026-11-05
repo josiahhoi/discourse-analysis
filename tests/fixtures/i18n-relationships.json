@@ -1,4 +1,5 @@
 {
+  "bilateralDefinitions": {"en": "A bilateral relationship supporting the preceding proposition and supported by the following proposition.", "zh-CN": "双向关系：中间命题支持前面的命题，同时受到后面的命题支持。", "zh-Hant": "雙向關係：中間命題支持前面的命題，同時受到後面的命題支持。"},
   "terms": [
     {"key": "relationship.name.series", "suggestedZhHant": "並列列舉", "english": "Series"},
     {"key": "relationship.name.progression", "suggestedZhHant": "遞進", "english": "Progression"},

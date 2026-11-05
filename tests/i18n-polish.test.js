@@ -47,7 +47,3 @@ test('foreign-type display aliases resolve current notation without mutating sto
   s.DA_PROFILES.setActiveById('josiah'); const before = JSON.stringify(s.DA_STATE.brackets); const view = s.DA_RELATIONSHIPS.selectorPresentation('general-specific');
   assert.match(view.full, /^意思—解释 Idea-Explanation/); assert.equal(view.abbr, s.DA_PROFILES.getAbbr('idea-explanation')); assert.equal(JSON.stringify(s.DA_STATE.brackets), before);
 });
-test('upstream import status accurately describes Enter rather than double-click in both languages', () => {
-  const s = setup();
-  for (const locale of ['en', 'zh-CN']) { s.DA_I18N.setPreference(locale); const text = s.DA_I18N.t('s.S0031', { detectedNote: '' }); assert.match(text, /Enter/); assert.doesNotMatch(text, /Double-click|双击/); }
-});

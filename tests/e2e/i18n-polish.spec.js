@@ -45,12 +45,6 @@ for (const [width, height, zoom] of layouts) for (const mode of ['light', 'dark'
     await page.locator('.advanced-notation > summary').click(); await settle(page);
     await within(page, '#settingsModal .modal-content'); await within(page, '#saveSettingsBtn');
     expect(await page.locator('#settingsModal .modal-body').evaluate(e => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
-    await page.locator('#cloudProfileName').scrollIntoViewIfNeeded();
-    const input = await page.locator('#cloudProfileName').evaluate(e => ({ bg: getComputedStyle(e).backgroundColor, color: getComputedStyle(e).color }));
-    if (mode === 'dark') {
-      expect(input.bg).not.toBe('rgb(255, 255, 255)');
-      expect(await page.locator('#settingsModal .sidebar-field input').evaluateAll(inputs => inputs.every(e => getComputedStyle(e).backgroundColor !== 'rgb(255, 255, 255)'))).toBe(true);
-    }
     await page.locator('#closeSettingsBtn').click();
     for (const profile of profiles) {
       await page.evaluate(profile => { window.DA_PROFILES.setActiveById(profile); window.DA_UI.openReferenceGuide(); }, profile); await settle(page);
@@ -59,7 +53,7 @@ for (const [width, height, zoom] of layouts) for (const mode of ['light', 'dark'
       await expect(page.locator('#referenceTableBody')).toContainText('并列关系');
       await expect(page.locator('#referenceTableBody')).toContainText('以重述支持');
       expect(await page.locator('#referenceTableBody td').first().evaluate(e => parseFloat(getComputedStyle(e).fontSize))).toBeGreaterThanOrEqual(14);
-        await page.locator('#closeReferenceBtn').click();
+      await page.locator('#closeReferenceBtn').click();
     }
     await page.locator('.bracket-hitbox[tabindex="0"]').first().press('Enter'); await settle(page);
     await within(page, '#labelPicker'); await abbreviationChecks(page);
@@ -101,16 +95,21 @@ test('selector compresses Chinese before raw profile notation and retains full d
   await input.dispatchEvent('compositionend'); await expect(picker.locator('button.action-manner')).toBeVisible();
   await input.press('Enter'); expect(await page.evaluate(() => window.DA_STATE.brackets[0].type)).toBe('action-manner'); expect(errors).toEqual([]);
 });
-for (const language of ['en', 'zh-CN']) test(`upstream copy correction: double-click selects while Enter splits in ${language}`, async ({ page }) => {
-  const errors = await boot(page, language); await page.locator('.import-section summary').click(); await page.locator('#pasteText').fill('[1] Alpha beta gamma delta.'); await page.locator('#importBtn').click();
-  await expect(page.locator('.status')).toContainText('Enter'); await expect(page.locator('.status')).not.toContainText(/Double-click|双击/);
-  await page.locator('.proposition-text').dblclick(); await settle(page); await expect(page.locator('.proposition-block')).toHaveCount(1);
-  expect(await page.evaluate(() => getSelection().toString().length)).toBeGreaterThan(0);
-  await page.evaluate(() => { const el = document.querySelector('.proposition-text'); el.focus(); const r = document.createRange(); const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); r.setStart(w.nextNode(), 6); r.collapse(true); const s = getSelection(); s.removeAllRanges(); s.addRange(r); });
-  await page.keyboard.press('Enter'); await expect(page.locator('.proposition-block')).toHaveCount(2);
-  expect(await page.evaluate(() => window.DA_STATE.propositions)).toEqual(['Alpha', 'beta gamma delta.']);
+test('import and parallel help localize the unchanged upstream English wording', async ({ page }) => {
+  const errors = await boot(page, 'en');
+  await page.locator('.import-section summary').click();
+  await page.locator('#pasteText').fill('[1] Alpha beta gamma delta.');
+  await page.locator('#importBtn').click();
   await page.evaluate(() => window.DA_UI.showParallelDialog());
-  await expect(page.locator('.parallel-dialog .hint-small')).toContainText(language === 'zh-CN' ? '续行初始为空' : 'continuation cells start empty');
+  await page.evaluate(() => window.DA_I18N.setPreference('en'));
+  await expect(page.locator('.status')).toContainText("Imported. Double-click to split a line, single-click to edit. Click the dots to create brackets.");
+  await expect(page.locator('.parallel-dialog .hint-small')).toHaveText("Editable beside the text (splits with Enter in Text Edit mode) and saved with the project.");
+  await page.evaluate(() => window.DA_I18N.setPreference('zh-CN'));
+  await expect(page.locator('.status')).toContainText("已导入。双击可拆分行，单击可编辑。点击圆点可建立括号。");
+  await expect(page.locator('.parallel-dialog .hint-small')).toHaveText("可在经文旁编辑（文字编辑模式下按 Enter 可拆分），并随项目保存。");
+  await page.evaluate(() => window.DA_I18N.setPreference('zh-Hant'));
+  await expect(page.locator('.status')).toContainText("已匯入。按兩下可拆分行，按一下可編輯。按一下圓點可建立括號。");
+  await expect(page.locator('.parallel-dialog .hint-small')).toHaveText("可在經文旁編輯（文字編輯模式下按 Enter 可拆分），並隨專案儲存。");
   expect(errors).toEqual([]);
 });
 for (const script of ['greek', 'hebrew']) test(`original-script fonts direction and parallel text remain valid: ${script}`, async ({ page }) => {
@@ -143,7 +142,6 @@ test('modal semantics, SVG opener restoration, icon names and draft focus surviv
   await page.locator('#commentPopover .close-btn').click();
   await theme(page, 'dark'); await page.locator('#openMenuBtn').click(); await page.locator('#openPicker > button').nth(1).click();
   await expect(page.locator('#openPicker input')).toBeFocused();
-  expect(await page.locator('#openPicker input').evaluate(e => getComputedStyle(e).backgroundColor)).not.toBe('rgb(255, 255, 255)');
   await page.keyboard.press('Escape');
   expect(errors).toEqual([]);
 });

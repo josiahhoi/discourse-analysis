@@ -120,6 +120,7 @@ test('Schreiner Guide and selector use publication terms plus course Double Grou
   await expect(page.locator('#referenceTableBody')).toContainText('連續性 Series（S）');
   await expect(page.locator('#referenceTableBody')).toContainText('雙重理據 Double Ground（DG）');
   await expect(page.locator('#referenceTableBody')).toContainText('以再陳述輔助');
+  await expect(page.locator('#referenceTableBody')).toContainText('雙向關係：中間命題支持前面的命題，同時受到後面的命題支持。');
   await settle(page); await page.locator('#closeReferenceBtn').click(); await picker(page);
   await expect(page.locator('#labelPicker button.double-ground')).toHaveAccessibleName('雙重理據 Double Ground（DG）');
   await page.locator('#labelPicker button.double-ground').focus(); await expect(page.locator('.info-name')).toHaveText('雙重理據 Double Ground（DG）');

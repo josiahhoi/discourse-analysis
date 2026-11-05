@@ -2484,8 +2484,8 @@ body.rtl-mode .proposition-block .proposition-text {
 .footer {
   /* Single compact row: sources on the left, version/credits on the right.
      flex-wrap lets it degrade to two lines at narrow widths instead of
-     overflowing. Its own flex wrapping remains independent of workspace
-     breakpoints. */
+     overflowing — there are no @media queries in this file, so this is
+     the only responsive behavior the footer gets. */
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -3340,51 +3340,41 @@ body.rtl-mode .proposition-block .proposition-text {
   }
 }
 
-/* Readable Chinese UI, bounded overlays and faithful profile notation.
-   These rules change display only. Scripture fonts, zoom and graph colors retain
-   their original sources. No new font downloads or bundled fonts are added. */
-:root {
+/* Chinese display layout. English keeps the upstream stylesheet rules. */
+html:is([lang="zh-CN"], [lang="zh-Hant"]) {
   --font-script-sans: 'Source Sans 3', system-ui, sans-serif;
 }
 html[lang="zh-CN"] {
   --font-sans: 'Source Sans 3', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
 }
-::placeholder { color: var(--text-muted); opacity: 1; }
-button:disabled { cursor: not-allowed; opacity: 0.55; }
-button:focus-visible, input:focus-visible, select:focus-visible,
-textarea:focus-visible, summary:focus-visible, [role="button"]:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+html[lang="zh-Hant"] {
+  --font-sans: 'Source Sans 3', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif;
 }
-.status {
-  max-width: calc(100vw - 32px);
-  max-height: 35vh;
-  overflow: auto;
-  overflow-wrap: anywhere;
-}
-.status.info { background: var(--surface-elevated); color: var(--text); border: 1px solid var(--accent); }
-.status.error { background: #40252d; color: #ffe4e6; border: 1px solid #ba7185; }
-[data-theme="light"] .status.error { background: #fff1f2; color: #881337; border-color: #be7181; }
-.workspace-toolbar { flex-wrap: wrap; max-width: 100%; }
-.passage-header-left, .passage-header-right { flex-wrap: wrap; }
-.passage-author, .profile-indicator { max-width: 100%; overflow-wrap: anywhere; }
-.profile-indicator { flex-wrap: wrap; }
-.modal-content { width: calc(100% - 32px); max-height: calc(100vh - 32px); }
-.modal-header, .modal-footer { flex-shrink: 0; }
-.modal-header h2 { min-width: 0; overflow-wrap: anywhere; }
-.modal-body { min-height: 0; flex: 1 1 auto; }
-.close-btn { color: var(--text-muted); flex-shrink: 0; }
-.notation-cloud-row { flex-wrap: wrap; }
-.notation-cloud-row input { min-width: 0; flex-basis: 12rem; background: var(--bg); }
-.notation-row { grid-template-columns: minmax(0, 1fr) 96px 28px 34px; }
-.notation-hint { opacity: 1; color: var(--text-muted); font-size: 0.8125rem; line-height: 1.65; }
-.reference-table { table-layout: fixed; font-size: 0.9375rem; line-height: 1.65; }
-.reference-table th, .reference-table td { overflow-wrap: anywhere; padding: 9px 10px; }
-.reference-table th:nth-child(1) { width: 25%; }
-.reference-table th:nth-child(2) { width: 15%; }
-.reference-table th:nth-child(3) { width: 25%; }
-.reference-table th:nth-child(4) { width: 35%; }
-.reference-table .abbr-cell { direction: ltr; unicode-bidi: isolate; }
+/* Bounds and wrapping accommodate localized sentences without changing colors. */
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .status { max-width: calc(100vw - 32px); max-height: 35vh; overflow: auto; overflow-wrap: anywhere; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .workspace-toolbar { flex-wrap: wrap; max-width: 100%; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .passage-header-left,
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .passage-header-right { flex-wrap: wrap; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .passage-author,
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .profile-indicator { max-width: 100%; overflow-wrap: anywhere; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .profile-indicator { flex-wrap: wrap; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .modal-content { width: calc(100% - 32px); max-height: calc(100vh - 32px); }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .modal-header,
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .modal-footer { flex-shrink: 0; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .modal-header h2 { min-width: 0; overflow-wrap: anywhere; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .modal-body { min-height: 0; flex: 1 1 auto; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .close-btn { flex-shrink: 0; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .notation-cloud-row { flex-wrap: wrap; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .notation-cloud-row input { min-width: 0; flex-basis: 12rem; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .notation-row { grid-template-columns: minmax(0, 1fr) 96px 28px 34px; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .reference-table { table-layout: fixed; font-size: 0.9375rem; line-height: 1.65; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .reference-table th,
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .reference-table td { overflow-wrap: anywhere; padding: 9px 10px; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .reference-table th:nth-child(1) { width: 25%; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .reference-table th:nth-child(2) { width: 15%; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .reference-table th:nth-child(3) { width: 25%; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .reference-table th:nth-child(4) { width: 35%; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .reference-table .abbr-cell { direction: ltr; unicode-bidi: isolate; }
 html:is([lang="zh-CN"], [lang="zh-Hant"]) .reference-table .keyword-cell { font-style: normal; }
 html:is([lang="zh-CN"], [lang="zh-Hant"]) .picker-group-header,
 html:is([lang="zh-CN"], [lang="zh-Hant"]) .reference-table .group-header td,
@@ -3393,71 +3383,59 @@ html:is([lang="zh-CN"], [lang="zh-Hant"]) .popover-title { text-transform: none;
 html:is([lang="zh-CN"], [lang="zh-Hant"]) .toolbar-btn { font-size: 0.8125rem; }
 html:is([lang="zh-CN"], [lang="zh-Hant"]) .picker-group-header { font-size: 0.8125rem; padding: 3px 6px; }
 html:is([lang="zh-CN"], [lang="zh-Hant"]) .reference-table .group-header td { font-size: 0.875rem; }
-#labelPicker {
+/* The compact presentation exists only for Chinese, including original notation. */
+html:is([lang="zh-CN"], [lang="zh-Hant"]) #labelPicker {
   width: clamp(320px, calc(60vw - 160px), 480px);
   min-width: min(320px, calc(100vw - 16px));
   max-width: calc(100vw - 16px);
   container-type: inline-size;
 }
-#labelPicker .picker-title { flex-wrap: wrap; gap: 6px; }
-#labelPicker .picker-header-tools { display: flex; flex-wrap: wrap; gap: 4px; }
-#labelPicker .picker-btn-wrapper { min-width: 0; max-width: 100%; flex: 1 0 calc(50% - 0.25rem); }
-#labelPicker .picker-btn-wrapper > button:first-child { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
-#labelPicker button.relationship-option {
+html:is([lang="zh-CN"], [lang="zh-Hant"]) #labelPicker .picker-title { flex-wrap: wrap; gap: 6px; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) #labelPicker .picker-header-tools { display: flex; flex-wrap: wrap; gap: 4px; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) #labelPicker .picker-btn-wrapper { min-width: 0; max-width: 100%; flex: 1 0 calc(50% - 0.25rem); }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) #labelPicker .picker-btn-wrapper > button:first-child { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) #labelPicker button.relationship-option {
   display: flex; width: 100%; align-items: center; justify-content: space-between;
   gap: 0.35rem; padding: 0.45rem 0.5rem; font-size: 0.84375rem;
-  color: var(--text) !important; /* raw profile color remains on the border */
 }
-.relationship-option-name { min-width: 0; flex: 0 1 auto; }
-.relationship-option-abbr {
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .relationship-option-name { min-width: 0; flex: 0 1 auto; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .relationship-option-abbr {
   flex: 0 0 auto; white-space: pre; direction: ltr; unicode-bidi: isolate;
   font-family: var(--font-sans); font-weight: 700; text-overflow: clip;
 }
 @container (max-width: 400px) {
-  .relationship-option-name { max-width: 4em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .relationship-option-name { max-width: 4em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 @container (max-width: 340px) {
-  .relationship-option-name { display: none; }
-  .relationship-option-abbr { margin-inline: auto; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .relationship-option-name { display: none; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .relationship-option-abbr { margin-inline: auto; }
 }
-.picker-info-panel { line-height: 1.6; overflow-wrap: anywhere; }
-.picker-info-panel .info-name { line-height: 1.55; }
-.context-menu { max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow: auto; }
-.context-menu .menu-item { white-space: normal; overflow-wrap: anywhere; }
-.comment-meta, .meta-left, .action-buttons, .edit-actions, .comment-actions { flex-wrap: wrap; }
-.popover-title { overflow-wrap: anywhere; }
-.bd-text { min-width: 0; unicode-bidi: plaintext; }
-.bd-label { flex: 0 1 40%; min-width: 0; margin-inline-start: 1em; margin-left: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.6; direction: ltr; unicode-bidi: isolate; }
-body.rtl-mode .bd-line { direction: rtl; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .picker-info-panel { line-height: 1.6; overflow-wrap: anywhere; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .picker-info-panel .info-name { line-height: 1.55; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .context-menu { max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow: auto; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .context-menu .menu-item { white-space: normal; overflow-wrap: anywhere; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .comment-meta,
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .meta-left,
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .action-buttons,
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .edit-actions,
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .comment-actions { flex-wrap: wrap; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .popover-title { overflow-wrap: anywhere; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .bd-text { min-width: 0; unicode-bidi: plaintext; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .bd-label { flex: 0 1 40%; min-width: 0; margin-inline-start: 1em; margin-left: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.6; direction: ltr; unicode-bidi: isolate; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) body.rtl-mode .bd-line { direction: rtl; }
 @media (max-width: 1000px) {
-  .workspace { padding: 1rem; }
-  .header { padding-inline: 1rem; }
-  .workspace-toolbar { width: 100%; }
-  .toolbar-btn { padding-inline: 0.55rem; }
-  .reference-modal .modal-body { padding: 12px; }
-  .reference-table th, .reference-table td { padding: 8px 6px; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .workspace { padding: 1rem; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .header { padding-inline: 1rem; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .workspace-toolbar { width: 100%; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .toolbar-btn { padding-inline: 0.55rem; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .reference-modal .modal-body { padding: 12px; }
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .reference-table th,
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .reference-table td { padding: 8px 6px; }
 }
-#labelPicker button[aria-pressed="true"] { background: var(--accent-15); box-shadow: inset 0 0 0 1px var(--accent); }
-#labelPicker .picker-info-panel .info-name { color: var(--text) !important; }
-.bd-label { margin-left: 0; margin-inline-start: 1em; }
 html:is([lang="zh-CN"], [lang="zh-Hant"]) .modal-body,
 html:is([lang="zh-CN"], [lang="zh-Hant"]) .picker-info-panel { line-break: strict; }
-.settings-modal .sidebar-field input,
-.settings-modal .sidebar-field select {
-  min-width: 0; width: 100%; padding: 0.5rem 0.65rem;
-  background: var(--bg); color: var(--text); border: 1px solid var(--border);
-  border-radius: 6px; font-family: var(--font-sans); font-size: 0.875rem;
-}
-
-#openPicker input { min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-family: var(--font-sans); }
-
-/* Traditional UI uses installed system fonts; original-script passage fonts stay independent. */
-html[lang="zh-Hant"] {
-  --font-sans: 'Source Sans 3', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif;
-}
-
-/* Greek keeps the original-script font stack when UI language changes. */
+/* A localized selector must fit the existing settings field without restyling it. */
+html:is([lang="zh-CN"], [lang="zh-Hant"]) #interfaceLanguage { max-width: 100%; }
+/* Preserve the English original-script font stack across language switching. */
 html:is([lang="zh-CN"], [lang="zh-Hant"]) .propositions.greek-text .proposition-text,
-html:is([lang="zh-CN"], [lang="zh-Hant"]) .propositions.greek-text ~ .block-diagram .bd-text {
-  font-family: var(--font-script-sans);
-}
+html:is([lang="zh-CN"], [lang="zh-Hant"]) .propositions.greek-text ~ .block-diagram .bd-text { font-family: var(--font-script-sans); }

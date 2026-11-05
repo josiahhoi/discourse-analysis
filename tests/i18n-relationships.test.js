@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { createSandbox, load } = require('./helpers/harness');
 async function setup() {
     const s = createSandbox({ navigator: { languages: ['en-US'] } });
-    ['js/i18n/en.js', 'js/i18n/zh-CN.js', 'js/i18n/i18n.js', 'js/utils/constants.js', 'js/services/state.js', 'js/services/profiles.js', 'js/i18n/relationships.js', 'js/services/export-service.js'].forEach(f => load(s, f));
+    ['js/i18n/en.js', 'js/i18n/zh-CN.js', 'js/i18n/zh-Hant.js', 'js/i18n/i18n.js', 'js/utils/constants.js', 'js/services/state.js', 'js/services/profiles.js', 'js/i18n/relationships.js', 'js/services/export-service.js'].forEach(f => load(s, f));
     await s.DA_I18N.ready;
     return s;
 }
@@ -37,13 +37,16 @@ test('approved Chinese names retain distinct profile English vocabulary', async 
     assert.match(s.DA_RELATIONSHIPS.getName('concessive'), /^逆接 Adversative/);
     assert.match(s.DA_RELATIONSHIPS.getName('action-purpose'), /^手段—目的 Means-End/);
 });
-test('Bilateral and Double Ground keep the approved opposite support directions', async () => {
+test('Bilateral translations preserve upstream preceding and following support directions', async () => {
     const s = await setup();
+    const { bilateralDefinitions } = require('./fixtures/i18n-relationships.json');
+    for (const [locale, expected] of Object.entries(bilateralDefinitions)) {
+        s.DA_I18N.setPreference(locale);
+        assert.equal(s.DA_RELATIONSHIPS.getDefinition('bilateral'), expected);
+    }
+    assert.equal(bilateralDefinitions.en, s.DA_CONSTANTS.RELATIONSHIP_DEFINITIONS.bilateral.definition);
     s.DA_I18N.setPreference('zh-CN');
-    assert.match(s.DA_RELATIONSHIPS.getDefinition('bilateral'), /中间命题作为根据，支持其前后两边/);
     assert.match(s.DA_RELATIONSHIPS.getDefinition('double-ground'), /中央命题受到前后两侧理由的支持/);
-    s.DA_I18N.setPreference('en');
-    assert.equal(s.DA_RELATIONSHIPS.getDefinition('bilateral'), s.DA_CONSTANTS.RELATIONSHIP_DEFINITIONS.bilateral.definition);
 });
 test('Way-End, Alternative, Idea-Explanation and Adversative use approved help boundaries', async () => {
     const s = await setup();
