@@ -75,6 +75,37 @@ function createSandbox(extra = {}) {
 
 /** Evaluate a source file (path relative to repo root) inside the sandbox. */
 function load(sandbox, relPath) {
+  if (!sandbox._i18nDOMPrepared) {
+    sandbox._i18nDOMPrepared = true;
+    const prepare = el => {
+      if (!el || el.getAttribute) return el;
+      const attrs = {};
+      const set = el.setAttribute;
+      el.getAttribute = k => attrs[k] ?? null;
+      el.setAttribute = (k, v) => { attrs[k] = String(v); set?.call(el, k, v); };
+      el.children ||= [];
+      el.childNodes ||= [];
+      return el;
+    };
+    for (const method of ['getElementById', 'querySelector', 'createElement']) {
+      const original = sandbox.document[method];
+      if (original) sandbox.document[method] = (...args) => prepare(original(...args));
+    }
+  }
+  // UI modules now consume the shared translator. Use the real English core
+  // for existing isolated tests; keep their collaborators and assertions intact.
+  if (!relPath.startsWith('js/i18n/') && !sandbox.DA_I18N) {
+    const doc = sandbox.document;
+    sandbox.document = { querySelectorAll: () => [], readyState: 'complete' };
+    ['en.js', 'zh-CN.js', 'zh-Hant.js', 'relationship-profiles.js', 'i18n.js'].forEach(f => load(sandbox, 'js/i18n/' + f));
+    sandbox.document = doc;
+  }
+  if (sandbox.DA_UI?.showStatus && !sandbox.DA_UI.showTranslatedStatus) {
+    sandbox.DA_UI.showTranslatedStatus = (key, params, type) =>
+      sandbox.DA_UI.showStatus(sandbox.DA_I18N.t(key, typeof params === 'function' ? params() : params), type);
+  }
+  if (!sandbox.showTranslatedStatus && sandbox.DA_UI?.showTranslatedStatus)
+    sandbox.showTranslatedStatus = sandbox.DA_UI.showTranslatedStatus;
   const code = fs.readFileSync(path.join(ROOT, relPath), 'utf8');
   vm.runInContext(code, sandbox, { filename: relPath });
 }
