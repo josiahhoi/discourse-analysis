@@ -674,12 +674,12 @@ function checkContiguity(existingRefs, newRefs, position, docCtx, addCtx) {
   const after = position === 'start' ? { ch: docStartCh, v: doc.firstVerse } : { ch: addStartCh, v: add.firstVerse };
   if (before.ch !== null && after.ch !== null && before.ch !== after.ch) {
     if (after.ch === before.ch + 1 && after.v === 1) return null;
-    if (after.ch > before.ch) return 'Note: there is a gap between the existing passage and the added verses.';
-    return 'Note: the added verses overlap the existing passage.';
+    if (after.ch > before.ch) return DA_I18N.t('s.S0805');
+    return DA_I18N.t('s.S0806');
   }
   if (after.v === before.v + 1) return null;
-  if (after.v <= before.v) return 'Note: the added verses overlap the existing passage.';
-  return `Note: gap between verse ${before.v} and verse ${after.v}.`;
+  if (after.v <= before.v) return DA_I18N.t('s.S0806');
+  return DA_I18N.t('s.S0807', { before: before.v, after: after.v });
 }
 
 /**
@@ -758,8 +758,8 @@ function _shiftPropRefBy(ref, k) {
  */
 function addPassage(data, position = 'end') {
   const props = (data && data.propositions) || [];
-  if (!props.length) throw new Error('Nothing to add.');
-  if (!DA_STATE.propositions.length) throw new Error('No document loaded to add to.');
+  if (!props.length) throw new Error(DA_I18N.t('s.S0356'));
+  if (!DA_STATE.propositions.length) throw new Error(DA_I18N.t('s.S0357'));
   DA_STATE.pushUndo('add passage');
 
   const oldLen = DA_STATE.propositions.length;
@@ -986,8 +986,7 @@ function deleteBracket(bracketIdx) {
   const dependents = doomedIds.size - 1;
   if (dependents > 0) {
     const ok = confirm(
-      `This bracket has ${dependents} larger bracket${dependents === 1 ? '' : 's'} built on it, ` +
-      `which can't stand without it.\n\nDelete all ${doomedIds.size} brackets? (Undo restores them.)`
+      DA_I18N.t('confirm.deleteDependents', {dependents, brackets: dependents === 1 ? 'bracket' : 'brackets', count: doomedIds.size})
     );
     if (!ok) return 0;
   }
@@ -1144,7 +1143,7 @@ function handleDotClick(pointId, x, y) {
     
     // Visual feedback
     bracketCanvas?.classList.add('connect-mode');
-    DA_UI.showStatus('Select second node to create bracket', 'success');
+    DA_UI.showTranslatedStatus('s.S0364', {}, 'success');
     
     if (window.DA_RENDERER) DA_RENDERER.renderAll();
   } else {
@@ -1185,7 +1184,7 @@ function handleDotClick(pointId, x, y) {
         if (firstEnd + 1 < secondStart) {
             isSeriesJumpOver = true;
         } else {
-            DA_UI.showStatus('Brackets must connect adjacent items. No "jumping over" allowed.', 'error');
+            DA_UI.showTranslatedStatus('s.S0365', {}, 'error');
             resetBracketSelection();
             return;
         }
@@ -1193,7 +1192,7 @@ function handleDotClick(pointId, x, y) {
 
     // If both resolve to the same target, block creation
     if (finalP1 === finalP2) {
-      DA_UI.showStatus('Bracket already exists for this exact range', 'warning');
+      DA_UI.showTranslatedStatus('s.S0366', {}, 'warning');
       resetBracketSelection();
       return;
     }
@@ -1201,7 +1200,7 @@ function handleDotClick(pointId, x, y) {
     // CONSTRAINT: Brackets cannot cross each other — judged on the tree as it
     // will exist after creation's reparent pass (see _creationWouldCross).
     if (_creationWouldCross(finalP1, finalP2)) {
-        DA_UI.showStatus('Brackets cannot cross each other', 'error');
+        DA_UI.showTranslatedStatus('s.S0367', {}, 'error');
         resetBracketSelection();
         return;
     }
@@ -1212,7 +1211,7 @@ function handleDotClick(pointId, x, y) {
     const p2AlreadyBusy = DA_STATE.brackets.some(b => b.from === finalP2 || b.to === finalP2);
 
     if (finalP1IsNode && finalP2IsNode && p1AlreadyBusy && p2AlreadyBusy) {
-        DA_UI.showStatus('Cannot connect two nodes that are already bracketed. Connect their dots instead.', 'error');
+        DA_UI.showTranslatedStatus('s.S0368', {}, 'error');
         resetBracketSelection();
         return;
     }
@@ -1222,7 +1221,7 @@ function handleDotClick(pointId, x, y) {
       (b.from === finalP2 && b.to === finalP1)
     );
     if (exists) {
-      DA_UI.showStatus('Bracket already exists between these nodes', 'warning');
+      DA_UI.showTranslatedStatus('s.S0369', {}, 'warning');
       resetBracketSelection();
       return;
     }
@@ -1258,7 +1257,7 @@ function handleDotClick(pointId, x, y) {
 
     // Both paths open the label picker (jump-over brackets get a restricted one,
     // keyed off bracket.isJumpOver inside showLabelPicker); only the toast differs.
-    DA_UI.showStatus(isSeriesJumpOver ? 'Jump-over bracket created' : 'Bracket created', 'success');
+    DA_UI.showStatus(isSeriesJumpOver ? DA_I18N.t('s.S0371') : DA_I18N.t('s.S0372'), 'success');
     if (x !== undefined && y !== undefined && window.showLabelPicker) {
       window.showLabelPicker(DA_STATE.brackets.length - 1, y, x);
     }

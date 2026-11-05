@@ -242,7 +242,7 @@ const DA_EXPORT = {
     const workspace = document.getElementById('workspace');
     if (!workspace) return;
 
-    DA_UI.showStatus('Capturing diagram...', 'info');
+    DA_UI.showTranslatedStatus('s.S0092', {}, 'info');
 
     const wasBlock = this.enterBracketViewForCapture();
     const prevZoom = this.enterBaseZoomForCapture();
@@ -294,7 +294,7 @@ const DA_EXPORT = {
         })
       ]);
 
-      DA_UI.showStatus('Diagram copied to clipboard!', 'success');
+      DA_UI.showTranslatedStatus('s.S0094', {}, 'success');
     } catch (err) {
       console.error('Export failed:', err);
       // Ensure restoration on failure
@@ -306,7 +306,7 @@ const DA_EXPORT = {
       this.restoreZoomAfterCapture(prevZoom);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
-      DA_UI.showStatus('Capture failed.', 'error');
+      DA_UI.showTranslatedStatus('s.S0096', {}, 'error');
     }
   },
 
@@ -317,7 +317,7 @@ const DA_EXPORT = {
     const workspace = document.getElementById('workspace');
     if (!workspace) return;
 
-    DA_UI.showStatus('Generating image...', 'info');
+    DA_UI.showTranslatedStatus('s.S0097', {}, 'info');
 
     const wasBlock = this.enterBracketViewForCapture();
     const prevZoom = this.enterBaseZoomForCapture();
@@ -351,7 +351,7 @@ const DA_EXPORT = {
       link.click();
       URL.revokeObjectURL(url);
 
-      DA_UI.showStatus('Image saved.', 'success');
+      DA_UI.showTranslatedStatus('s.S0099', {}, 'success');
     } catch (err) {
       console.error(err);
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
@@ -362,7 +362,7 @@ const DA_EXPORT = {
       this.restoreZoomAfterCapture(prevZoom);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
-      DA_UI.showStatus('Save failed.', 'error');
+      DA_UI.showTranslatedStatus('s.S0100', {}, 'error');
     }
   },
 
@@ -371,11 +371,11 @@ const DA_EXPORT = {
    */
   async exportToPDF() {
     if (typeof jspdf === 'undefined') {
-      DA_UI.showStatus('PDF library not loaded.', 'error');
+      DA_UI.showTranslatedStatus('s.S0101', {}, 'error');
       return;
     }
 
-    DA_UI.showStatus('Generating PDF...', 'info');
+    DA_UI.showTranslatedStatus('s.S0102', {}, 'info');
     const workspace = document.getElementById('workspace');
 
     const wasBlock = this.enterBracketViewForCapture();
@@ -432,7 +432,7 @@ const DA_EXPORT = {
       const filename = (DA_STATE.passageRef || 'discourse').replace(/\s+/g, '_');
       pdf.save(`${filename}.pdf`);
       
-      DA_UI.showStatus('PDF exported.', 'success');
+      DA_UI.showTranslatedStatus('s.S0103', {}, 'success');
     } catch (err) {
       console.error(err);
       DA_STATE.brackets.forEach((b, i) => b.isCollapsed = savedCollapseStates[i]);
@@ -443,7 +443,7 @@ const DA_EXPORT = {
       this.restoreZoomAfterCapture(prevZoom);
       if (window.renderAll) window.renderAll();
       this.restoreViewAfterCapture(wasBlock);
-      DA_UI.showStatus('PDF export failed.', 'error');
+      DA_UI.showTranslatedStatus('s.S0104', {}, 'error');
     }
   }
 };

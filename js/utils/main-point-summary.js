@@ -208,7 +208,7 @@
     const item = document.createElement('div');
     item.className = 'menu-item';
     item.dataset.action = 'add-comment';
-    item.textContent = 'Add Comment';
+    DA_I18N.bindValue(item, () => (DA_I18N.t('s.S0379')), 'text');
     menu.appendChild(item);
     menu.style.left = `${x}px`;
     menu.style.top = `${y}px`;

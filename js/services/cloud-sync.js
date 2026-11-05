@@ -95,7 +95,7 @@ function _leaveLiveSession() {
  *  the same project can be resumed later from this same document. */
 function stopCloudSync() {
   _leaveLiveSession();
-  DA_UI.showStatus('Cloud Sync stopped.', 'info');
+  DA_UI.showTranslatedStatus('s.S0077', {}, 'info');
 }
 
 /**
@@ -110,7 +110,7 @@ function resetSessionForNewContent() {
   if (wasLive) _leaveLiveSession();
   DA_STATE.activeProjectId = null;
   DA_STATE.cloudDirty = false;
-  if (wasLive) DA_UI.showStatus('Cloud Sync stopped — this new work is not connected to the old project.', 'info');
+  if (wasLive) DA_UI.showTranslatedStatus('s.S0078', {}, 'info');
 }
 
 /** An imported file carries the project id it was shared under. inactive →
@@ -151,12 +151,12 @@ function decodeProjectDataFromFirestore(data) {
 // ── Live session I/O ──────────────────────────────────────────────────────────
 
 async function startCloudSync() {
-  if (!db) return DA_UI.showStatus('Firebase not initialized.', 'error');
+  if (!db) return DA_UI.showTranslatedStatus('s.S0079', {}, 'error');
 
   let projectId = getProjectId();
 
   if (projectId) {
-    const reuse = confirm(`This project was previously synced with code ${projectId}. \n\nWould you like to resume that session? \n(Cancel will generate a new six-digit code)`);
+    const reuse = confirm(DA_I18N.t('s.S0080', { projectId: projectId }));
     if (!reuse) {
       projectId = Math.random().toString(36).substring(2, 8).toUpperCase();
     }
@@ -174,26 +174,26 @@ async function startCloudSync() {
   try {
     await db.collection('projects').doc(projectId).set(projectData);
     _enterLiveSession(projectId); // we just wrote the current state → clean
-    DA_UI.showStatus('Cloud Sync started!', 'success');
+    DA_UI.showTranslatedStatus('s.S0081', {}, 'success');
   } catch (err) {
-    DA_UI.showStatus('Failed to start sync: ' + err.message, 'error');
+    DA_UI.showTranslatedStatus('s.S0082', () => ({error: err.message}), 'error');
   }
 }
 
 async function joinCloudSync(projectId) {
-  if (!db) return DA_UI.showStatus('Firebase not initialized.', 'error');
+  if (!db) return DA_UI.showTranslatedStatus('s.S0079', {}, 'error');
   if (!projectId) return;
 
   try {
     const doc = await db.collection('projects').doc(projectId).get();
     if (!doc.exists) {
-      throw new Error('Project not found.');
+      throw new Error(DA_I18N.t('s.S0083'));
     }
 
     _enterLiveSession(projectId); // an incoming snapshot defines our baseline
-    DA_UI.showStatus('Connected to project ' + projectId, 'success');
+    DA_UI.showTranslatedStatus('s.S0084', () => ({projectId}), 'success');
   } catch (err) {
-    DA_UI.showStatus('Failed to join: ' + err.message, 'error');
+    DA_UI.showTranslatedStatus('s.S0085', () => ({error: err.message}), 'error');
   }
 }
 
@@ -308,8 +308,8 @@ function updateSyncUI() {
 
   if (btn) {
     btn.disabled = !dirty;
-    btn.textContent = dirty ? 'Sync' : 'Synced ✓';
-    btn.title = dirty ? 'Sync your changes to the cloud' : 'All changes are synced';
+    DA_I18N.bindValue(btn, () => (dirty ? DA_I18N.t('s.S0086') : DA_I18N.t('s.S0087')), 'text');
+    DA_I18N.bindValue(btn, () => (dirty ? DA_I18N.t('s.S0088') : DA_I18N.t('s.S0089')), 'title');
   }
 }
 

@@ -58,7 +58,7 @@ function normalizeVerseText(raw) {
  */
 async function fetchSBLGNTChapterVerses(ref) {
   const res = await fetch(`${DA_CONSTANTS.SBLGNT_BASE}${ref.file}`);
-  if (!res.ok) throw new Error(`SBLGNT fetch error: ${res.status}`);
+  if (!res.ok) throw new Error(DA_I18N.t('s.S0054', { status: res.status }));
 
   const map = {};
   for (const line of (await res.text()).split('\n')) {
@@ -75,7 +75,7 @@ async function fetchSBLGNTChapterVerses(ref) {
 
 async function fetchSBLGNTPassage(query, ref) {
   if (!ref) ref = parsePassageReference(query);
-  if (!ref || !ref.file) throw new Error('Book not found in SBLGNT (New Testament only).');
+  if (!ref || !ref.file) throw new Error(DA_I18N.t('s.S0056'));
 
   const map = await fetchSBLGNTChapterVerses(ref);
   const verseNums = Object.keys(map)
@@ -83,7 +83,7 @@ async function fetchSBLGNTPassage(query, ref) {
     .sort((a, b) => a - b)
     .filter((v) => !ref.hasVerses || (v >= ref.startVerse && v <= ref.endVerse));
 
-  if (verseNums.length === 0) throw new Error('No verses found in SBLGNT for this range.');
+  if (verseNums.length === 0) throw new Error(DA_I18N.t('s.S0057'));
 
   return {
     propositions: verseNums.map((v) => map[String(v)]),
@@ -99,10 +99,10 @@ async function fetchSBLGNTPassage(query, ref) {
  */
 async function fetchSBLGNTChapterMap(query) {
   const ref = parsePassageReference(query);
-  if (!ref || !ref.file) throw new Error('SBLGNT covers the New Testament only.');
+  if (!ref || !ref.file) throw new Error(DA_I18N.t('s.S0059'));
 
   const map = await fetchSBLGNTChapterVerses(ref);
-  if (!Object.keys(map).length) throw new Error('No verses found in SBLGNT for this chapter.');
+  if (!Object.keys(map).length) throw new Error(DA_I18N.t('s.S0060'));
   return map;
 }
 
@@ -123,13 +123,13 @@ async function fetchBollsChapter(translation, query, parseErrorMsg) {
 
   const bookName = match[1].trim().toLowerCase().replace(/\s+/g, '');
   const bollsId = DA_CONSTANTS.BOLLS_BOOKS[bookName];
-  if (!bollsId) throw new Error(`Book "${match[1]}" not recognized.`);
+  if (!bollsId) throw new Error(DA_I18N.t('s.S0061', { book: match[1] }));
 
   const res = await fetch(`https://bolls.life/get-text/${translation}/${bollsId}/${match[2]}/`);
-  if (!res.ok) throw new Error(`Bolls API error: ${res.status}`);
+  if (!res.ok) throw new Error(DA_I18N.t('s.S0062', { status: res.status }));
 
   const verses = await res.json();
-  if (!Array.isArray(verses) || verses.length === 0) throw new Error('No verses found.');
+  if (!Array.isArray(verses) || verses.length === 0) throw new Error(DA_I18N.t('s.S0063'));
 
   // Normalize per verse, before fetchFromBolls joins them with "[N] " markers -
   // the CJK-adjacent space rule in normalizeVerseText would otherwise eat the
@@ -146,7 +146,7 @@ async function fetchBollsChapter(translation, query, parseErrorMsg) {
 
 async function fetchFromBolls(translation, query) {
   const { match, verses, bookName } = await fetchBollsChapter(
-    translation, query, 'Could not parse reference. Use format like "John 1:1-5"');
+    translation, query, DA_I18N.t('s.S0064'));
 
   const chapter = match[2];
   const startVerse = match[3] ? parseInt(match[3]) : null;
@@ -156,7 +156,7 @@ async function fetchFromBolls(translation, query) {
     ? verses.filter(v => v.verse >= startVerse && v.verse <= endVerse)
     : verses;
 
-  if (filtered.length === 0) throw new Error('Verse range not found.');
+  if (filtered.length === 0) throw new Error(DA_I18N.t('s.S0065'));
 
   const text = filtered.map(v => `[${v.verse}] ${v.text}`).join(' ');
   const bookNameNormalized = DA_CONSTANTS.FULL_BOOK_NAMES[bookName] || match[1].trim();
@@ -177,7 +177,7 @@ async function fetchParallelVerses(translation, query) {
   if (translation === 'SBLGNT') return fetchSBLGNTChapterMap(query);
 
   const { verses } = await fetchBollsChapter(
-    translation, query, 'Could not read this passage reference. Parallel needs a reference like "John 1:1-5".');
+    translation, query, DA_I18N.t('s.S0067'));
 
   // Markup strip / zero-width strip / trim now happen once, per verse, inside
   // fetchBollsChapter (normalizeVerseText) - this loop just reshapes the
@@ -264,20 +264,20 @@ async function callPassageBackend(route, param) {
     if (typeof bridge === 'function') return bridge(param);
   }
   const base = DA_CONSTANTS.WEB_PROXY_BASE;
-  if (!base) throw new Error('No API backend available in this build.');
+  if (!base) throw new Error(DA_I18N.t('s.S0068'));
   const paramName = route === 'esv' ? 'q' : 'passage';
   const res = await fetch(`${base}/${route}?${paramName}=${encodeURIComponent(param)}`);
-  if (!res.ok) throw new Error(`API proxy error (${res.status})`);
+  if (!res.ok) throw new Error(DA_I18N.t('s.S0069', { status: res.status }));
   return res.json();
 }
 
 function unwrapBackendResult(res, label) {
   if (!res || !res.ok) {
-    if (res && res.noKey) throw new Error(`No ${label} key configured.`);
-    throw new Error(`${label} error${res && res.status ? ` (${res.status})` : ''}`);
+    if (res && res.noKey) throw new Error(DA_I18N.t('s.S0070', { label: label }));
+    throw new Error(DA_I18N.t('s.S0071', { label: label, status: res && res.status ? ` (${res.status})` : '' }));
   }
   const parsed = parseBollsText(res.text);
-  if (parsed.propositions.length === 0) throw new Error(`${label} returned no verses.`);
+  if (parsed.propositions.length === 0) throw new Error(DA_I18N.t('s.S0073', { label: label }));
   return parsed;
 }
 
@@ -289,7 +289,7 @@ async function fetchFromESVApi(query) {
 
 async function fetchFromNASBApi(query) {
   const ref = parsePassageReference(query);
-  if (!ref || !ref.usfm) throw new Error('Reference not recognized for the NASB API.');
+  if (!ref || !ref.usfm) throw new Error(DA_I18N.t('s.S0075'));
   // API.Bible passage ids: ROM.3 (chapter) or ROM.3.21-ROM.3.26 (verse range).
   let passageId = `${ref.usfm}.${ref.chapter}`;
   if (ref.hasVerses) {

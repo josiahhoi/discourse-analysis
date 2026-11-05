@@ -460,18 +460,20 @@ function renderBrackets() {
     // (Enter opens the label picker via the canvas keydown handler); the arm
     // hitboxes below stay mouse-only so each bracket is a single tab stop.
     const _ext = _extents[i];
-    const _typeName = window.DA_PROFILES ? DA_PROFILES.getName(bracket.type) : bracket.type;
-    const _spokenType = (!_typeName || _typeName === '?') ? 'Unlabeled' : _typeName;
-    const _vLabel = `${_spokenType} bracket, verses ${_verseMap[_ext.from] || _ext.from + 1}–${_verseMap[_ext.to] || _ext.to + 1}. Press Enter to edit.`;
-    group.appendChild(createSVG('line', {
+    const _spokenType = () => {
+      const name = window.DA_RELATIONSHIPS ? DA_RELATIONSHIPS.getName(bracket.type) : DA_PROFILES.getName(bracket.type);
+      return !name || name === '?' ? DA_I18N.t('relationship.unlabeled') : name;
+    };
+    const hitbox = createSVG('line', {
       x1: x, y1: topY,
       x2: x, y2: ((bracket.isCollapsed && !isCollapsedCoord) ? topY : bottomY),
       class: 'bracket-hitbox',
       tabindex: 0,
       role: 'button',
-      'aria-label': _vLabel,
       dataset: { index: i }
-    }));
+    });
+    DA_I18N.bindValue(hitbox, () => DA_I18N.t('s.S0395', {relationship: _spokenType(), from: _verseMap[_ext.from] || _ext.from + 1, to: _verseMap[_ext.to] || _ext.to + 1}), 'aria-label');
+    group.appendChild(hitbox);
 
     // Top Arm (always drawn — for subordinate collapsed this is the single arm to the dominant row)
     group.appendChild(createSVG('line', {
@@ -523,18 +525,17 @@ function renderBrackets() {
       else if (labels.bottom && labels.bottom.includes('*')) nodeY = bottomY;
     }
 
-    group.appendChild(createSVG('circle', {
+    const connectionNode = createSVG('circle', {
       cx: x + _nodeDX,
       cy: nodeY,
       r: 5 * _z,
       class: `${(DA_STATE.bracketSelectStep === 1 && DA_STATE.firstBracketPoint === bracket.id) ? 'connection-node active-node' : 'connection-node'} ${bracket.isCollapsed ? 'collapsed' : ''} ${_hiddenNodeIdx.has(i) ? 'series-absorbed' : ''}`,
       tabindex: 0,
       role: 'button',
-      'aria-label': bracket.isCollapsed
-        ? `${_spokenType} bracket node: collapsed, press Enter to expand`
-        : `${_spokenType} bracket node: select for bracket`,
       dataset: { bracketIdx: i }
-    }));
+    });
+    DA_I18N.bindValue(connectionNode, () => DA_I18N.t(bracket.isCollapsed ? 's.S0402' : 's.S0403', {relationship: _spokenType()}), 'aria-label');
+    group.appendChild(connectionNode);
 
     if (bracket.isCollapsed && !isCollapsedCoord) {
       // Subordinate collapsed: summary label at the dominant row arm, same position as normal top label

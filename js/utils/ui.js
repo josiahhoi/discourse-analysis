@@ -19,6 +19,14 @@ function showStatus(message, type = 'info') {
       el.style.opacity = '0';
       setTimeout(() => el.remove(), 500);
     }, 3000);
+    return el;
+}
+
+function showTranslatedStatus(key, params = {}, type = 'info') {
+    const values = typeof params === 'function' ? params() : params;
+    const el = showStatus(DA_I18N.t(key, values), type);
+    DA_I18N.bindText(el, key, params);
+    return el;
 }
 
 function updateCloudUI(isActive, projectId = '') {
@@ -177,7 +185,9 @@ function addReplyToComment(comment, text) {
  */
 function manageDialogFocus(dialog, opts = {}) {
   let opener = document.activeElement;
-  if (!(opener instanceof HTMLElement) || opener === document.body) opener = null;
+  const canRestore = opener instanceof HTMLElement
+    || (typeof SVGElement !== 'undefined' && opener instanceof SVGElement);
+  if (!canRestore || opener === document.body) opener = null;
 
   const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), '
     + 'select:not([disabled]), textarea:not([disabled]), '
@@ -338,7 +348,7 @@ function makeCommentPopoverDraggableAndResizable(popover) {
 
   const resizeHandle = document.createElement('div');
   resizeHandle.className = 'comment-popover-resize-handle';
-  resizeHandle.setAttribute('aria-label', 'Resize');
+  DA_I18N.bindValue(resizeHandle, () => (DA_I18N.t('s.S0532')), 'aria-label');
   popover.appendChild(resizeHandle);
   const minW = 260;
   const maxW = Math.min(1200, Math.max(360, wrapper.getBoundingClientRect().width * 0.9));
@@ -374,5 +384,5 @@ function makeCommentPopoverDraggableAndResizable(popover) {
 
 
 window.DA_UI = Object.assign(window.DA_UI || {}, {
-  showStatus, updateCloudUI, escapeHtml, renderCommentText, applyFormatting, clampToViewport, makePopupDraggable, makeFixedDraggable, setupClickOutside, clearPropositionHighlights, getCommentForBracket, getPropositionSelection, addReplyToComment, makeCommentPopoverDraggableAndResizable, manageDialogFocus
+  showStatus, showTranslatedStatus, updateCloudUI, escapeHtml, renderCommentText, applyFormatting, clampToViewport, makePopupDraggable, makeFixedDraggable, setupClickOutside, clearPropositionHighlights, getCommentForBracket, getPropositionSelection, addReplyToComment, makeCommentPopoverDraggableAndResizable, manageDialogFocus
 });

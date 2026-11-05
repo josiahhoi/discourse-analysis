@@ -63,6 +63,20 @@ function clearAllFormatting() {
   document.getElementById('bracketCanvas')?.classList.remove('connect-mode');
 }
 
+// UI locale is a personal preference, never a document edit.
+const interfaceLanguage = document.getElementById('interfaceLanguage');
+if (interfaceLanguage) {
+  interfaceLanguage.value = DA_I18N.getPreference();
+  interfaceLanguage.addEventListener('change', () => DA_I18N.setPreference(interfaceLanguage.value));
+}
+DA_I18N.onChange(() => {
+  if (interfaceLanguage) interfaceLanguage.value = DA_I18N.getPreference();
+  // Only display-only areas are refreshed; editable fields keep their nodes/drafts.
+  if (DA_UI.refreshRelationshipPickerLanguage) DA_UI.refreshRelationshipPickerLanguage();
+  const guide = document.getElementById('referenceModal');
+  if (guide?.style.display === 'flex') populateReferenceGuide();
+});
+
 // Service Initializations
 DA_UI.initTheme();
 DA_UI.initZoom();
@@ -142,9 +156,9 @@ function undoLastAction() {
     // The header is only ever synced manually; snapshots can change passageRef
     // (e.g. undoing an added passage restores the shorter range).
     if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
-    DA_UI.showStatus(`Undo: ${action}`, 'success');
+    DA_UI.showTranslatedStatus('s.S0001', () => ({ action: DA_I18N.t('action.' + action) }), 'success');
   } else {
-    DA_UI.showStatus('Nothing to undo', 'info');
+    DA_UI.showTranslatedStatus('s.S0003', {}, 'info');
   }
 }
 
@@ -153,9 +167,9 @@ function redoLastAction() {
   if (action) {
     renderAll();
     if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
-    DA_UI.showStatus(`Redo: ${action}`, 'success');
+    DA_UI.showTranslatedStatus('s.S0005', () => ({ action: DA_I18N.t('action.' + action) }), 'success');
   } else {
-    DA_UI.showStatus('Nothing to redo', 'info');
+    DA_UI.showTranslatedStatus('s.S0006', {}, 'info');
   }
 }
 
@@ -180,7 +194,7 @@ if (reviewerNameInput) {
 if (toggleCommentsBtn) {
   const updateToggleUI = () => {
     toggleCommentsBtn.classList.toggle('active', DA_STATE.showCommentsEnabled);
-    toggleCommentsBtn.textContent = DA_STATE.showCommentsEnabled ? 'Hide Comments (C)' : 'Show Comments (C)';
+    DA_I18N.bindValue(toggleCommentsBtn, () => (DA_STATE.showCommentsEnabled ? DA_I18N.t('s.S0007') : DA_I18N.t('s.S0008')), 'text');
   };
   updateToggleUI();
   
@@ -198,11 +212,11 @@ if (saveBtn) saveBtn.addEventListener('click', () => DA_PERSISTENCE.saveBracket(
 if (saveAsBtn) saveAsBtn.addEventListener('click', () => DA_PERSISTENCE.saveBracket(true));
 if (exportMenuBtn) exportMenuBtn.addEventListener('click', DA_UI.showExportMenu);
 if (clearBracketsBtn) clearBracketsBtn.addEventListener('click', () => {
-  if (confirm('Clear all brackets and formatting?')) {
+  if (confirm(DA_I18N.t('confirm.clearAll'))) {
     DA_STATE.pushUndo('clear-all');
     clearAllFormatting();
     renderAll();
-    DA_UI.showStatus('All brackets cleared.', 'success');
+    DA_UI.showTranslatedStatus('project.cleared', {}, 'success');
   }
 });
 if (importFileInput) {
@@ -214,7 +228,7 @@ if (importFileInput) {
       const data = JSON.parse(text);
       DA_PERSISTENCE.importBracket(data);
     } catch (_) {
-      DA_UI.showStatus('Could not read file.', 'error');
+      DA_UI.showTranslatedStatus('s.S0012', {}, 'error');
     }
   });
 }
@@ -250,12 +264,12 @@ async function fetchPassage(mode = 'replace') {
   const query = passageInput?.value?.trim() || '';
 
   if (!query) {
-    DA_UI.showStatus('Enter a passage reference (e.g. John 1:1-5)', 'error');
+    DA_UI.showTranslatedStatus('s.S0014', {}, 'error');
     return;
   }
 
   fetchBtn.disabled = true;
-  fetchBtn.textContent = 'Fetching…';
+  DA_I18N.bindText(fetchBtn, 'passage.fetching');
 
   try {
     const result = await DA_BIBLE.fetchPassageData(version, query);
@@ -264,7 +278,7 @@ async function fetchPassage(mode = 'replace') {
       // Direction is document-global (body rtl-mode, arrows disabled in RTL),
       // so a mixed-direction document is not representable — block, don't warn.
       if (!!result.isRTL !== !!DA_STATE.isRTL) {
-        DA_UI.showStatus('Cannot add: that text reads in the opposite direction. Fetch it as a new document instead.', 'error');
+        DA_UI.showTranslatedStatus('s.S0016', {}, 'error');
         return;
       }
       // The Greek/Hebrew font class is also document-global but purely
@@ -306,11 +320,9 @@ async function fetchPassage(mode = 'replace') {
 
       if (passageRefEl) passageRefEl.textContent = DA_STATE.passageRef;
       renderAll();
-      const notes = [warning, fontMismatch ? 'Note: the added text uses a different script than the document.' : null]
+      const notes = [warning, fontMismatch ? DA_I18N.t('s.S0804') : null]
         .filter(Boolean).join(' ');
-      DA_UI.showStatus(
-        `Added ${added} verse${added === 1 ? '' : 's'} to the ${position === 'start' ? 'beginning' : 'end'}.${notes ? ' ' + notes : ''}`,
-        notes ? 'info' : 'success');
+      DA_UI.showTranslatedStatus('s.S0017', () => ({ count: added, verses: added === 1 ? 'verse' : 'verses', position: DA_I18N.t(position === 'start' ? 'position.beginning' : 'position.end'), notes: notes ? ' ' + notes : '' }), notes ? 'info' : 'success');
       return; // copyright, script classes, RTL and the reset stay untouched
     }
 
@@ -341,12 +353,12 @@ async function fetchPassage(mode = 'replace') {
     // other versions are always Bolls, so don't call that a "fallback".
     const usedFallback = (version === 'esv' || version === 'nasb') && result.source === 'bolls';
     const apiName = version === 'esv' ? 'ESV' : 'NASB';
-    DA_UI.showStatus(usedFallback ? `Passage loaded (via Bolls — ${apiName} API unavailable).` : 'Passage loaded.', 'success');
+    DA_UI.showTranslatedStatus(usedFallback ? 'passage.fallback' : 'passage.loaded', { apiName }, 'success');
   } catch (err) {
-    DA_UI.showStatus(err.message || 'Failed to fetch passage', 'error');
+    DA_UI.showTranslatedStatus('passage.failed', { error: err.message || DA_I18N.t('error.unknown') }, 'error');
   } finally {
     fetchBtn.disabled = false;
-    fetchBtn.textContent = 'Fetch Passage';
+    DA_I18N.bindText(fetchBtn, 'passage.fetch');
   }
 }
 
@@ -380,7 +392,7 @@ if (importBtn) importBtn.addEventListener('click', () => {
   if (!pasteText) return;
   const raw = pasteText.value.trim();
   if (!raw) {
-    DA_UI.showStatus('Paste some text first.', 'error');
+    DA_UI.showTranslatedStatus('s.S0022', {}, 'error');
     return;
   }
   if (!hasDocumentContent()) return importPastedText(raw, 'replace');
@@ -400,7 +412,7 @@ function importPastedText(raw, mode) {
       if (mode === 'add') {
         // A project file carries its own brackets/comments — "adding" it
         // would silently drop them, so it may only replace.
-        DA_UI.showStatus('That is a saved project file — it can only replace the document, not be added to it.', 'error');
+        DA_UI.showTranslatedStatus('s.S0023', {}, 'error');
         return;
       }
       DA_PERSISTENCE.importBracket(data);
@@ -465,13 +477,11 @@ function importPastedText(raw, mode) {
       if (passageRefInput) passageRefInput.value = '';
       if (startVerseInput) startVerseInput.value = '';
       const parallelHint = DA_STATE.parallelLabel
-        ? ' New rows have empty parallel cells — refill via Alternate Views → Change translation.'
+        ? DA_I18N.t('s.S0025')
         : '';
-      DA_UI.showStatus(
-        `Added ${added} verse${added === 1 ? '' : 's'} to the ${position === 'start' ? 'beginning' : 'end'}.${warning ? ' ' + warning : ''}${parallelHint}`,
-        (warning || parallelHint) ? 'info' : 'success');
+      DA_UI.showTranslatedStatus('s.S0026', () => ({ count: added, verses: added === 1 ? 'verse' : 'verses', position: DA_I18N.t(position === 'start' ? 'position.beginning' : 'position.end'), warning: warning ? ' ' + warning : '', parallelHint: parallelHint }), (warning || parallelHint) ? 'info' : 'success');
     } catch (err) {
-      DA_UI.showStatus(err.message || 'Could not add the pasted text.', 'error');
+      DA_UI.showStatus(err.message || DA_I18N.t('s.S0027'), 'error');
     }
     return;
   }
@@ -508,9 +518,9 @@ function importPastedText(raw, mode) {
   if (passageRefInput) passageRefInput.value = '';
   if (startVerseInput) startVerseInput.value = '';
   const detectedNote = (parsed.detection === 'lines' || parsed.detection === 'flow')
-    ? `Detected ${parsed.passageRef ? `${parsed.passageRef} — ` : ''}${parsed.verseRefs.length} verse${parsed.verseRefs.length === 1 ? '' : 's'}. `
+    ? DA_I18N.t('s.S0029', { reference: parsed.passageRef ? `${parsed.passageRef} — ` : '', count: parsed.verseRefs.length, verses: parsed.verseRefs.length === 1 ? 'verse' : 'verses' })
     : '';
-  DA_UI.showStatus(`${detectedNote}Imported. Double-click to split a line, single-click to edit. Click the dots to create brackets.`, 'success');
+  DA_UI.showTranslatedStatus('s.S0031', () => ({ detectedNote: detectedNote }), 'success');
 }
 
 
@@ -572,9 +582,9 @@ function setHeaderCollapsed(collapsed) {
   appHeader.classList.toggle('header-collapsed', collapsed);
   headerCollapseBtn.classList.toggle('flipped', collapsed);
   headerCollapseBtn.setAttribute('aria-expanded', String(!collapsed));
-  headerCollapseBtn.title = collapsed
-    ? 'Expand the top bar'
-    : 'Collapse the top bar (it also folds away when you scroll down)';
+  DA_I18N.bindValue(headerCollapseBtn, () => (collapsed
+    ? DA_I18N.t('s.S0032')
+    : DA_I18N.t('s.S0033')), 'title');
 }
 
 if (appHeader && headerCollapseBtn) {
@@ -603,7 +613,7 @@ if (propositionsContainer?.parentElement) {
 
 // Initial placeholder (when no passage yet)
 const propEditor = document.getElementById('propositionEditor');
-if (propEditor) propEditor.placeholder = 'Fetch or import a passage to start. Click in the text and press Enter to split it into a new line. Click the dots to create brackets and logical relationships.';
+if (propEditor) DA_I18N.bindValue(propEditor, () => (DA_I18N.t('s.S0034')), 'placeholder');
 
 // Initialize Electron "Open With" support
 if (window.electronAPI && typeof window.electronAPI.onOpenFile === 'function') {
@@ -614,7 +624,7 @@ if (window.electronAPI && typeof window.electronAPI.onOpenFile === 'function') {
         DA_PERSISTENCE.importBracket(data);
       }
     } catch (_) {
-      DA_UI.showStatus('Could not open file.', 'error');
+      DA_UI.showTranslatedStatus('s.S0035', {}, 'error');
     }
   });
 }
@@ -636,12 +646,12 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const synced = await DA_CLOUD.syncToCloud();
         if (synced) {
-          DA_UI.showStatus('Changes synced to cloud!', 'success');
+          DA_UI.showTranslatedStatus('s.S0036', {}, 'success');
         } else {
-          DA_UI.showStatus('No active cloud session. Turn Cloud Sync on first.', 'error');
+          DA_UI.showTranslatedStatus('s.S0037', {}, 'error');
         }
       } catch (err) {
-        DA_UI.showStatus('Sync failed: ' + (err.message || 'unknown error'), 'error');
+        DA_UI.showTranslatedStatus('s.S0038', () => ({error: err.message || DA_I18N.t('error.unknown')}), 'error');
       }
     });
   }
@@ -658,8 +668,8 @@ document.addEventListener('DOMContentLoaded', () => {
       sel.removeAllRanges();
       sel.addRange(range);
       navigator.clipboard.writeText(code)
-        .then(() => DA_UI.showStatus(`Project code ${code} copied!`, 'success'))
-        .catch(() => DA_UI.showStatus('Could not copy code.', 'error'));
+        .then(() => DA_UI.showTranslatedStatus('project.codeCopied', { code }, 'success'))
+        .catch(() => DA_UI.showTranslatedStatus('s.S0041', {}, 'error'));
     });
   }
 

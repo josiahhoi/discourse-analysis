@@ -94,7 +94,7 @@ window.DA_MOUSE = {
       propositionsContainer.addEventListener('mousedown', (e) => {
         if (!DA_STATE.arrowMode) return;
         if (e.target.closest('.parallel-text')) {
-          DA_UI.showStatus('Word arrows are not supported in the parallel column.', 'warning');
+          DA_UI.showTranslatedStatus('s.S0119', {}, 'warning');
           return;
         }
         const word = window.DA_MOUSE.getWordAtPoint(e);
@@ -102,16 +102,16 @@ window.DA_MOUSE = {
 
         if (!DA_STATE.pendingArrowStart) {
           DA_STATE.pendingArrowStart = word;
-          DA_UI.showStatus('Start word selected. Now click the target word.', 'success');
+          DA_UI.showTranslatedStatus('s.S0120', {}, 'success');
         } else {
           const outcome = window.DA_MOUSE.completeArrow(DA_STATE.pendingArrowStart, word);
           if (outcome === 'created') {
             if (window.renderAll) window.renderAll();
-            DA_UI.showStatus('Arrow created.', 'success');
+            DA_UI.showTranslatedStatus('s.S0121', {}, 'success');
           } else if (outcome === 'duplicate') {
-            DA_UI.showStatus('An identical arrow already exists.', 'warning');
+            DA_UI.showTranslatedStatus('s.S0122', {}, 'warning');
           } else {
-            DA_UI.showStatus('Arrow cancelled.', 'info');
+            DA_UI.showTranslatedStatus('s.S0123', {}, 'info');
           }
         }
       });
